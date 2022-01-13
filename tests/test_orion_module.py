@@ -1,5 +1,5 @@
 import unittest
-import orion_module as orion
+import orionapi as orion
 import vcr
 
 
