@@ -1,11 +1,11 @@
 [tool.poetry]
-name = "orion_module"
+name = "orionapi"
 version = "0.1.1"
-description = ""
+description = "A python interface for the Orion Advisors platform web API"
 authors = ["spencerogden-dsam <67068943+spencerogden-dsam@users.noreply.github.com>"]
 
 [tool.poetry.dependencies]
-python = "^3.9"
+python = "^3.8"
 requests = "^2.26.0"
 
 [tool.poetry.dev-dependencies]
