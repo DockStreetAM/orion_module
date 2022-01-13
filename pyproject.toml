@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "orion_module"
-version = "0.1.0"
+version = "0.1.1"
 description = ""
 authors = ["spencerogden-dsam <67068943+spencerogden-dsam@users.noreply.github.com>"]
 
