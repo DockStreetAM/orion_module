@@ -1,4 +1,4 @@
-__version__ = '0.1.2'
+__version__ = '0.1.3'
 
 import requests
 import tabulate
@@ -44,7 +44,7 @@ class OrionAPI(object):
     def query(self,id,params=None):
         # Get the query to get list of params
         default_params = self.get_query_params(id)
-        print(f"{default_params=}")
+
         # Match param dict with params to constructut payload
         payload_template = {
             "runTo": 'null',
@@ -56,11 +56,10 @@ class OrionAPI(object):
             if p['code'] in params.keys():
                 p['defaultValue'] = params[p['code']]
             run_params.append(p)
-        print(f"{run_params=}")
 
         payload = payload_template.copy()
         payload['prompts'] = run_params
-        print(f"{payload=}")
+        
         # Put request to run query
         res = self.api_request(f"{self.base_url}/Reporting/Custom/{id}/Generate/Table",
             requests.post, json=payload)
