@@ -27,7 +27,7 @@ workflows:
     test-workflow:
       jobs:
         - python/test:
-            version: '3.5' 
+            version: '3.6' 
         - python/test:
             version: '3.8'
         - python/test:
