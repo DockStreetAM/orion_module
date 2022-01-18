@@ -1,4 +1,4 @@
-__version__ = '0.1.3'
+__version__ = '0.1.4'
 
 import requests
 import tabulate
@@ -59,7 +59,7 @@ class OrionAPI(object):
 
         payload = payload_template.copy()
         payload['prompts'] = run_params
-        
+
         # Put request to run query
         res = self.api_request(f"{self.base_url}/Reporting/Custom/{id}/Generate/Table",
             requests.post, json=payload)
