@@ -1,4 +1,3 @@
 Orion API Module
 ================
-
-Update to see if CircleCI triggers...again
+This module is to ease the interaction with the Orion advisors platform.
