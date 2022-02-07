@@ -59,9 +59,56 @@ class OrionAPI(object):
 
         payload = payload_template.copy()
         payload['prompts'] = run_params
+        print(f"{payload=}")
 
         # Put request to run query
         res = self.api_request(f"{self.base_url}/Reporting/Custom/{id}/Generate/Table",
             requests.post, json=payload)
         return res.json()        
 
+class EclipseAPI(object):
+    def __init__(self, usr=None, pwd=None, orion_token=None):
+        self.eclipse_token = None
+        self.orion_token = orion_token
+        self.usr = usr
+        self.pwd = pwd
+        self.base_url = "https://api.orioneclipse.com/api/v1"
+
+    def login(self,usr=None, pwd=None, orion_token=None):
+        self.usr = usr
+        self.pwd = pwd
+        self.orion_token = orion_token
+
+        if orion_token is not None and usr is not None:
+            raise Exception("Pass either usr/pwd or an Orion Connect token, not both")
+        pass
+
+        if usr is not None:
+            print("Requesting"+f"{self.base_url}/admin/token")
+            res = requests.get(
+                f"{self.base_url}/admin/token",
+                auth=(usr,pwd)
+                )
+            print(res.text)
+            self.eclipse_token = res.json()['eclipse_access_token']
+
+        if self.orion_token is not None:
+            print("Requesting"+f"{self.base_url}/admin/token")
+            res = requests.get(
+                f"{self.base_url}/admin/token",
+                headers={'Authorization': 'Session '+self.orion_token})
+            print(res)
+            self.eclipse_token = res.json()['eclipse_access_token']
+
+    def api_request(self,url,req_func=requests.get,**kwargs):
+        return req_func(url,
+            headers={'Authorization': 'Session '+self.eclipse_token},**kwargs)
+
+    def check_username(self):
+        res = self.api_request(f"{self.base_url}/admin/authorization/user")
+        return res.json()['userLoginId']
+
+
+
+
+        #https://api.orioneclipse.com/doc/#api-Portfolios-GetPortfolioAllocations
