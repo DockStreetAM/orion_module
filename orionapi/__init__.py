@@ -44,7 +44,8 @@ class OrionAPI(object):
     def query(self,id,params=None):
         # Get the query to get list of params
         default_params = self.get_query_params(id)
-
+        params = params or {}
+        
         # Match param dict with params to constructut payload
         payload_template = {
             "runTo": 'null',
@@ -53,7 +54,7 @@ class OrionAPI(object):
             }
         run_params = []
         for p in default_params:
-            if p['code'] in params.keys():
+            if p['code'] in params:
                 p['defaultValue'] = params[p['code']]
             run_params.append(p)
 
