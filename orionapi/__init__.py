@@ -73,19 +73,34 @@ class EclipseAPI(object):
         self.orion_token = orion_token
         self.usr = usr
         self.pwd = pwd
-        self.base_url = "https://api.orioneclipse.com/api/v1"
+        self.base_url = "https://api.orioneclipse.com/v1"
 
+        # if one of the params is not None, then login
+        if self.usr is not None:
+            self.login(self.usr,self.pwd)
+        if self.orion_token is not None:
+            self.login(orion_token=self.orion_token)
+
+        
     def login(self,usr=None, pwd=None, orion_token=None):
+        print("login")
         self.usr = usr
         self.pwd = pwd
         self.orion_token = orion_token
 
-        if orion_token is not None and usr is not None:
+        if orion_token is None and usr is None:
             raise Exception("Pass either usr/pwd or an Orion Connect token, not both")
         pass
+# Orion Connect Login
+    #def login(self,usr=None,pwd=None):
+    #    res = requests.get(
+    #        f"{self.base_url}/security/token",
+    #        auth=(usr,pwd)
+    #    )
+    #    self.token = res.json()['access_token']
 
         if usr is not None:
-            print("Requesting"+f"{self.base_url}/admin/token")
+            print("Requesting with usr: "+f"{self.base_url}/admin/token")
             res = requests.get(
                 f"{self.base_url}/admin/token",
                 auth=(usr,pwd)
@@ -94,12 +109,21 @@ class EclipseAPI(object):
             self.eclipse_token = res.json()['eclipse_access_token']
 
         if self.orion_token is not None:
-            print("Requesting"+f"{self.base_url}/admin/token")
+            print("Requesting with token: "+f"{self.base_url}/admin/token")
+            print(f"Orion Connect Token: {self.orion_token[-4:]}") # last 4 characters of token
             res = requests.get(
                 f"{self.base_url}/admin/token",
                 headers={'Authorization': 'Session '+self.orion_token})
-            print(res)
-            self.eclipse_token = res.json()['eclipse_access_token']
+            print("request URL: ",res.request.url)
+            print("request Header: ",res.request.headers)
+            print("request Body: ",res.request.body)
+            print("response Status: ",res.status_code)
+            print("response Text: ",res.text)
+            print(res.json())
+            try:
+                self.eclipse_token = res.json()['eclipse_access_token']
+            except KeyError:
+                return res
 
     def api_request(self,url,req_func=requests.get,**kwargs):
         return req_func(url,
@@ -109,7 +133,19 @@ class EclipseAPI(object):
         res = self.api_request(f"{self.base_url}/admin/authorization/user")
         return res.json()['userLoginId']
 
+    def get_set_asides(self):
+        res = self.api_request(f"{self.base_url}/api/v2/Account/Accounts/SetAsideCashSettings")
+        return res.json()
 
-
-
+    def get_all_models(self):
+        res = self.api_request(f"{self.base_url}/modeling/models")
+        return res.json()
         #https://api.orioneclipse.com/doc/#api-Portfolios-GetPortfolioAllocations
+
+    def get_all_security_sets(self):
+        res = self.api_request(f"{self.base_url}/security/securityset")
+        return res.json()
+
+    def get_security_set(self,id):
+        res = self.api_request(f"{self.base_url}/security/securityset/details/{id}")
+        return res.json()
