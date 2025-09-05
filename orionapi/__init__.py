@@ -83,7 +83,6 @@ class EclipseAPI(object):
 
         
     def login(self,usr=None, pwd=None, orion_token=None):
-        print("login")
         self.usr = usr
         self.pwd = pwd
         self.orion_token = orion_token
@@ -91,35 +90,18 @@ class EclipseAPI(object):
         if orion_token is None and usr is None:
             raise Exception("Pass either usr/pwd or an Orion Connect token, not both")
         pass
-# Orion Connect Login
-    #def login(self,usr=None,pwd=None):
-    #    res = requests.get(
-    #        f"{self.base_url}/security/token",
-    #        auth=(usr,pwd)
-    #    )
-    #    self.token = res.json()['access_token']
 
         if usr is not None:
-            print("Requesting with usr: "+f"{self.base_url}/admin/token")
             res = requests.get(
                 f"{self.base_url}/admin/token",
                 auth=(usr,pwd)
                 )
-            print(res.text)
             self.eclipse_token = res.json()['eclipse_access_token']
 
         if self.orion_token is not None:
-            print("Requesting with token: "+f"{self.base_url}/admin/token")
-            print(f"Orion Connect Token: {self.orion_token[-4:]}") # last 4 characters of token
             res = requests.get(
                 f"{self.base_url}/admin/token",
                 headers={'Authorization': 'Session '+self.orion_token})
-            print("request URL: ",res.request.url)
-            print("request Header: ",res.request.headers)
-            print("request Body: ",res.request.body)
-            print("response Status: ",res.status_code)
-            print("response Text: ",res.text)
-            print(res.json())
             try:
                 self.eclipse_token = res.json()['eclipse_access_token']
             except KeyError:
