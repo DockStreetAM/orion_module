@@ -42,6 +42,7 @@ class OrionAPI(object):
             
 
     def query(self,id,params=None):
+        # TODO: allow params to be optional. Right now {} must be passed for some reason
         # Get the query to get list of params
         default_params = self.get_query_params(id)
         params = params or {}
@@ -60,8 +61,7 @@ class OrionAPI(object):
 
         payload = payload_template.copy()
         payload['prompts'] = run_params
-        print(f"{payload=}")
-
+        
         # Put request to run query
         res = self.api_request(f"{self.base_url}/Reporting/Custom/{id}/Generate/Table",
             requests.post, json=payload)
