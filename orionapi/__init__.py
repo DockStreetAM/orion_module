@@ -131,3 +131,88 @@ class EclipseAPI(object):
     def get_security_set(self,id):
         res = self.api_request(f"{self.base_url}/security/securityset/details/{id}")
         return res.json()
+
+    
+    def get_all_accounts(self):
+        res = self.api_request(f"{self.base_url}/account/accounts/simple")
+        accounts = res.json()
+        return accounts
+
+    def get_set_asides_v2(self):
+        res = self.api_request(f"{self.base_url}/api/v2/Account/Accounts/SetAsideCashSettings")
+        return res.json()
+
+    def get_set_asides(self,account_id):
+        account_id = self.get_internal_account_id(account_id)
+        res = self.api_request(f"{self.base_url}/account/accounts/{account_id}/asidecash")
+        return res.json()
+
+    def get_internal_account_id(self,account_id):
+        """Takes account_id, which is shown in the app and Orion Connect
+        Returns the internal system id used by the Eclipse API"""
+        res = self.api_request(f"{self.base_url}/account/accounts/simple?search={account_id}")
+        return res.json()[0]['id']
+        
+    def create_set_aside(self, account_id, amount, min_amount=None, max_amount=None,description=None, 
+                         min=None, max=None, cash_type='$',start_date=None,
+                         expire_type='None',expire_date=None,expire_trans_tol=0,
+                         expire_trans_type=1,percent_calc_type=0):
+        
+        account_id = self.get_internal_account_id(account_id)
+
+        cash_type_map = {
+            # end point account/accounts/asideCashAmountType
+            '$': 1,
+            '%': 2,
+        }
+        if type(cash_type) == str:
+            cash_type = cash_type_map[cash_type]
+
+        expire_type_map = {
+            # end point account/accounts/asideCashExpirationType
+            'Date': 1,
+            'Transaction': 2,
+            'None': 3,
+        }
+        if type(expire_type) == str:
+            print("mapping expire type")
+            expire_type = expire_type_map[expire_type]
+        print(f"Expire type is {expire_type}")
+        print(f"Type of expire type is {type(expire_type)}")
+
+        expire_trans_type_map = {
+            # end point account/accounts/asideCashTransactionType
+            'Distribution / Merge Out': 1,
+            'Fee': 3,
+        }
+        if type(expire_trans_type) == str:
+            expire_trans_type = expire_type_map[expire_trans_type]
+            
+        if expire_type == 1:
+            expire_value = expire_date
+        elif expire_type == 2:
+            expire_value = expire_trans_type
+        elif expire_type == 3:
+            expire_value = 0
+
+        percent_calc_type_map = {
+            'Use Default/Managed Value': 0,
+            'Use Total Value': 1,
+            'Use Excluded Value': 2,
+        }
+        if type(percent_calc_type) == str:
+            percent_calc_type = percent_calc_type_map[percent_calc_type]
+            
+        res = self.api_request(f"{self.base_url}/account/accounts/{account_id}/asidecash",
+            requests.post, json={
+                "cashAmountTypeId": cash_type,
+                "cashAmount": amount,
+                'minCashAmount': min_amount,
+                'maxCashAmount': max_amount,
+                "expirationTypeId": expire_type,
+                "expirationValue": expire_value,
+                "toleranceValue": expire_trans_tol,
+                "description": "TESTING Aside Cash",
+                "percentCalculationTypeId": percent_calc_type,
+})
+        return res.json()
