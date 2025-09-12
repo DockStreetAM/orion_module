@@ -206,9 +206,9 @@ class EclipseAPI(object):
         res = self.api_request(f"{self.base_url}/account/accounts/{account_id}/asidecash",
             requests.post, json={
                 "cashAmountTypeId": cash_type,
-                "cashAmount": amount,
-                'minCashAmount': min_amount,
-                'maxCashAmount': max_amount,
+                "cashAmount": float(amount),
+                'minCashAmount': float(min_amount),
+                'maxCashAmount': float(max_amount),
                 "expirationTypeId": expire_type,
                 "expirationValue": expire_value,
                 "toleranceValue": expire_trans_tol,
