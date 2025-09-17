@@ -147,8 +147,9 @@ class EclipseAPI(object):
         res = self.api_request(f"{self.base_url}/account/accounts/{account_id}/asidecash")
         return res.json()
 
-    def get_internal_account_id(self,account_id):
-        """Takes account_id, which is shown in the app and Orion Connect
+    def get_internal_account_id(self,search_param):
+        """Searches across id/accountName/accountNumber/portfolioName
+        Best use is to pass a full custodian accout number
         Returns the internal system id used by the Eclipse API"""
         res = self.api_request(f"{self.base_url}/account/accounts/simple?search={account_id}")
         return res.json()[0]['id']
@@ -214,5 +215,13 @@ class EclipseAPI(object):
                 "toleranceValue": expire_trans_tol,
                 "description": "TESTING Aside Cash",
                 "percentCalculationTypeId": percent_calc_type,
-})
+            })
         return res.json()
+
+    def get_account_details(self,internal_id):
+        res = self.api_request(f"{self.base_url}/account/accounts/{internal_id}")
+        return res.json()
+    
+    def get_account_cash_available(self,internal_id):
+        res = self.get_account_details(internal_id)
+        return res['summarySection']['cashAvailable']
