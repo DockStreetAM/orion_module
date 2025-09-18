@@ -150,9 +150,40 @@ class EclipseAPI(object):
     def get_internal_account_id(self,search_param):
         """Searches across id/accountName/accountNumber/portfolioName
         Best use is to pass a full custodian accout number
-        Returns the internal system id used by the Eclipse API"""
-        res = self.api_request(f"{self.base_url}/account/accounts/simple?search={account_id}")
+        Returns the internal system id used by the Eclipse API
+        Returns the first result. This might not be expected"""
+        res = self.search_accounts(search_param)
         return res.json()[0]['id']
+
+    def search_accounts(self,search_param):
+        res = self.api_request(f"{self.base_url}/account/accounts/simple?search={search_param}")
+        return res.json()
+
+    def search_accounts_number_and_name(self,acct_num_portion, name_portion):
+        """Searches accounts based on the trailing digits of the custodial account number
+        and a string contained in the name"""
+        from_acct = re.sub(r"\D", "", acct_num_portion)
+
+        accounts = self.search_accounts(from_acct)
+
+        num_match = [account for account in accounts if account['accountNumber'].endswith(from_acct)]
+        name_match = [account for account in accounts if name_portion.lower() in account['name'].lower()]
+
+        # intersection of name_match and num_match
+        matching_accounts = [account for account in num_match if account in name_match]
+
+        if len(matching_accounts) == 1:
+            return matching_accounts[0]['id'], matching_accounts[0]['accountNumber']
+
+        if len(matching_accounts) == 0:
+            E = Exception(f"No accounts found for acct# {acct_num_portion} and {name_portion}")
+            print("accounts matching digits: ", [{key: account[key] for key in ['id','name','accountId','accountNumber','accountType']} for account in num_match])
+            print("accounts matching last name: ", [{key: account[key] for key in ['id','name','accountId','accountNumber','accountType']} for account in name_match])
+            raise E
+        else:
+            E = Exception(f"Multiple accounts found for {acct_num_portion} and {name_portion}")
+            print("matching accounts: ", [{key: account[key] for key in ['id','name','accountId','accountNumber','accountType']} for account in matching_accounts])
+            raise E
         
     def create_set_aside(self, account_id, amount, min_amount=None, max_amount=None,description=None, 
                          min=None, max=None, cash_type='$',start_date=None,
