@@ -1,4 +1,4 @@
-__version__ = '0.2.2'
+__version__ = '0.2.3'
 
 import requests
 import tabulate
@@ -245,7 +245,7 @@ class EclipseAPI(object):
                 "expirationTypeId": expire_type,
                 "expirationValue": expire_value,
                 "toleranceValue": expire_trans_tol,
-                "description": "TESTING Aside Cash",
+                "description": description,
                 "percentCalculationTypeId": percent_calc_type,
             })
         return res.json()
