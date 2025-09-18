@@ -1,7 +1,8 @@
-__version__ = '0.2.0'
+__version__ = '0.2.1'
 
 import requests
 import tabulate
+import re
 
 class OrionAPI(object):
     def __init__(self, usr=None, pwd=None):
