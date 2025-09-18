@@ -154,7 +154,7 @@ class EclipseAPI(object):
         Returns the internal system id used by the Eclipse API
         Returns the first result. This might not be expected"""
         res = self.search_accounts(search_param)
-        return res.json()[0]['id']
+        return res[0]['id']
 
     def search_accounts(self,search_param):
         res = self.api_request(f"{self.base_url}/account/accounts/simple?search={search_param}")
