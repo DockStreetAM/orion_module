@@ -1,4 +1,4 @@
-__version__ = '0.2.3'
+__version__ = '0.2.4'
 
 import requests
 import tabulate
@@ -257,3 +257,9 @@ class EclipseAPI(object):
     def get_account_cash_available(self,internal_id):
         res = self.get_account_details(internal_id)
         return res['summarySection']['cashAvailable']
+
+    def get_orders(self):
+        return self.api_request(f"{self.base_url}/tradeorder/trades?isPending=false").json()
+
+    def get_orders_pending(self):
+        return self.api_request(f"{self.base_url}/tradeorder/trades?isPending=true").json()
