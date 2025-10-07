@@ -3,6 +3,7 @@ __version__ = '0.2.4'
 import requests
 import tabulate
 import re
+import rapidfuzz
 
 class OrionAPI(object):
     def __init__(self, usr=None, pwd=None):
@@ -154,21 +155,28 @@ class EclipseAPI(object):
         Returns the internal system id used by the Eclipse API
         Returns the first result. This might not be expected"""
         res = self.search_accounts(search_param)
+        print(res)
         return res[0]['id']
 
     def search_accounts(self,search_param):
         res = self.api_request(f"{self.base_url}/account/accounts/simple?search={search_param}")
         return res.json()
 
+    def normalize_name(self, name):
+        return re.sub(r"[^a-zA-Z0-9]", "", name).lower()
+
     def search_accounts_number_and_name(self,acct_num_portion, name_portion):
         """Searches accounts based on the trailing digits of the custodial account number
         and a string contained in the name"""
+
         from_acct = re.sub(r"\D", "", acct_num_portion)
+        name_portion = self.normalize_name(name_portion)
 
         accounts = self.search_accounts(from_acct)
 
         num_match = [account for account in accounts if account['accountNumber'].endswith(from_acct)]
-        name_match = [account for account in accounts if name_portion.lower() in account['name'].lower()]
+        name_match = [account for account in accounts if rapidfuzz.fuzz.partial_ratio(
+            name_portion, self.normalize_name(account['name']), score_cutoff=85) ]
 
         # intersection of name_match and num_match
         matching_accounts = [account for account in num_match if account in name_match]
@@ -186,12 +194,13 @@ class EclipseAPI(object):
             print("matching accounts: ", [{key: account[key] for key in ['id','name','accountId','accountNumber','accountType']} for account in matching_accounts])
             raise E
         
-    def create_set_aside(self, account_id, amount, min_amount=None, max_amount=None,description=None, 
+    def create_set_aside(self, account_number, amount, min_amount=None, max_amount=None,description=None, 
                          min=None, max=None, cash_type='$',start_date=None,
                          expire_type='None',expire_date=None,expire_trans_tol=0,
                          expire_trans_type=1,percent_calc_type=0):
         
-        account_id = self.get_internal_account_id(account_id)
+        # This function takes the full custodial account number as input
+        account_id = self.get_internal_account_id(account_number)
 
         cash_type_map = {
             # end point account/accounts/asideCashAmountType
@@ -252,6 +261,10 @@ class EclipseAPI(object):
 
     def get_account_details(self,internal_id):
         res = self.api_request(f"{self.base_url}/account/accounts/{internal_id}")
+        return res.json()
+
+    def get_all_account_details(self):
+        res = self.api_request(f"{self.base_url}/account/accounts/")
         return res.json()
     
     def get_account_cash_available(self,internal_id):
