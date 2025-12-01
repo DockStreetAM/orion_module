@@ -1,9 +1,10 @@
-__version__ = '0.2.5'
+__version__ = '0.3.0'
 
 import requests
 import tabulate
 import re
 import rapidfuzz
+import logging
 
 class OrionAPI(object):
     def __init__(self, usr=None, pwd=None):
@@ -121,20 +122,6 @@ class EclipseAPI(object):
         res = self.api_request(f"{self.base_url}/api/v2/Account/Accounts/SetAsideCashSettings")
         return res.json()
 
-    def get_all_models(self):
-        res = self.api_request(f"{self.base_url}/modeling/models")
-        return res.json()
-        #https://api.orioneclipse.com/doc/#api-Portfolios-GetPortfolioAllocations
-
-    def get_all_security_sets(self):
-        res = self.api_request(f"{self.base_url}/security/securityset")
-        return res.json()
-
-    def get_security_set(self,id):
-        res = self.api_request(f"{self.base_url}/security/securityset/details/{id}")
-        return res.json()
-
-    
     def get_all_accounts(self):
         res = self.api_request(f"{self.base_url}/account/accounts/simple")
         accounts = res.json()
@@ -172,27 +159,36 @@ class EclipseAPI(object):
         from_acct = re.sub(r"\D", "", acct_num_portion)
         name_portion = self.normalize_name(name_portion)
 
+        # First: filter by exact trailing account-number match
         accounts = self.search_accounts(from_acct)
+        num_match = [
+            a for a in accounts
+            if a["accountNumber"].endswith(from_acct)
+        ]
 
-        num_match = [account for account in accounts if account['accountNumber'].endswith(from_acct)]
-        name_match = [account for account in accounts if rapidfuzz.fuzz.partial_ratio(
-            name_portion, self.normalize_name(account['name']), score_cutoff=85) ]
+        if not num_match:
+            raise Exception(f"No accounts found for acct# {acct_num_portion}")
 
-        # intersection of name_match and num_match
-        matching_accounts = [account for account in num_match if account in name_match]
+        # If multiple number matches, log but continue
+        if len(num_match) > 1:
+            logging.info(
+                "Multiple accounts share trailing digits '%s': %s",
+                from_acct,
+                [
+                    {k: a[k] for k in ["id","name","accountId","accountNumber","accountType"]}
+                    for a in num_match
+                ]
+            )
 
-        if len(matching_accounts) == 1:
-            return matching_accounts[0]['id'], matching_accounts[0]['accountNumber']
-
-        if len(matching_accounts) == 0:
-            E = Exception(f"No accounts found for acct# {acct_num_portion} and {name_portion}")
-            print("accounts matching digits: ", [{key: account[key] for key in ['id','name','accountId','accountNumber','accountType']} for account in num_match])
-            print("accounts matching last name: ", [{key: account[key] for key in ['id','name','accountId','accountNumber','accountType']} for account in name_match])
-            raise E
-        else:
-            E = Exception(f"Multiple accounts found for {acct_num_portion} and {name_portion}")
-            print("matching accounts: ", [{key: account[key] for key in ['id','name','accountId','accountNumber','accountType']} for account in matching_accounts])
-            raise E
+        ### Pick the best fuzzy name match
+        best_acct = max(
+            num_match,
+            key=lambda a: fuzz.partial_ratio(
+                name_portion,
+                self.normalize_name(a["name"])
+            )
+        )
+        return best_acct['id'], best_acct['accountNumber']
         
     def create_set_aside(self, account_number, amount, min_amount=None, max_amount=None,description=None, 
                          min=None, max=None, cash_type='$',start_date=None,
@@ -276,3 +272,60 @@ class EclipseAPI(object):
 
     def get_orders_pending(self):
         return self.api_request(f"{self.base_url}/tradeorder/trades?isPending=true").json()
+
+
+    ### Model Maintenance
+    def get_all_models(self):
+        res = self.api_request(f"{self.base_url}/modeling/models")
+        return res.json()
+        #https://api.orioneclipse.com/doc/#api-Portfolios-GetPortfolioAllocations
+
+    def get_model(self,id):
+        res = self.api_request(f"{self.base_url}/modeling/models/{id}")
+        return res.json()
+
+    def get_model_allocations(self,id):
+        res = self.api_request(f"{self.base_url}/modeling/models/{id}/allocations?aggregateAllocations=true")
+        return res.json()
+
+    def get_all_security_sets(self):
+        res = self.api_request(f"{self.base_url}/security/securityset")
+        return res.json()
+
+    def get_security_set(self,id):
+        res = self.api_request(f"{self.base_url}/security/securityset/details/{id}")
+        return res.json()
+
+    def add_model(self, name, nameSpace=None, description=None, tags=None, statusId=None, 
+        managementStyleId=None, isCommunityModel=None, isDynamic=None,excludeRebalanceSleeve=None):
+        pass
+        #Set defaults for all Params
+        #POST json to create model
+    
+    def add_model_detail(self, name, children):
+        # children is list of dict formated:
+        # {id:model or sec set,
+        #  name: optional?,
+        #  targetPercent: float,
+        #  rank: int,
+        #  toleranceType: RANGE or ?,
+        #  toleranceTypeValue: int,
+        #  lowerModelTolerancePercent: float,
+        #  upperModelTolerancePercent: float,
+        #  lowerModelToleranceAmount: float,
+        #  upperModelToleranceAmount: float,
+        #  children: []
+        #}
+        #which are optional?
+        #lets start with the most minimal and see what happens.
+
+    #def delete_model(self,id):
+        # DELETE request type?
+    #    return
+
+    #def create_security_set(self, name, securities, description=None, toleranceType=None,
+                            toleranceTypeValue=None):
+    #    return
+        # list of securities: id, targetPercent, lowerModelTolerancePercent, upperModelTolerancePercent
+        # lowerModelToleranceAmount, upperModelToleranceAmount, rank, 
+        # POST request type
