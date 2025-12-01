@@ -1,4 +1,4 @@
-__version__ = '0.3.0'
+__version__ = '0.3.1'
 
 import requests
 import tabulate
@@ -183,7 +183,7 @@ class EclipseAPI(object):
         ### Pick the best fuzzy name match
         best_acct = max(
             num_match,
-            key=lambda a: fuzz.partial_ratio(
+            key=lambda a: rapidfuzz.fuzz.partial_ratio(
                 name_portion,
                 self.normalize_name(a["name"])
             )
@@ -302,7 +302,7 @@ class EclipseAPI(object):
         #Set defaults for all Params
         #POST json to create model
     
-    def add_model_detail(self, name, children):
+    #def add_model_detail(self, name, children):
         # children is list of dict formated:
         # {id:model or sec set,
         #  name: optional?,
@@ -324,8 +324,8 @@ class EclipseAPI(object):
     #    return
 
     #def create_security_set(self, name, securities, description=None, toleranceType=None,
-                            toleranceTypeValue=None):
+    #                        toleranceTypeValue=None):
     #    return
         # list of securities: id, targetPercent, lowerModelTolerancePercent, upperModelTolerancePercent
         # lowerModelToleranceAmount, upperModelToleranceAmount, rank, 
-        # POST request type
+        # POST request typ
