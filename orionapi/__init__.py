@@ -273,6 +273,37 @@ class EclipseAPI(object):
     def get_orders_pending(self):
         return self.api_request(f"{self.base_url}/tradeorder/trades?isPending=true").json()
 
+    def cash_needs_trade(self, portfolio_ids, portfolio_trade_group_ids=None,
+                         is_view_only=True, reason="", is_excel_import=False):
+        """Rebalance CashNeeds Portfolios.
+
+        Args:
+            portfolio_ids: List of portfolio IDs to process
+            portfolio_trade_group_ids: List of portfolio trade group IDs (optional)
+            is_view_only: If True, preview trades without executing (default True)
+            reason: Reason for the trade
+            is_excel_import: Whether this is from an Excel import (default False)
+
+        Returns:
+            dict with 'issues', 'success', and 'instanceId' fields
+        """
+        if portfolio_trade_group_ids is None:
+            portfolio_trade_group_ids = []
+
+        payload = {
+            "portfolioIds": portfolio_ids,
+            "portfolioTradeGroupIds": portfolio_trade_group_ids,
+            "isViewOnly": is_view_only,
+            "reason": reason,
+            "isExcelImport": is_excel_import
+        }
+
+        res = self.api_request(
+            f"{self.base_url}/tradetool/cashneeds/action/generatetrade",
+            requests.post,
+            json=payload
+        )
+        return res.json()
 
     ### Model Maintenance
     def get_all_models(self):
