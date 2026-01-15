@@ -6,7 +6,48 @@ import re
 import rapidfuzz
 import logging
 
-class OrionAPI(object):
+
+class BaseAPI:
+    """Base class for Orion API clients with shared request handling."""
+
+    base_url = None
+
+    def _get_auth_header(self):
+        """Return authorization header dict. Subclasses must implement."""
+        raise NotImplementedError("Subclasses must implement _get_auth_header()")
+
+    def api_request(self, url, req_func=requests.get, **kwargs):
+        """Make an authenticated API request with error handling.
+
+        Args:
+            url: The API endpoint URL
+            req_func: The requests function to use (get, post, put, delete)
+            **kwargs: Additional arguments passed to the request
+
+        Returns:
+            requests.Response object
+
+        Raises:
+            requests.exceptions.HTTPError: On 4xx/5xx responses
+        """
+        headers = kwargs.pop('headers', {})
+        headers.update(self._get_auth_header())
+        res = req_func(url, headers=headers, **kwargs)
+        try:
+            res.raise_for_status()
+        except requests.exceptions.HTTPError as e:
+            # Try to include API error message in exception
+            try:
+                error_body = res.json()
+                raise requests.exceptions.HTTPError(
+                    f"{e}: {error_body.get('message', error_body)}"
+                ) from None
+            except ValueError:
+                raise
+        return res
+
+
+class OrionAPI(BaseAPI):
     def __init__(self, usr=None, pwd=None):
         self.token = None
         self.usr = usr
@@ -23,9 +64,8 @@ class OrionAPI(object):
         )
         self.token = res.json()['access_token']
 
-    def api_request(self,url,req_func=requests.get,**kwargs):
-        return req_func(url,
-            headers={'Authorization': 'Session '+self.token},**kwargs)
+    def _get_auth_header(self):
+        return {'Authorization': 'Session ' + self.token}
 
     def check_username(self):
         res = self.api_request(f"{self.base_url}/authorization/user")
@@ -70,7 +110,7 @@ class OrionAPI(object):
             requests.post, json=payload)
         return res.json()        
 
-class EclipseAPI(object):
+class EclipseAPI(BaseAPI):
     def __init__(self, usr=None, pwd=None, orion_token=None):
         self.eclipse_token = None
         self.orion_token = orion_token
@@ -91,8 +131,7 @@ class EclipseAPI(object):
         self.orion_token = orion_token
 
         if orion_token is None and usr is None:
-            raise Exception("Pass either usr/pwd or an Orion Connect token, not both")
-        pass
+            raise Exception("Must provide either usr/pwd or orion_token")
 
         if usr is not None:
             res = requests.get(
@@ -110,17 +149,12 @@ class EclipseAPI(object):
             except KeyError:
                 return res
 
-    def api_request(self,url,req_func=requests.get,**kwargs):
-        return req_func(url,
-            headers={'Authorization': 'Session '+self.eclipse_token},**kwargs)
+    def _get_auth_header(self):
+        return {'Authorization': 'Session ' + self.eclipse_token}
 
     def check_username(self):
         res = self.api_request(f"{self.base_url}/admin/authorization/user")
         return res.json()['userLoginId']
-
-    def get_set_asides(self):
-        res = self.api_request(f"{self.base_url}/api/v2/Account/Accounts/SetAsideCashSettings")
-        return res.json()
 
     def get_all_accounts(self):
         res = self.api_request(f"{self.base_url}/account/accounts/simple")
@@ -142,7 +176,7 @@ class EclipseAPI(object):
         Returns the internal system id used by the Eclipse API
         Returns the first result. This might not be expected"""
         res = self.search_accounts(search_param)
-        print(res)
+        logging.debug("search_accounts result: %s", res)
         return res[0]['id']
 
     def search_accounts(self,search_param):
@@ -203,7 +237,7 @@ class EclipseAPI(object):
             '$': 1,
             '%': 2,
         }
-        if type(cash_type) == str:
+        if isinstance(cash_type, str):
             cash_type = cash_type_map[cash_type]
 
         expire_type_map = {
@@ -212,19 +246,18 @@ class EclipseAPI(object):
             'Transaction': 2,
             'None': 3,
         }
-        if type(expire_type) == str:
-            print("mapping expire type")
+        if isinstance(expire_type, str):
+            logging.debug("mapping expire type")
             expire_type = expire_type_map[expire_type]
-        print(f"Expire type is {expire_type}")
-        print(f"Type of expire type is {type(expire_type)}")
+        logging.debug("Expire type is %s (type: %s)", expire_type, type(expire_type))
 
         expire_trans_type_map = {
             # end point account/accounts/asideCashTransactionType
             'Distribution / Merge Out': 1,
             'Fee': 3,
         }
-        if type(expire_trans_type) == str:
-            expire_trans_type = expire_type_map[expire_trans_type]
+        if isinstance(expire_trans_type, str):
+            expire_trans_type = expire_trans_type_map[expire_trans_type]
             
         if expire_type == 1:
             expire_value = expire_date
@@ -238,7 +271,7 @@ class EclipseAPI(object):
             'Use Total Value': 1,
             'Use Excluded Value': 2,
         }
-        if type(percent_calc_type) == str:
+        if isinstance(percent_calc_type, str):
             percent_calc_type = percent_calc_type_map[percent_calc_type]
             
         res = self.api_request(f"{self.base_url}/account/accounts/{account_id}/asidecash",
@@ -404,36 +437,121 @@ class EclipseAPI(object):
         res = self.api_request(f"{self.base_url}/security/securityset/details/{id}")
         return res.json()
 
-    def add_model(self, name, nameSpace=None, description=None, tags=None, statusId=None, 
-        managementStyleId=None, isCommunityModel=None, isDynamic=None,excludeRebalanceSleeve=None):
-        pass
-        #Set defaults for all Params
-        #POST json to create model
-    
-    #def add_model_detail(self, name, children):
-        # children is list of dict formated:
-        # {id:model or sec set,
-        #  name: optional?,
-        #  targetPercent: float,
-        #  rank: int,
-        #  toleranceType: RANGE or ?,
-        #  toleranceTypeValue: int,
-        #  lowerModelTolerancePercent: float,
-        #  upperModelTolerancePercent: float,
-        #  lowerModelToleranceAmount: float,
-        #  upperModelToleranceAmount: float,
-        #  children: []
-        #}
-        #which are optional?
-        #lets start with the most minimal and see what happens.
+    def add_model(self, name, name_space=None, description=None, tags=None, status_id=1,
+                  management_style_id=2, is_community_model=False, is_dynamic=False,
+                  exclude_rebalance_sleeve=False):
+        """Create a new model.
 
-    #def delete_model(self,id):
-        # DELETE request type?
-    #    return
+        Args:
+            name: Name of the model (required)
+            name_space: Namespace of the model
+            description: Description of the model
+            tags: Tags for the model
+            status_id: Status ID (default 1)
+            management_style_id: Management style ID (default 2)
+            is_community_model: Whether model is from community (default False)
+            is_dynamic: Whether model is dynamic (default False)
+            exclude_rebalance_sleeve: Exclude sleeved accounts from rebalance (default False)
 
-    #def create_security_set(self, name, securities, description=None, toleranceType=None,
-    #                        toleranceTypeValue=None):
-    #    return
-        # list of securities: id, targetPercent, lowerModelTolerancePercent, upperModelTolerancePercent
-        # lowerModelToleranceAmount, upperModelToleranceAmount, rank, 
-        # POST request typ
+        Returns:
+            dict with created model details including 'id'
+        """
+        payload = {
+            "name": name,
+            "nameSpace": name_space,
+            "description": description,
+            "tags": tags,
+            "statusId": status_id,
+            "managementStyleId": management_style_id,
+            "isCommunityModel": is_community_model,
+            "isDynamic": 1 if is_dynamic else 0,
+            "excludeRebalanceSleeve": exclude_rebalance_sleeve
+        }
+
+        res = self.api_request(
+            f"{self.base_url}/modeling/models",
+            requests.post,
+            json=payload
+        )
+        return res.json()
+
+    def add_model_detail(self, model_id, model_detail):
+        """Add model detail/structure to an existing model.
+
+        Args:
+            model_id: ID of the model to add detail to
+            model_detail: Dict with model structure. Can include:
+                - id: ID of submodel
+                - name: Name
+                - nameSpace: Namespace
+                - securityAsset: {"id": asset_id}
+                - targetPercent: Target percentage
+                - toleranceType: "range" or "fixband%"
+                - toleranceTypeValue: Tolerance value
+                - rank: Rank order
+                - lowerModelTolerancePercent: Lower tolerance %
+                - upperModelTolerancePercent: Upper tolerance %
+                - lowerModelToleranceAmount: Lower tolerance $
+                - upperModelToleranceAmount: Upper tolerance $
+                - children: List of child ModelDetail dicts
+
+        Returns:
+            dict with updated model details
+        """
+        res = self.api_request(
+            f"{self.base_url}/modeling/models/{model_id}/modelDetail",
+            requests.post,
+            json={"modelDetail": model_detail}
+        )
+        return res.json()
+
+    def delete_model(self, model_id):
+        """Delete a model (soft delete).
+
+        Args:
+            model_id: ID of the model to delete
+
+        Returns:
+            dict with success message
+        """
+        res = self.api_request(
+            f"{self.base_url}/modeling/models/{model_id}",
+            requests.delete
+        )
+        return res.json()
+
+    def create_security_set(self, name, securities, description=None,
+                            tolerance_type="ABSOLUTE", tolerance_type_value=0):
+        """Create a new security set.
+
+        Args:
+            name: Name of the security set
+            securities: List of security dicts with:
+                - id: Security ID
+                - targetPercent: Target percentage
+                - rank: Rank order
+                - lowerModelTolerancePercent: Lower tolerance %
+                - upperModelTolerancePercent: Upper tolerance %
+                - lowerModelToleranceAmount: Lower tolerance $ (optional)
+                - upperModelToleranceAmount: Upper tolerance $ (optional)
+            description: Description of the security set
+            tolerance_type: "ABSOLUTE" or "BAND" (default "ABSOLUTE")
+            tolerance_type_value: Tolerance value (default 0)
+
+        Returns:
+            dict with created security set details
+        """
+        payload = {
+            "name": name,
+            "description": description,
+            "toleranceType": tolerance_type,
+            "toleranceTypeValue": tolerance_type_value,
+            "securities": securities
+        }
+
+        res = self.api_request(
+            f"{self.base_url}/security/securityset",
+            requests.post,
+            json=payload
+        )
+        return res.json()
