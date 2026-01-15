@@ -267,6 +267,14 @@ class EclipseAPI(object):
         res = self.get_account_details(internal_id)
         return res['summarySection']['cashAvailable']
 
+    def get_portfolio(self, portfolio_id):
+        """Get portfolio details by ID.
+
+        Returns dict with 'general', 'teams', 'issues', 'summary' sections.
+        """
+        res = self.api_request(f"{self.base_url}/portfolio/portfolios/{portfolio_id}")
+        return res.json()
+
     def get_orders(self):
         return self.api_request(f"{self.base_url}/tradeorder/trades?isPending=false").json()
 
