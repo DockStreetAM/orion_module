@@ -1,0 +1,6 @@
+# Model: Test Model TESTING 2
+# Description: A test model for sync testing - UPDATED
+
+# Component                      Lower%  Target%  Upper%
+Equity                           15      85      140
+Cash Funds                       0       15      25
