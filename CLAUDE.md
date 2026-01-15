@@ -7,6 +7,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 Python wrapper for the Orion Advisor and Eclipse trading platform APIs. Provides two main classes:
 - `OrionAPI` - Interface for Orion Advisor API (reporting, custom queries)
 - `EclipseAPI` - Interface for Eclipse trading platform (accounts, orders, models, trade tools)
+## Goal
+To provide an easy to use python wrapper for the api where the user can supply username and password and get the mostly frequently used endpoints. Complexity ay be hidden (endpoints and parameters rarely used)
 
 ## Commands
 
