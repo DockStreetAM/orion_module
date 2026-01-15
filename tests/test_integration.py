@@ -169,3 +169,53 @@ class TestEclipseAPI:
         """Test that we can fetch all security sets."""
         security_sets = eclipse_client.get_all_security_sets()
         assert isinstance(security_sets, list)
+
+    # Additional read method tests
+
+    def test_get_orders_pending(self, eclipse_client):
+        """Test that we can fetch pending orders."""
+        orders = eclipse_client.get_orders_pending()
+        assert isinstance(orders, list)
+
+    def test_get_all_account_details(self, eclipse_client):
+        """Test that we can fetch details for all accounts."""
+        details = eclipse_client.get_all_account_details()
+        assert isinstance(details, list)
+
+    def test_get_internal_account_id(self, eclipse_client):
+        """Test that we can get internal account ID from account number."""
+        accounts = eclipse_client.get_all_accounts()
+        if not accounts:
+            pytest.skip("No accounts available")
+
+        acct_num = accounts[0].get('accountNumber', '')
+        if not acct_num:
+            pytest.skip("Account missing number")
+
+        internal_id = eclipse_client.get_internal_account_id(acct_num)
+        assert isinstance(internal_id, int)
+
+    def test_get_account_cash_available(self, eclipse_client):
+        """Test that we can get available cash for an account."""
+        accounts = eclipse_client.get_all_accounts()
+        if not accounts:
+            pytest.skip("No accounts available")
+
+        account_id = accounts[0]['id']
+        cash = eclipse_client.get_account_cash_available(account_id)
+        assert isinstance(cash, (int, float))
+
+    def test_get_security_set(self, eclipse_client):
+        """Test that we can fetch a security set by ID."""
+        security_sets = eclipse_client.get_all_security_sets()
+        if not security_sets:
+            pytest.skip("No security sets available")
+
+        set_id = security_sets[0]['id']
+        security_set = eclipse_client.get_security_set(set_id)
+        assert isinstance(security_set, dict)
+
+    def test_get_set_asides_v2(self, eclipse_client):
+        """Test that we can fetch all set asides via v2 API."""
+        set_asides = eclipse_client.get_set_asides_v2()
+        assert isinstance(set_asides, (dict, list))
