@@ -638,6 +638,28 @@ class EclipseAPI(BaseAPI):
         )
         return res.json()
 
+    def get_closed_trades(self):
+        """Get all closed/executed trade orders.
+
+        Returns:
+            list: List of closed trade order dicts with account, security, action, etc.
+        """
+        return self.api_request(f"{self.base_url}/tradeorder/closedtrades").json()
+
+    def get_trade_instances(self, start_date, end_date):
+        """Get trade instances (batches of trades) within a date range.
+
+        Args:
+            start_date: Start date (YYYY-MM-DD format)
+            end_date: End date (YYYY-MM-DD format)
+
+        Returns:
+            list: List of trade instance dicts with id, orderCount, executeStatus, etc.
+        """
+        return self.api_request(
+            f"{self.base_url}/tradeorder/instances?startDate={start_date}&endDate={end_date}"
+        ).json()
+
     # Model Maintenance
 
     def get_all_models(self):
