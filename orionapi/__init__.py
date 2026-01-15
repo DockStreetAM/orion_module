@@ -275,6 +275,75 @@ class EclipseAPI(object):
         res = self.api_request(f"{self.base_url}/portfolio/portfolios/{portfolio_id}")
         return res.json()
 
+    def get_portfolio_accounts(self, portfolio_id):
+        """Get list of accounts for a portfolio.
+
+        Returns list of accounts with cash targets, sleeve settings, and values.
+        """
+        res = self.api_request(f"{self.base_url}/portfolio/portfolios/{portfolio_id}/accounts")
+        return res.json()
+
+    def get_model_tolerance(self, portfolio_id, account_id, account_type="Normal"):
+        """Get model tolerance values for a portfolio/account.
+
+        Args:
+            portfolio_id: Portfolio ID
+            account_id: Account ID
+            account_type: "Normal" or "Sleeve"
+
+        Returns target vs current allocation percentages and tolerance bands.
+        """
+        res = self.api_request(
+            f"{self.base_url}/portfolio/portfolios/{portfolio_id}/ModelMACTolerance/{account_id}",
+            params={"accountType": account_type}
+        )
+        return res.json()
+
+    def get_all_portfolios(self, include_value=True, search=None):
+        """Get list of all portfolios.
+
+        Args:
+            include_value: Include holding values (default True)
+            search: Optional search string
+
+        Returns list of portfolios with basic info and optionally values.
+        """
+        params = {"includevalue": str(include_value).lower()}
+        if search:
+            params["search"] = search
+        res = self.api_request(f"{self.base_url}/portfolio/portfolios/simple", params=params)
+        return res.json()
+
+    def get_account_holdings(self, account_id, search=None):
+        """Get holdings for a specific account.
+
+        Args:
+            account_id: Account ID
+            search: Optional search string (id or name)
+
+        Returns list of holdings with values and percentages.
+        """
+        params = {"inAccountId": account_id}
+        if search:
+            params["search"] = search
+        res = self.api_request(f"{self.base_url}/holding/holdings/simple", params=params)
+        return res.json()
+
+    def get_portfolio_holdings(self, portfolio_id, search=None):
+        """Get all holdings across a portfolio.
+
+        Args:
+            portfolio_id: Portfolio ID
+            search: Optional search string (id or name)
+
+        Returns list of holdings with values and percentages.
+        """
+        params = {"inPortfolioId": portfolio_id}
+        if search:
+            params["search"] = search
+        res = self.api_request(f"{self.base_url}/holding/holdings/simple", params=params)
+        return res.json()
+
     def get_orders(self):
         return self.api_request(f"{self.base_url}/tradeorder/trades?isPending=false").json()
 
