@@ -1,0 +1,5 @@
+# Security Set: Cash Funds
+# Description: Floating Rate or Money Market funds. Cash like, but requires a trade
+
+# Ticker  Lower%  Target%  Upper%
+TBLL     50.00   100.00  150.00 

@@ -1,0 +1,6 @@
+# Model: 50% Equity
+# Description: Target 50% Fixed Income, remaining Equity
+
+# Component                      Lower%  Target%  Upper%
+Equity                           15       50       55
+Fixed Income                     35       50       85

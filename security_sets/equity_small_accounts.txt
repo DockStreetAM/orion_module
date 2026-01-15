@@ -1,0 +1,27 @@
+# Security Set: Equity - Small Accounts
+# Description: Dock Street's high quality companies
+
+# Ticker  Lower%  Target%  Upper%
+AMZN     0.00    7.50    37.50  
+BRKB     0.00    0.00    0.00   
+ORCL     0.00    3.50    17.50  
+MSFT     0.00    5.00    25.00  
+TSM      0.00    5.00    25.00  
+BKNG     0.00    3.00    15.00  
+AAPL     0.00    2.00    10.00  
+NFLX     0.00    2.50    12.50  
+CDNS     0.00    3.00    15.00  
+NVDA     0.00    16.50   82.50  
+MCO      0.00    0.00    0.00   
+MA       0.00    5.00    25.00  
+MSCI     0.00    2.00    10.00  
+V        0.00    6.50    32.50  
+META     0.00    5.00    25.00  
+NOW      0.00    5.00    25.00  
+GOOG     0.00    5.50    27.50  
+AVGO     0.00    2.00    10.00  
+FICO     0.00    3.00    15.00  
+PLTR     0.00    12.00   60.00  
+ARM      0.00    2.00    10.00  
+SPOT     0.00    2.50    12.50  
+TKO      0.00    1.50    7.50   

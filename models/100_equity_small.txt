@@ -1,0 +1,6 @@
+# Model: 100% Equity - Small Portfolio
+# Description: 100% Equity for small accounts
+
+# Component                      Lower%  Target%  Upper%
+Equity - Small Accounts          65       100       100
+Fixed Income                     0       0       35
