@@ -225,6 +225,59 @@ class TestEclipseAPI:
             pytest.skip("Insufficient privileges for v2 set asides endpoint")
 
 
+    def test_search_securities(self, eclipse_client):
+        """Test that we can search for securities."""
+        results = eclipse_client.search_securities('AAPL', top=5)
+        assert isinstance(results, list)
+        # Should find at least one result
+        assert len(results) > 0
+        # Check structure
+        assert 'id' in results[0]
+        assert 'symbol' in results[0] or 'name' in results[0]
+
+    def test_get_security_by_ticker(self, eclipse_client):
+        """Test that we can get a security by ticker."""
+        sec = eclipse_client.get_security_by_ticker('AAPL')
+        assert isinstance(sec, dict)
+        assert 'id' in sec
+        assert sec.get('symbol', '').upper() == 'AAPL'
+
+    def test_parse_security_set_file(self, eclipse_client, tmp_path):
+        """Test parsing a security set definition file."""
+        # Create a test file
+        test_file = tmp_path / "test_set.txt"
+        test_file.write_text("""# Security Set: Test Set
+# Description: A test security set
+
+# Ticker  Lower%  Target%  Upper%
+AAPL      5       10       20
+MSFT      3       8        15
+""")
+
+        parsed = eclipse_client.parse_security_set_file(str(test_file))
+        assert parsed['name'] == 'Test Set'
+        assert parsed['description'] == 'A test security set'
+        assert len(parsed['securities']) == 2
+        assert parsed['securities'][0]['ticker'] == 'AAPL'
+        assert parsed['securities'][0]['lower_bound'] == 5.0
+        assert parsed['securities'][0]['target'] == 10.0
+        assert parsed['securities'][0]['upper_bound'] == 20.0
+
+    def test_convert_to_eclipse_tolerances(self, eclipse_client):
+        """Test converting absolute bounds to Eclipse tolerance format."""
+        securities = [
+            {'ticker': 'AAPL', 'lower_bound': 5, 'target': 10, 'upper_bound': 20}
+        ]
+        result = eclipse_client.convert_to_eclipse_tolerances(securities)
+        assert len(result) == 1
+        assert 'id' in result[0]
+        assert result[0]['targetPercent'] == 10
+        # lower_tolerance = target - lower_bound = 10 - 5 = 5
+        assert result[0]['lowerModelTolerancePercent'] == 5
+        # upper_tolerance = upper_bound - target = 20 - 10 = 10
+        assert result[0]['upperModelTolerancePercent'] == 10
+
+
 class TestOrionAPI:
     def test_check_username(self, orion_client):
         """Test that we can authenticate and get username."""
