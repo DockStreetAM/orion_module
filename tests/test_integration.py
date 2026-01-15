@@ -80,3 +80,92 @@ class TestEclipseAPI:
         account_id = accounts[0]['id']
         holdings = eclipse_client.get_account_holdings(account_id)
         assert isinstance(holdings, list)
+
+    # High priority tests
+
+    def test_get_account_details(self, eclipse_client):
+        """Test that we can fetch details for an account."""
+        accounts = eclipse_client.get_all_accounts()
+        if not accounts:
+            pytest.skip("No accounts available")
+
+        account_id = accounts[0]['id']
+        details = eclipse_client.get_account_details(account_id)
+        assert isinstance(details, dict)
+        assert 'id' in details or 'accountNumber' in details
+
+    def test_get_model(self, eclipse_client):
+        """Test that we can fetch a model by ID."""
+        models = eclipse_client.get_all_models()
+        if not models:
+            pytest.skip("No models available")
+
+        model_id = models[0]['id']
+        model = eclipse_client.get_model(model_id)
+        assert isinstance(model, dict)
+        assert 'id' in model
+
+    def test_get_model_tolerance(self, eclipse_client):
+        """Test that we can fetch model tolerance for a portfolio/account."""
+        portfolios = eclipse_client.get_all_portfolios()
+        if not portfolios:
+            pytest.skip("No portfolios available")
+
+        portfolio_id = portfolios[0]['id']
+        accounts = eclipse_client.get_portfolio_accounts(portfolio_id)
+        if not accounts:
+            pytest.skip("No accounts in portfolio")
+
+        account_id = accounts[0]['id']
+        tolerance = eclipse_client.get_model_tolerance(portfolio_id, account_id)
+        assert isinstance(tolerance, (dict, list))
+
+    def test_search_accounts_number_and_name(self, eclipse_client):
+        """Test that we can search accounts by number and name."""
+        # Get an existing account to use for search
+        accounts = eclipse_client.get_all_accounts()
+        if not accounts:
+            pytest.skip("No accounts available")
+
+        # Use last 4 digits of account number and part of name
+        acct = accounts[0]
+        acct_num = acct.get('accountNumber', '')
+        acct_name = acct.get('name', '')
+
+        if not acct_num or not acct_name:
+            pytest.skip("Account missing number or name")
+
+        # Search using trailing digits and name portion
+        acct_id, found_num = eclipse_client.search_accounts_number_and_name(
+            acct_num[-4:],
+            acct_name[:5]
+        )
+        assert isinstance(acct_id, int)
+        assert isinstance(found_num, str)
+
+    # Medium priority tests
+
+    def test_get_model_allocations(self, eclipse_client):
+        """Test that we can fetch model allocations."""
+        models = eclipse_client.get_all_models()
+        if not models:
+            pytest.skip("No models available")
+
+        model_id = models[0]['id']
+        allocations = eclipse_client.get_model_allocations(model_id)
+        assert isinstance(allocations, (dict, list))
+
+    def test_get_set_asides(self, eclipse_client):
+        """Test that we can fetch set asides for an account."""
+        accounts = eclipse_client.get_all_accounts()
+        if not accounts:
+            pytest.skip("No accounts available")
+
+        account_id = accounts[0]['id']
+        set_asides = eclipse_client.get_set_asides(account_id)
+        assert isinstance(set_asides, (dict, list))
+
+    def test_get_all_security_sets(self, eclipse_client):
+        """Test that we can fetch all security sets."""
+        security_sets = eclipse_client.get_all_security_sets()
+        assert isinstance(security_sets, list)
