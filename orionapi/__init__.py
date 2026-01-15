@@ -7,6 +7,21 @@ import rapidfuzz
 import logging
 
 
+class OrionAPIError(Exception):
+    """Base exception for Orion API errors."""
+    pass
+
+
+class AuthenticationError(OrionAPIError):
+    """Raised when authentication fails."""
+    pass
+
+
+class NotFoundError(OrionAPIError):
+    """Raised when a requested resource is not found."""
+    pass
+
+
 class BaseAPI:
     """Base class for Orion API clients with shared request handling."""
 
@@ -28,26 +43,47 @@ class BaseAPI:
             requests.Response object
 
         Raises:
-            requests.exceptions.HTTPError: On 4xx/5xx responses
+            AuthenticationError: On 401/403 responses
+            NotFoundError: On 404 responses
+            OrionAPIError: On other 4xx/5xx responses
         """
         headers = kwargs.pop('headers', {})
         headers.update(self._get_auth_header())
         res = req_func(url, headers=headers, **kwargs)
-        try:
-            res.raise_for_status()
-        except requests.exceptions.HTTPError as e:
-            # Try to include API error message in exception
+
+        if not res.ok:
+            # Try to get error message from response body
             try:
                 error_body = res.json()
-                raise requests.exceptions.HTTPError(
-                    f"{e}: {error_body.get('message', error_body)}"
-                ) from None
+                message = error_body.get('message', str(error_body))
             except ValueError:
-                raise
+                message = res.text or res.reason
+
+            if res.status_code in (401, 403):
+                raise AuthenticationError(f"{res.status_code} {res.reason}: {message}")
+            elif res.status_code == 404:
+                raise NotFoundError(f"Resource not found: {message}")
+            else:
+                raise OrionAPIError(f"{res.status_code} {res.reason}: {message}")
+
         return res
 
 
 class OrionAPI(BaseAPI):
+    """Client for the Orion Advisor API.
+
+    Provides access to reporting and custom query functionality.
+
+    Args:
+        usr: Username for authentication
+        pwd: Password for authentication
+
+    Example:
+        >>> api = OrionAPI(usr="user@example.com", pwd="password")
+        >>> api.check_username()
+        'user@example.com'
+    """
+
     def __init__(self, usr=None, pwd=None):
         self.token = None
         self.usr = usr
@@ -55,47 +91,92 @@ class OrionAPI(BaseAPI):
         self.base_url = "https://api.orionadvisor.com/api/v1/"
 
         if self.usr is not None:
-            self.login(self.usr,self.pwd)
+            self.login(self.usr, self.pwd)
 
-    def login(self,usr=None,pwd=None):
+    def login(self, usr=None, pwd=None):
+        """Authenticate with the Orion API.
+
+        Args:
+            usr: Username for authentication
+            pwd: Password for authentication
+
+        Raises:
+            AuthenticationError: If credentials are invalid
+        """
         res = requests.get(
             f"{self.base_url}/security/token",
-            auth=(usr,pwd)
+            auth=(usr, pwd)
         )
-        self.token = res.json()['access_token']
+        if not res.ok:
+            raise AuthenticationError(f"Login failed: {res.status_code} {res.reason}")
+        try:
+            self.token = res.json()['access_token']
+        except (KeyError, ValueError) as e:
+            raise AuthenticationError(f"Invalid response from auth endpoint: {e}")
 
     def _get_auth_header(self):
         return {'Authorization': 'Session ' + self.token}
 
     def check_username(self):
+        """Get the authenticated user's login ID.
+
+        Returns:
+            str: The user's login ID
+        """
         res = self.api_request(f"{self.base_url}/authorization/user")
         return res.json()['loginUserId']
 
-    def get_query_payload(self,id):
+    def get_query_payload(self, id):
+        """Get the full payload for a custom query.
+
+        Args:
+            id: The custom query ID
+
+        Returns:
+            dict: Query payload including prompts and metadata
+        """
         return self.api_request(f"{self.base_url}/Reporting/Custom/{id}").json()
 
-    def get_query_params(self,id):
+    def get_query_params(self, id):
+        """Get the parameters for a custom query.
+
+        Args:
+            id: The custom query ID
+
+        Returns:
+            list: List of parameter definitions with codes and default values
+        """
         return self.get_query_payload(id)['prompts']
 
-    def get_query_params_description(self,id):
+    def get_query_params_description(self, id):
+        """Print a formatted table of query parameters.
+
+        Args:
+            id: The custom query ID
+        """
         param_list = self.get_query_params(id)
         header = param_list[0].keys()
         rows = [x.values() for x in param_list]
         print(tabulate.tabulate(rows, header))
-            
 
-    def query(self,id,params=None):
-        # TODO: allow params to be optional. Right now {} must be passed for some reason
-        # Get the query to get list of params
+    def query(self, id, params=None):
+        """Execute a custom query.
+
+        Args:
+            id: The custom query ID
+            params: Dict of parameter code -> value overrides (optional)
+
+        Returns:
+            dict or list: Query results
+        """
         default_params = self.get_query_params(id)
         params = params or {}
-        
-        # Match param dict with params to constructut payload
+
         payload_template = {
             "runTo": 'null',
             "databaseIdList": 'null',
             "prompts": [],
-            }
+        }
         run_params = []
         for p in default_params:
             if p['code'] in params:
@@ -104,13 +185,30 @@ class OrionAPI(BaseAPI):
 
         payload = payload_template.copy()
         payload['prompts'] = run_params
-        
-        # Put request to run query
-        res = self.api_request(f"{self.base_url}/Reporting/Custom/{id}/Generate/Table",
-            requests.post, json=payload)
+
+        res = self.api_request(
+            f"{self.base_url}/Reporting/Custom/{id}/Generate/Table",
+            requests.post,
+            json=payload
+        )
         return res.json()        
 
 class EclipseAPI(BaseAPI):
+    """Client for the Eclipse Trading Platform API.
+
+    Provides access to accounts, portfolios, models, orders, and trade tools.
+
+    Args:
+        usr: Username for authentication
+        pwd: Password for authentication
+        orion_token: Orion session token (alternative to usr/pwd)
+
+    Example:
+        >>> api = EclipseAPI(usr="user@example.com", pwd="password")
+        >>> api.check_username()
+        'user@example.com'
+    """
+
     def __init__(self, usr=None, pwd=None, orion_token=None):
         self.eclipse_token = None
         self.orion_token = orion_token
@@ -118,77 +216,153 @@ class EclipseAPI(BaseAPI):
         self.pwd = pwd
         self.base_url = "https://api.orioneclipse.com/v1"
 
-        # if one of the params is not None, then login
         if self.usr is not None:
-            self.login(self.usr,self.pwd)
-        if self.orion_token is not None:
+            self.login(self.usr, self.pwd)
+        elif self.orion_token is not None:
             self.login(orion_token=self.orion_token)
 
-        
-    def login(self,usr=None, pwd=None, orion_token=None):
+    def login(self, usr=None, pwd=None, orion_token=None):
+        """Authenticate with the Eclipse API.
+
+        Args:
+            usr: Username for authentication
+            pwd: Password for authentication
+            orion_token: Orion session token (alternative to usr/pwd)
+
+        Raises:
+            AuthenticationError: If credentials are invalid or missing
+        """
         self.usr = usr
         self.pwd = pwd
         self.orion_token = orion_token
 
         if orion_token is None and usr is None:
-            raise Exception("Must provide either usr/pwd or orion_token")
+            raise AuthenticationError("Must provide either usr/pwd or orion_token")
 
         if usr is not None:
             res = requests.get(
                 f"{self.base_url}/admin/token",
-                auth=(usr,pwd)
-                )
-            self.eclipse_token = res.json()['eclipse_access_token']
-
-        if self.orion_token is not None:
-            res = requests.get(
-                f"{self.base_url}/admin/token",
-                headers={'Authorization': 'Session '+self.orion_token})
+                auth=(usr, pwd)
+            )
+            if not res.ok:
+                raise AuthenticationError(f"Login failed: {res.status_code} {res.reason}")
             try:
                 self.eclipse_token = res.json()['eclipse_access_token']
-            except KeyError:
-                return res
+            except (KeyError, ValueError) as e:
+                raise AuthenticationError(f"Invalid response from auth endpoint: {e}")
+
+        elif self.orion_token is not None:
+            res = requests.get(
+                f"{self.base_url}/admin/token",
+                headers={'Authorization': 'Session ' + self.orion_token}
+            )
+            if not res.ok:
+                raise AuthenticationError(f"Token exchange failed: {res.status_code} {res.reason}")
+            try:
+                self.eclipse_token = res.json()['eclipse_access_token']
+            except (KeyError, ValueError) as e:
+                raise AuthenticationError(f"Invalid response from auth endpoint: {e}")
 
     def _get_auth_header(self):
         return {'Authorization': 'Session ' + self.eclipse_token}
 
     def check_username(self):
+        """Get the authenticated user's login ID.
+
+        Returns:
+            str: The user's login ID
+        """
         res = self.api_request(f"{self.base_url}/admin/authorization/user")
         return res.json()['userLoginId']
 
     def get_all_accounts(self):
+        """Get a simplified list of all accounts.
+
+        Returns:
+            list: List of account dicts with basic info (id, name, accountNumber, etc.)
+        """
         res = self.api_request(f"{self.base_url}/account/accounts/simple")
-        accounts = res.json()
-        return accounts
+        return res.json()
 
     def get_set_asides_v2(self):
+        """Get all set-aside cash settings via v2 API.
+
+        Returns:
+            list: List of set-aside settings across all accounts
+        """
         res = self.api_request(f"{self.base_url}/api/v2/Account/Accounts/SetAsideCashSettings")
         return res.json()
 
-    def get_set_asides(self,account_id):
+    def get_set_asides(self, account_id):
+        """Get set-aside cash settings for a specific account.
+
+        Args:
+            account_id: Account ID or account number
+
+        Returns:
+            list: List of set-aside settings for the account
+        """
         account_id = self.get_internal_account_id(account_id)
         res = self.api_request(f"{self.base_url}/account/accounts/{account_id}/asidecash")
         return res.json()
 
-    def get_internal_account_id(self,search_param):
-        """Searches across id/accountName/accountNumber/portfolioName
-        Best use is to pass a full custodian accout number
-        Returns the internal system id used by the Eclipse API
-        Returns the first result. This might not be expected"""
+    def get_internal_account_id(self, search_param):
+        """Get internal Eclipse account ID from a search parameter.
+
+        Searches across id, accountName, accountNumber, and portfolioName.
+        Best use is to pass a full custodian account number.
+
+        Args:
+            search_param: Account number, name, or ID to search for
+
+        Returns:
+            int: The internal Eclipse account ID
+
+        Raises:
+            NotFoundError: If no matching account is found
+
+        Note:
+            Returns the first matching result, which may not be expected
+            if multiple accounts match the search parameter.
+        """
         res = self.search_accounts(search_param)
         logging.debug("search_accounts result: %s", res)
+        if not res:
+            raise NotFoundError(f"No account found for search: {search_param}")
         return res[0]['id']
 
-    def search_accounts(self,search_param):
+    def search_accounts(self, search_param):
+        """Search for accounts by various criteria.
+
+        Args:
+            search_param: Search string (matches id, accountName, accountNumber, portfolioName)
+
+        Returns:
+            list: List of matching account dicts
+        """
         res = self.api_request(f"{self.base_url}/account/accounts/simple?search={search_param}")
         return res.json()
 
     def normalize_name(self, name):
+        """Normalize a name for fuzzy matching (internal helper)."""
         return re.sub(r"[^a-zA-Z0-9]", "", name).lower()
 
-    def search_accounts_number_and_name(self,acct_num_portion, name_portion):
-        """Searches accounts based on the trailing digits of the custodial account number
-        and a string contained in the name"""
+    def search_accounts_number_and_name(self, acct_num_portion, name_portion):
+        """Search for an account by trailing account number digits and name.
+
+        Uses fuzzy matching to find the best match when multiple accounts
+        share the same trailing digits.
+
+        Args:
+            acct_num_portion: Trailing digits of the custodial account number
+            name_portion: Partial name to match against
+
+        Returns:
+            tuple: (account_id, account_number) of the best match
+
+        Raises:
+            NotFoundError: If no accounts match the trailing digits
+        """
 
         from_acct = re.sub(r"\D", "", acct_num_portion)
         name_portion = self.normalize_name(name_portion)
@@ -201,7 +375,7 @@ class EclipseAPI(BaseAPI):
         ]
 
         if not num_match:
-            raise Exception(f"No accounts found for acct# {acct_num_portion}")
+            raise NotFoundError(f"No accounts found for acct# {acct_num_portion}")
 
         # If multiple number matches, log but continue
         if len(num_match) > 1:
@@ -224,12 +398,30 @@ class EclipseAPI(BaseAPI):
         )
         return best_acct['id'], best_acct['accountNumber']
         
-    def create_set_aside(self, account_number, amount, min_amount=None, max_amount=None,description=None, 
-                         min=None, max=None, cash_type='$',start_date=None,
-                         expire_type='None',expire_date=None,expire_trans_tol=0,
-                         expire_trans_type=1,percent_calc_type=0):
-        
-        # This function takes the full custodial account number as input
+    def create_set_aside(self, account_number, amount, min_amount=None, max_amount=None,
+                         description=None, min=None, max=None, cash_type='$',
+                         start_date=None, expire_type='None', expire_date=None,
+                         expire_trans_tol=0, expire_trans_type=1, percent_calc_type=0):
+        """Create a set-aside cash reservation for an account.
+
+        Args:
+            account_number: Full custodial account number
+            amount: Cash amount to set aside
+            min_amount: Minimum cash amount
+            max_amount: Maximum cash amount
+            description: Description of the set-aside
+            cash_type: '$' for dollar amount, '%' for percentage (default '$')
+            start_date: Start date for the set-aside
+            expire_type: 'None', 'Date', or 'Transaction' (default 'None')
+            expire_date: Expiration date (if expire_type='Date')
+            expire_trans_tol: Transaction tolerance value (default 0)
+            expire_trans_type: 1='Distribution / Merge Out', 3='Fee' (default 1)
+            percent_calc_type: 0='Use Default/Managed Value', 1='Use Total Value',
+                              2='Use Excluded Value' (default 0)
+
+        Returns:
+            dict: Created set-aside details
+        """
         account_id = self.get_internal_account_id(account_number)
 
         cash_type_map = {
@@ -288,15 +480,36 @@ class EclipseAPI(BaseAPI):
             })
         return res.json()
 
-    def get_account_details(self,internal_id):
+    def get_account_details(self, internal_id):
+        """Get detailed information for a specific account.
+
+        Args:
+            internal_id: Internal Eclipse account ID
+
+        Returns:
+            dict: Account details including summarySection, holdings, etc.
+        """
         res = self.api_request(f"{self.base_url}/account/accounts/{internal_id}")
         return res.json()
 
     def get_all_account_details(self):
+        """Get detailed information for all accounts.
+
+        Returns:
+            list: List of account detail dicts
+        """
         res = self.api_request(f"{self.base_url}/account/accounts/")
         return res.json()
-    
-    def get_account_cash_available(self,internal_id):
+
+    def get_account_cash_available(self, internal_id):
+        """Get available cash for an account.
+
+        Args:
+            internal_id: Internal Eclipse account ID
+
+        Returns:
+            float: Available cash amount
+        """
         res = self.get_account_details(internal_id)
         return res['summarySection']['cashAvailable']
 
@@ -378,9 +591,19 @@ class EclipseAPI(BaseAPI):
         return res.json()
 
     def get_orders(self):
+        """Get all completed (non-pending) trade orders.
+
+        Returns:
+            list: List of completed trade order dicts
+        """
         return self.api_request(f"{self.base_url}/tradeorder/trades?isPending=false").json()
 
     def get_orders_pending(self):
+        """Get all pending trade orders.
+
+        Returns:
+            list: List of pending trade order dicts
+        """
         return self.api_request(f"{self.base_url}/tradeorder/trades?isPending=true").json()
 
     def cash_needs_trade(self, portfolio_ids, portfolio_trade_group_ids=None,
@@ -415,25 +638,59 @@ class EclipseAPI(BaseAPI):
         )
         return res.json()
 
-    ### Model Maintenance
+    # Model Maintenance
+
     def get_all_models(self):
+        """Get all investment models.
+
+        Returns:
+            list: List of model dicts with id, name, status, etc.
+        """
         res = self.api_request(f"{self.base_url}/modeling/models")
         return res.json()
-        #https://api.orioneclipse.com/doc/#api-Portfolios-GetPortfolioAllocations
 
-    def get_model(self,id):
+    def get_model(self, id):
+        """Get details for a specific model.
+
+        Args:
+            id: Model ID
+
+        Returns:
+            dict: Model details including allocations and settings
+        """
         res = self.api_request(f"{self.base_url}/modeling/models/{id}")
         return res.json()
 
-    def get_model_allocations(self,id):
+    def get_model_allocations(self, id):
+        """Get aggregated allocations for a model.
+
+        Args:
+            id: Model ID
+
+        Returns:
+            list: List of allocation dicts with target percentages
+        """
         res = self.api_request(f"{self.base_url}/modeling/models/{id}/allocations?aggregateAllocations=true")
         return res.json()
 
     def get_all_security_sets(self):
+        """Get all security sets.
+
+        Returns:
+            list: List of security set dicts
+        """
         res = self.api_request(f"{self.base_url}/security/securityset")
         return res.json()
 
-    def get_security_set(self,id):
+    def get_security_set(self, id):
+        """Get details for a specific security set.
+
+        Args:
+            id: Security set ID
+
+        Returns:
+            dict: Security set details including securities and allocations
+        """
         res = self.api_request(f"{self.base_url}/security/securityset/details/{id}")
         return res.json()
 
