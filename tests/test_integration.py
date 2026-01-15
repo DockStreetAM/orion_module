@@ -217,14 +217,12 @@ class TestEclipseAPI:
 
     def test_get_set_asides_v2(self, eclipse_client):
         """Test that we can fetch all set asides via v2 API."""
-        import requests
+        from orionapi import AuthenticationError
         try:
             set_asides = eclipse_client.get_set_asides_v2()
             assert isinstance(set_asides, (dict, list))
-        except requests.exceptions.HTTPError as e:
-            if "403" in str(e):
-                pytest.skip("Insufficient privileges for v2 set asides endpoint")
-            raise
+        except AuthenticationError:
+            pytest.skip("Insufficient privileges for v2 set asides endpoint")
 
 
 class TestOrionAPI:
