@@ -225,3 +225,27 @@ class TestEclipseAPI:
             if "403" in str(e):
                 pytest.skip("Insufficient privileges for v2 set asides endpoint")
             raise
+
+
+class TestOrionAPI:
+    def test_check_username(self, orion_client):
+        """Test that we can authenticate and get username."""
+        username = orion_client.check_username()
+        assert username is not None
+        assert len(username) > 0
+
+    def test_get_query_payload(self, orion_client, orion_query_id):
+        """Test that we can get a query payload."""
+        payload = orion_client.get_query_payload(orion_query_id)
+        assert isinstance(payload, dict)
+        assert 'prompts' in payload
+
+    def test_get_query_params(self, orion_client, orion_query_id):
+        """Test that we can get query parameters."""
+        params = orion_client.get_query_params(orion_query_id)
+        assert isinstance(params, list)
+
+    def test_query(self, orion_client, orion_query_id):
+        """Test that we can run a query."""
+        result = orion_client.query(orion_query_id, {})
+        assert isinstance(result, (dict, list))

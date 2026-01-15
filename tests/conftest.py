@@ -44,3 +44,12 @@ def orion_client(orion_credentials):
     """Return authenticated OrionAPI client."""
     from orionapi import OrionAPI
     return OrionAPI(**orion_credentials)
+
+
+@pytest.fixture
+def orion_query_id():
+    """Return a valid Orion query ID for testing."""
+    query_id = os.getenv("ORION_QUERY_ID")
+    if not query_id:
+        pytest.skip("ORION_QUERY_ID not set in environment")
+    return int(query_id)
