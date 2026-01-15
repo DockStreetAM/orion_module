@@ -812,3 +812,275 @@ class EclipseAPI(BaseAPI):
             json=payload
         )
         return res.json()
+
+    def update_security_set(self, set_id, name, securities, description=None,
+                            tolerance_type="ABSOLUTE", tolerance_type_value=0):
+        """Update an existing security set.
+
+        Args:
+            set_id: ID of the security set to update
+            name: Name of the security set
+            securities: List of security dicts with:
+                - id: Security ID
+                - targetPercent: Target percentage
+                - rank: Rank order
+                - lowerModelTolerancePercent: Lower tolerance %
+                - upperModelTolerancePercent: Upper tolerance %
+            description: Description of the security set
+            tolerance_type: "ABSOLUTE" or "BAND" (default "ABSOLUTE")
+            tolerance_type_value: Tolerance value (default 0)
+
+        Returns:
+            dict with updated security set details
+        """
+        payload = {
+            "name": name,
+            "description": description,
+            "toleranceType": tolerance_type,
+            "toleranceTypeValue": tolerance_type_value,
+            "securities": securities
+        }
+
+        res = self.api_request(
+            f"{self.base_url}/security/securityset/{set_id}",
+            requests.put,
+            json=payload
+        )
+        return res.json()
+
+    def search_securities(self, search, top=20, exclude_cash=True):
+        """Search for securities by ticker symbol, name, or ID.
+
+        Args:
+            search: Search string (ticker, name, or ID)
+            top: Maximum number of results (default 20)
+            exclude_cash: Exclude cash securities (default True)
+
+        Returns:
+            list: List of matching security dicts with id, name, symbol, price, etc.
+        """
+        params = {
+            "search": search,
+            "top": top,
+            "excludeCashSecurity": str(exclude_cash).lower()
+        }
+        res = self.api_request(f"{self.base_url}/security/securities", params=params)
+        return res.json()
+
+    def get_security_by_ticker(self, ticker):
+        """Get a security by its ticker symbol.
+
+        Args:
+            ticker: The ticker symbol (e.g., "AAPL")
+
+        Returns:
+            dict: Security details including id, name, symbol, price
+
+        Raises:
+            NotFoundError: If no security matches the ticker
+        """
+        results = self.search_securities(ticker, top=10)
+        # Find exact ticker match
+        for sec in results:
+            if sec.get('symbol', '').upper() == ticker.upper():
+                return sec
+        raise NotFoundError(f"No security found with ticker: {ticker}")
+
+    # Security Set Sync Helpers
+
+    def parse_security_set_file(self, file_path):
+        """Parse a security set definition file.
+
+        File format:
+            # Security Set: Name Here
+            # Description: Optional description
+            # Lines starting with # are comments
+            # Ticker  Lower%  Target%  Upper%
+            AAPL      5       10       20
+            MSFT      3       8        15
+
+        Where Lower and Upper are absolute percentage bounds (not relative to target).
+
+        Args:
+            file_path: Path to the security set definition file
+
+        Returns:
+            dict with 'name', 'description', and 'securities' list
+        """
+        name = None
+        description = None
+        securities = []
+
+        with open(file_path, 'r') as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+
+                # Parse header comments
+                if line.startswith('#'):
+                    if line.lower().startswith('# security set:'):
+                        name = line.split(':', 1)[1].strip()
+                    elif line.lower().startswith('# description:'):
+                        description = line.split(':', 1)[1].strip()
+                    continue
+
+                # Parse security line: TICKER LOWER TARGET UPPER
+                parts = line.split()
+                if len(parts) >= 4:
+                    ticker = parts[0]
+                    lower = float(parts[1].rstrip('%'))
+                    target = float(parts[2].rstrip('%'))
+                    upper = float(parts[3].rstrip('%'))
+
+                    securities.append({
+                        'ticker': ticker,
+                        'lower_bound': lower,
+                        'target': target,
+                        'upper_bound': upper
+                    })
+
+        return {
+            'name': name,
+            'description': description,
+            'securities': securities
+        }
+
+    def convert_to_eclipse_tolerances(self, securities):
+        """Convert absolute bounds to Eclipse tolerance format.
+
+        Eclipse stores tolerances as offsets from target:
+        - lowerModelTolerancePercent: subtracted from target for lower bound
+        - upperModelTolerancePercent: added to target for upper bound
+
+        Args:
+            securities: List of dicts with 'ticker', 'lower_bound', 'target', 'upper_bound'
+
+        Returns:
+            list: Securities with Eclipse tolerance format and resolved IDs
+        """
+        result = []
+        for i, sec in enumerate(securities):
+            security_info = self.get_security_by_ticker(sec['ticker'])
+
+            # Convert absolute bounds to relative tolerances
+            lower_tolerance = sec['target'] - sec['lower_bound']
+            upper_tolerance = sec['upper_bound'] - sec['target']
+
+            result.append({
+                'id': security_info['id'],
+                'targetPercent': sec['target'],
+                'lowerModelTolerancePercent': lower_tolerance,
+                'upperModelTolerancePercent': upper_tolerance,
+                'rank': i
+            })
+
+        return result
+
+    def sync_security_set_from_file(self, file_path, set_id=None):
+        """Sync a security set from a definition file to Eclipse.
+
+        If set_id is provided, updates the existing security set.
+        Otherwise, creates a new security set.
+
+        Args:
+            file_path: Path to the security set definition file
+            set_id: Optional ID of existing security set to update
+
+        Returns:
+            dict: Created or updated security set details
+        """
+        parsed = self.parse_security_set_file(file_path)
+
+        if not parsed['name']:
+            raise ValueError("Security set file must have '# Security Set: Name' header")
+
+        eclipse_securities = self.convert_to_eclipse_tolerances(parsed['securities'])
+
+        if set_id:
+            return self.update_security_set(
+                set_id=set_id,
+                name=parsed['name'],
+                securities=eclipse_securities,
+                description=parsed['description']
+            )
+        else:
+            return self.create_security_set(
+                name=parsed['name'],
+                securities=eclipse_securities,
+                description=parsed['description']
+            )
+
+    def find_security_set_by_name(self, name):
+        """Find a security set by name.
+
+        Args:
+            name: Name of the security set
+
+        Returns:
+            dict: Security set if found, None otherwise
+        """
+        all_sets = self.get_all_security_sets()
+        for ss in all_sets:
+            if ss.get('name', '').lower() == name.lower():
+                return ss
+        return None
+
+    def sync_security_set_from_file_by_name(self, file_path):
+        """Sync a security set from file, auto-detecting create vs update.
+
+        If a security set with the same name exists, it will be updated.
+        Otherwise, a new security set will be created.
+
+        Args:
+            file_path: Path to the security set definition file
+
+        Returns:
+            tuple: (result dict, 'created' or 'updated')
+        """
+        parsed = self.parse_security_set_file(file_path)
+
+        if not parsed['name']:
+            raise ValueError("Security set file must have '# Security Set: Name' header")
+
+        existing = self.find_security_set_by_name(parsed['name'])
+
+        if existing:
+            result = self.sync_security_set_from_file(file_path, set_id=existing['id'])
+            return result, 'updated'
+        else:
+            result = self.sync_security_set_from_file(file_path)
+            return result, 'created'
+
+    def export_security_set_to_file(self, set_id, file_path):
+        """Export a security set to a definition file.
+
+        Converts Eclipse tolerance format back to absolute bounds.
+
+        Args:
+            set_id: ID of the security set to export
+            file_path: Path to write the definition file
+        """
+        ss = self.get_security_set(set_id)
+
+        lines = [
+            f"# Security Set: {ss.get('name', 'Unknown')}",
+            f"# Description: {ss.get('description', '')}",
+            "",
+            "# Ticker  Lower%  Target%  Upper%"
+        ]
+
+        for sec in ss.get('securities', []):
+            ticker = sec.get('symbol', sec.get('name', f"ID:{sec.get('id')}"))
+            target = sec.get('targetPercent', 0)
+            lower_tol = sec.get('lowerModelTolerancePercent', 0)
+            upper_tol = sec.get('upperModelTolerancePercent', 0)
+
+            # Convert back to absolute bounds
+            lower_bound = target - lower_tol
+            upper_bound = target + upper_tol
+
+            lines.append(f"{ticker:<8} {lower_bound:<7.2f} {target:<7.2f} {upper_bound:<7.2f}")
+
+        with open(file_path, 'w') as f:
+            f.write('\n'.join(lines) + '\n')
