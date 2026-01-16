@@ -5,6 +5,7 @@ import tabulate
 import re
 import rapidfuzz
 import logging
+import time
 
 
 # Trade Instance Type mappings (from Orion API documentation)
@@ -666,7 +667,8 @@ class EclipseAPI(BaseAPI):
     def create_set_aside(self, account_number, amount, min_amount=None, max_amount=None,
                          description=None, min=None, max=None, cash_type='$',
                          start_date=None, expire_type='None', expire_date=None,
-                         expire_trans_tol=0, expire_trans_type=1, percent_calc_type=0):
+                         expire_trans_tol=0, expire_trans_type=1, percent_calc_type=0,
+                         sync=True):
         """Create a set-aside cash reservation for an account.
 
         Args:
@@ -683,6 +685,7 @@ class EclipseAPI(BaseAPI):
             expire_trans_type: 1='Distribution / Merge Out', 3='Fee' (default 1)
             percent_calc_type: 0='Use Default/Managed Value', 1='Use Total Value',
                               2='Use Excluded Value' (default 0)
+            sync: Wait for analytics to complete (default True)
 
         Returns:
             dict: Created set-aside details
@@ -743,7 +746,9 @@ class EclipseAPI(BaseAPI):
                 "description": description,
                 "percentCalculationTypeId": percent_calc_type,
             })
-        return res.json()
+        result = res.json()
+        self._maybe_wait_for_analytics(sync)
+        return result
 
     def get_account_details(self, internal_id):
         """Get detailed information for a specific account.
@@ -855,6 +860,57 @@ class EclipseAPI(BaseAPI):
         res = self.api_request(f"{self.base_url}/holding/holdings/simple", params=params)
         return res.json()
 
+    def run_analytics(self):
+        """Run analytics for portfolios that need it.
+
+        Triggers the post-import analysis process for portfolios flagged
+        as needing analytics. Status updates are sent via socket.io.
+
+        Returns:
+            dict: Response with analytics run status
+        """
+        res = self.api_request(f"{self.base_url}/postimport/run_need_analysis")
+        return res.json()
+
+    def get_analytics_status(self):
+        """Check if analytics are currently running.
+
+        Returns:
+            dict: Status with 'isAnalysisRunning' and 'doRunAnalytics' flags
+                  (0 = not running/no pending, 1 = running/pending)
+        """
+        res = self.api_request(f"{self.base_url}/dataimport/analysis/status")
+        return res.json()
+
+    def wait_for_analytics(self, poll_interval=1, timeout=300):
+        """Wait for analytics to complete.
+
+        Polls the analytics status until isAnalysisRunning is 0.
+
+        Args:
+            poll_interval: Seconds between status checks (default 1)
+            timeout: Max seconds to wait (default 300)
+
+        Returns:
+            True when analytics complete
+
+        Raises:
+            TimeoutError: If analytics don't complete within timeout
+        """
+        start = time.time()
+        while True:
+            status = self.get_analytics_status()
+            if not status.get('isAnalysisRunning'):
+                return True
+            if time.time() - start > timeout:
+                raise TimeoutError(f"Analytics did not complete within {timeout} seconds")
+            time.sleep(poll_interval)
+
+    def _maybe_wait_for_analytics(self, sync):
+        """Helper to conditionally wait for analytics."""
+        if sync:
+            self.wait_for_analytics()
+
     def get_orders(self):
         """Get all completed (non-pending) trade orders.
 
@@ -872,7 +928,8 @@ class EclipseAPI(BaseAPI):
         return self.api_request(f"{self.base_url}/tradeorder/trades?isPending=true").json()
 
     def cash_needs_trade(self, portfolio_ids, portfolio_trade_group_ids=None,
-                         is_view_only=True, reason="", is_excel_import=False):
+                         is_view_only=True, reason="", is_excel_import=False,
+                         sync=True):
         """Rebalance CashNeeds Portfolios.
 
         Args:
@@ -881,6 +938,7 @@ class EclipseAPI(BaseAPI):
             is_view_only: If True, preview trades without executing (default True)
             reason: Reason for the trade
             is_excel_import: Whether this is from an Excel import (default False)
+            sync: Wait for analytics to complete (default True)
 
         Returns:
             dict with 'issues', 'success', and 'instanceId' fields
@@ -901,7 +959,9 @@ class EclipseAPI(BaseAPI):
             requests.post,
             json=payload
         )
-        return res.json()
+        result = res.json()
+        self._maybe_wait_for_analytics(sync)
+        return result
 
     def get_closed_trades(self):
         """Get all closed/executed trade orders.
@@ -1029,7 +1089,7 @@ class EclipseAPI(BaseAPI):
         )
         return res.json()
 
-    def add_model_detail(self, model_id, model_detail):
+    def add_model_detail(self, model_id, model_detail, sync=True):
         """Add model detail/structure to an existing model.
 
         Args:
@@ -1048,6 +1108,7 @@ class EclipseAPI(BaseAPI):
                 - lowerModelToleranceAmount: Lower tolerance $
                 - upperModelToleranceAmount: Upper tolerance $
                 - children: List of child ModelDetail dicts
+            sync: Wait for analytics to complete (default True)
 
         Returns:
             dict with updated model details
@@ -1057,7 +1118,9 @@ class EclipseAPI(BaseAPI):
             requests.post,
             json={"modelDetail": model_detail}
         )
-        return res.json()
+        result = res.json()
+        self._maybe_wait_for_analytics(sync)
+        return result
 
     def delete_model(self, model_id):
         """Delete a model (soft delete).
@@ -1111,7 +1174,8 @@ class EclipseAPI(BaseAPI):
         return res.json()
 
     def update_security_set(self, set_id, name, securities, description=None,
-                            tolerance_type="ABSOLUTE", tolerance_type_value=0):
+                            tolerance_type="ABSOLUTE", tolerance_type_value=0,
+                            sync=True):
         """Update an existing security set.
 
         Args:
@@ -1126,6 +1190,7 @@ class EclipseAPI(BaseAPI):
             description: Description of the security set
             tolerance_type: "ABSOLUTE" or "BAND" (default "ABSOLUTE")
             tolerance_type_value: Tolerance value (default 0)
+            sync: Wait for analytics to complete (default True)
 
         Returns:
             dict with updated security set details
@@ -1143,7 +1208,9 @@ class EclipseAPI(BaseAPI):
             requests.put,
             json=payload
         )
-        return res.json()
+        result = res.json()
+        self._maybe_wait_for_analytics(sync)
+        return result
 
     def search_securities(self, search, top=20, exclude_cash=True):
         """Search for securities by ticker symbol, name, or ID.
@@ -1525,12 +1592,13 @@ class EclipseAPI(BaseAPI):
 
     # Model Sync Helpers
 
-    def update_model_detail(self, model_id, model_detail):
+    def update_model_detail(self, model_id, model_detail, sync=True):
         """Update model detail/structure for an existing model.
 
         Args:
             model_id: ID of the model to update
             model_detail: Dict with model structure (same format as add_model_detail)
+            sync: Wait for analytics to complete (default True)
 
         Returns:
             dict with updated model details
@@ -1540,7 +1608,9 @@ class EclipseAPI(BaseAPI):
             requests.put,
             json={"modelDetail": model_detail}
         )
-        return res.json()
+        result = res.json()
+        self._maybe_wait_for_analytics(sync)
+        return result
 
     def find_model_by_name(self, name):
         """Find a model by name.
