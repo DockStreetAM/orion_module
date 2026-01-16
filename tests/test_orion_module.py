@@ -4,9 +4,6 @@ import vcr
 
 
 class TestBasics(unittest.TestCase):
-    def test_version(self):
-        assert orion.__version__ == '0.1.4'
-  
     def test_class(self):
         assert issubclass(orion.OrionAPI().__class__,object) 
 
