@@ -7,6 +7,48 @@ import rapidfuzz
 import logging
 
 
+# Trade Instance Type mappings (from Orion API documentation)
+TRADE_INSTANCE_TYPES = {
+    1: 'Astro',
+    2: 'Cash Movements',
+    3: 'Global Trades',
+    4: 'Option Trading',
+    5: 'Quick Trade',
+    6: 'Rebalance',
+    7: 'Tactical Tool',
+    8: 'Tax Harvesting',
+    9: 'Tax Ticker Swap',
+    10: 'Trade to Target',
+    11: 'Liquidate',
+}
+
+# Trade Instance SubType mappings (from Orion API documentation)
+TRADE_INSTANCE_SUBTYPES = {
+    1: 'Automated Losses',
+    2: 'ASTRO',
+    3: 'Cash Needs',
+    4: 'Focused Rebalance',
+    5: 'Full Location Rebalance',
+    6: 'Global Trades',
+    7: 'Manual Gains',
+    8: 'Manual Losses',
+    9: 'Option Trading',
+    10: 'Partial Location Rebalance',
+    11: 'Quick Trade',
+    12: 'Raise Cash',
+    13: 'Spend Cash',
+    14: 'Standard Rebalance',
+    15: 'Tactical Tool',
+    16: 'Tax Ticker Swap',
+    17: 'Trade Import',
+    18: 'Trade to Target',
+    19: 'Journal Only Cash',
+    20: 'Journal Cash and Holdings',
+    21: 'Money Market Rebalance',
+    22: 'Liquidate',
+}
+
+
 class OrionAPIError(Exception):
     """Base exception for Orion API errors."""
     pass
@@ -191,7 +233,230 @@ class OrionAPI(BaseAPI):
             requests.post,
             json=payload
         )
-        return res.json()        
+        return res.json()
+
+    # -------------------------------------------------------------------------
+    # Custom Field Definitions
+    # -------------------------------------------------------------------------
+
+    _custom_field_cache = {}  # Cache: entity -> {display_name: code}
+
+    def get_custom_field_definitions(self, entity):
+        """Get custom field definitions for an entity type.
+
+        Args:
+            entity: 'client', 'registration', or 'account'
+
+        Returns:
+            list: Field definitions with code, description, type, options, etc.
+        """
+        res = self.api_request(f"{self.base_url}/Settings/UserDefinedFields/Definitions/{entity}")
+        fields = res.json()
+
+        # Cache the display name -> code mapping
+        self._custom_field_cache[entity] = {
+            f['description']: f['code'] for f in fields if f.get('description')
+        }
+        return fields
+
+    def _translate_custom_fields(self, entity, data):
+        """Translate custom field display names to codes.
+
+        Args:
+            entity: 'client', 'registration', or 'account'
+            data: Dict that may contain display names as keys
+
+        Returns:
+            dict: Data with display names replaced by udf-prefixed codes
+        """
+        # Ensure cache is populated
+        if entity not in self._custom_field_cache:
+            self.get_custom_field_definitions(entity)
+
+        name_to_code = self._custom_field_cache.get(entity, {})
+        translated = {}
+
+        for key, value in data.items():
+            if key in name_to_code:
+                # It's a display name - translate to udf + code
+                translated[f"udf{name_to_code[key]}"] = value
+            else:
+                translated[key] = value
+
+        return translated
+
+    # -------------------------------------------------------------------------
+    # Households (Clients)
+    # -------------------------------------------------------------------------
+
+    def search_clients(self, search_term, top=20, is_active=True):
+        """Search for households/clients by name.
+
+        Args:
+            search_term: Name to search for
+            top: Max results to return (default 20)
+            is_active: Filter to active clients only (default True)
+
+        Returns:
+            list: Matching clients with id, name, status
+        """
+        params = f"search={search_term}&top={top}&isActive={str(is_active).lower()}"
+        res = self.api_request(f"{self.base_url}/Portfolio/Clients/Simple/Search?{params}")
+        return res.json()
+
+    def get_client(self, client_id):
+        """Get full details for a household/client.
+
+        Args:
+            client_id: Client ID
+
+        Returns:
+            dict: Client details including custom fields
+        """
+        res = self.api_request(f"{self.base_url}/Portfolio/Clients/{client_id}")
+        return res.json()
+
+    def update_client(self, client_id, data):
+        """Update a household/client.
+
+        Args:
+            client_id: Client ID
+            data: Dict of fields to update. Custom fields can use display names
+                  (e.g., "Annual Spending") or codes (e.g., "udf5ANNUALSPE")
+
+        Returns:
+            dict: Updated client
+        """
+        translated = self._translate_custom_fields('client', data)
+        res = self.api_request(
+            f"{self.base_url}/Portfolio/Clients/{client_id}",
+            requests.put,
+            json=translated
+        )
+        return res.json()
+
+    # -------------------------------------------------------------------------
+    # Registrations
+    # -------------------------------------------------------------------------
+
+    def search_registrations(self, search_term, top=20, is_active=True):
+        """Search for registrations by name.
+
+        Args:
+            search_term: Name to search for
+            top: Max results to return (default 20)
+            is_active: Filter to active registrations only (default True)
+
+        Returns:
+            list: Matching registrations with id, name, type
+        """
+        params = f"search={search_term}&top={top}&isActive={str(is_active).lower()}"
+        res = self.api_request(f"{self.base_url}/Portfolio/Registrations/Simple/Search?{params}")
+        return res.json()
+
+    def get_registration(self, registration_id):
+        """Get full details for a registration.
+
+        Args:
+            registration_id: Registration ID
+
+        Returns:
+            dict: Registration details including custom fields
+        """
+        res = self.api_request(f"{self.base_url}/Portfolio/Registrations/{registration_id}")
+        return res.json()
+
+    def get_client_registrations(self, client_id, is_active=True):
+        """Get all registrations for a household/client.
+
+        Args:
+            client_id: Client ID
+            is_active: Filter to active registrations only (default True)
+
+        Returns:
+            list: Registrations under this client
+        """
+        res = self.api_request(
+            f"{self.base_url}/Portfolio/Clients/{client_id}/Registrations?isActive={str(is_active).lower()}"
+        )
+        return res.json()
+
+    def update_registration(self, registration_id, data):
+        """Update a registration.
+
+        Args:
+            registration_id: Registration ID
+            data: Dict of fields to update. Custom fields can use display names.
+
+        Returns:
+            dict: Updated registration
+        """
+        translated = self._translate_custom_fields('registration', data)
+        res = self.api_request(
+            f"{self.base_url}/Portfolio/Registrations/{registration_id}",
+            requests.put,
+            json=translated
+        )
+        return res.json()
+
+    def get_registration_types(self):
+        """Get available registration types (IRA, 401k, etc.).
+
+        Returns:
+            list: Registration types with id and name
+        """
+        res = self.api_request(f"{self.base_url}/Portfolio/Registrations/Types")
+        return res.json()
+
+    # -------------------------------------------------------------------------
+    # Accounts
+    # -------------------------------------------------------------------------
+
+    def search_orion_accounts(self, search_term, top=20, is_active=True):
+        """Search for accounts by name or number.
+
+        Args:
+            search_term: Name or account number to search for
+            top: Max results to return (default 20)
+            is_active: Filter to active accounts only (default True)
+
+        Returns:
+            list: Matching accounts with id, number, name, custodian
+        """
+        params = f"search={search_term}&top={top}&isActive={str(is_active).lower()}"
+        res = self.api_request(f"{self.base_url}/Portfolio/Accounts/Simple/Search?{params}")
+        return res.json()
+
+    def get_orion_account(self, account_id):
+        """Get full details for an account.
+
+        Args:
+            account_id: Account ID
+
+        Returns:
+            dict: Account details including custom fields
+        """
+        res = self.api_request(f"{self.base_url}/Portfolio/Accounts/{account_id}")
+        return res.json()
+
+    def update_orion_account(self, account_id, data):
+        """Update an account.
+
+        Args:
+            account_id: Account ID
+            data: Dict of fields to update. Custom fields can use display names.
+
+        Returns:
+            dict: Updated account
+        """
+        translated = self._translate_custom_fields('account', data)
+        res = self.api_request(
+            f"{self.base_url}/Portfolio/Accounts/{account_id}",
+            requests.put,
+            json=translated
+        )
+        return res.json()
+
 
 class EclipseAPI(BaseAPI):
     """Client for the Eclipse Trading Platform API.
@@ -654,11 +919,21 @@ class EclipseAPI(BaseAPI):
             end_date: End date (YYYY-MM-DD format)
 
         Returns:
-            list: List of trade instance dicts with id, orderCount, executeStatus, etc.
+            list: List of trade instance dicts with id, orderCount, executeStatus,
+                  tradeInstanceType (string), tradeInstanceSubType (string), etc.
         """
-        return self.api_request(
+        instances = self.api_request(
             f"{self.base_url}/tradeorder/instances?startDate={start_date}&endDate={end_date}"
         ).json()
+
+        # Convert type/subtype IDs to friendly names
+        for inst in instances:
+            type_id = inst.get('tradeInstanceType')
+            subtype_id = inst.get('tradeInstanceSubType')
+            inst['tradeInstanceType'] = TRADE_INSTANCE_TYPES.get(type_id) if type_id else None
+            inst['tradeInstanceSubType'] = TRADE_INSTANCE_SUBTYPES.get(subtype_id) if subtype_id else None
+
+        return instances
 
     # Model Maintenance
 

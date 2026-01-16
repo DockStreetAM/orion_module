@@ -300,3 +300,87 @@ class TestOrionAPI:
         """Test that we can run a query."""
         result = orion_client.query(orion_query_id, {})
         assert isinstance(result, (dict, list))
+
+    # Custom Field Definitions
+
+    def test_get_custom_field_definitions_client(self, orion_client):
+        """Test fetching custom field definitions for clients."""
+        from orionapi import AuthenticationError, NotFoundError
+        try:
+            fields = orion_client.get_custom_field_definitions('client')
+            assert isinstance(fields, list)
+        except (AuthenticationError, NotFoundError):
+            pytest.skip("Custom field definitions endpoint not accessible")
+
+    def test_get_custom_field_definitions_account(self, orion_client):
+        """Test fetching custom field definitions for accounts."""
+        from orionapi import AuthenticationError, NotFoundError
+        try:
+            fields = orion_client.get_custom_field_definitions('account')
+            assert isinstance(fields, list)
+        except (AuthenticationError, NotFoundError):
+            pytest.skip("Custom field definitions endpoint not accessible")
+
+    # Households (Clients)
+
+    def test_search_clients(self, orion_client):
+        """Test searching for clients by name."""
+        results = orion_client.search_clients('a', top=5)
+        assert isinstance(results, list)
+
+    def test_get_client(self, orion_client):
+        """Test fetching a client by ID."""
+        results = orion_client.search_clients('a', top=1)
+        if not results:
+            pytest.skip("No clients found")
+        client = orion_client.get_client(results[0]['id'])
+        assert isinstance(client, dict)
+        assert 'id' in client
+
+    def test_get_client_registrations(self, orion_client):
+        """Test fetching registrations for a client."""
+        results = orion_client.search_clients('a', top=1)
+        if not results:
+            pytest.skip("No clients found")
+        registrations = orion_client.get_client_registrations(results[0]['id'])
+        assert isinstance(registrations, list)
+
+    # Registrations
+
+    def test_search_registrations(self, orion_client):
+        """Test searching for registrations by name."""
+        results = orion_client.search_registrations('a', top=5)
+        assert isinstance(results, list)
+
+    def test_get_registration(self, orion_client):
+        """Test fetching a registration by ID."""
+        results = orion_client.search_registrations('a', top=1)
+        if not results:
+            pytest.skip("No registrations found")
+        registration = orion_client.get_registration(results[0]['id'])
+        assert isinstance(registration, dict)
+        assert 'id' in registration
+
+    def test_get_registration_types(self, orion_client):
+        """Test fetching registration types."""
+        types = orion_client.get_registration_types()
+        assert isinstance(types, list)
+        if types:
+            assert 'id' in types[0]
+            assert 'name' in types[0]
+
+    # Accounts
+
+    def test_search_orion_accounts(self, orion_client):
+        """Test searching for accounts by name."""
+        results = orion_client.search_orion_accounts('a', top=5)
+        assert isinstance(results, list)
+
+    def test_get_orion_account(self, orion_client):
+        """Test fetching an account by ID."""
+        results = orion_client.search_orion_accounts('a', top=1)
+        if not results:
+            pytest.skip("No accounts found")
+        account = orion_client.get_orion_account(results[0]['id'])
+        assert isinstance(account, dict)
+        assert 'id' in account
