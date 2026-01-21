@@ -1,85 +1,196 @@
-__version__ = '1.2.0'
+__version__ = "1.2.0"
 
+import logging
+import re
+import time
+from pathlib import Path
+from urllib.parse import urlencode
+
+import rapidfuzz
 import requests
 import tabulate
-import re
-import rapidfuzz
-import logging
-import time
-
 
 # Trade Instance Type mappings (from Orion API documentation)
 TRADE_INSTANCE_TYPES = {
-    1: 'Astro',
-    2: 'Cash Movements',
-    3: 'Global Trades',
-    4: 'Option Trading',
-    5: 'Quick Trade',
-    6: 'Rebalance',
-    7: 'Tactical Tool',
-    8: 'Tax Harvesting',
-    9: 'Tax Ticker Swap',
-    10: 'Trade to Target',
-    11: 'Liquidate',
+    1: "Astro",
+    2: "Cash Movements",
+    3: "Global Trades",
+    4: "Option Trading",
+    5: "Quick Trade",
+    6: "Rebalance",
+    7: "Tactical Tool",
+    8: "Tax Harvesting",
+    9: "Tax Ticker Swap",
+    10: "Trade to Target",
+    11: "Liquidate",
 }
 
 # Trade Instance SubType mappings (from Orion API documentation)
 TRADE_INSTANCE_SUBTYPES = {
-    1: 'Automated Losses',
-    2: 'ASTRO',
-    3: 'Cash Needs',
-    4: 'Focused Rebalance',
-    5: 'Full Location Rebalance',
-    6: 'Global Trades',
-    7: 'Manual Gains',
-    8: 'Manual Losses',
-    9: 'Option Trading',
-    10: 'Partial Location Rebalance',
-    11: 'Quick Trade',
-    12: 'Raise Cash',
-    13: 'Spend Cash',
-    14: 'Standard Rebalance',
-    15: 'Tactical Tool',
-    16: 'Tax Ticker Swap',
-    17: 'Trade Import',
-    18: 'Trade to Target',
-    19: 'Journal Only Cash',
-    20: 'Journal Cash and Holdings',
-    21: 'Money Market Rebalance',
-    22: 'Liquidate',
+    1: "Automated Losses",
+    2: "ASTRO",
+    3: "Cash Needs",
+    4: "Focused Rebalance",
+    5: "Full Location Rebalance",
+    6: "Global Trades",
+    7: "Manual Gains",
+    8: "Manual Losses",
+    9: "Option Trading",
+    10: "Partial Location Rebalance",
+    11: "Quick Trade",
+    12: "Raise Cash",
+    13: "Spend Cash",
+    14: "Standard Rebalance",
+    15: "Tactical Tool",
+    16: "Tax Ticker Swap",
+    17: "Trade Import",
+    18: "Trade to Target",
+    19: "Journal Only Cash",
+    20: "Journal Cash and Holdings",
+    21: "Money Market Rebalance",
+    22: "Liquidate",
 }
+
+# Set-Aside Cash Constants (from Eclipse API)
+CASH_TYPE_DOLLAR = 1
+CASH_TYPE_PERCENT = 2
+
+EXPIRE_TYPE_DATE = 1
+EXPIRE_TYPE_TRANSACTION = 2
+EXPIRE_TYPE_NONE = 3
+
+EXPIRE_TRANS_DISTRIBUTION = 1
+EXPIRE_TRANS_FEE = 3
+
+PERCENT_CALC_DEFAULT = 0
+PERCENT_CALC_TOTAL_VALUE = 1
+PERCENT_CALC_EXCLUDED_VALUE = 2
+
+MODEL_TYPE_SECURITY_SET = 4
 
 
 class OrionAPIError(Exception):
     """Base exception for Orion API errors."""
+
     pass
 
 
 class AuthenticationError(OrionAPIError):
     """Raised when authentication fails."""
+
     pass
 
 
 class NotFoundError(OrionAPIError):
     """Raised when a requested resource is not found."""
+
     pass
 
 
+class RateLimiter:
+    """Simple rate limiter to prevent API abuse.
+
+    Implements a token bucket algorithm to limit requests per second.
+
+    Args:
+        calls_per_second: Maximum number of API calls per second (default 10)
+    """
+
+    def __init__(self, calls_per_second=10):
+        self.calls_per_second = calls_per_second
+        self.min_interval = 1.0 / calls_per_second
+        self.last_call = 0
+
+    def wait(self):
+        """Wait if necessary to respect rate limit."""
+        if self.calls_per_second <= 0:
+            return  # Rate limiting disabled
+
+        now = time.time()
+        time_since_last = now - self.last_call
+
+        if time_since_last < self.min_interval:
+            sleep_time = self.min_interval - time_since_last
+            time.sleep(sleep_time)
+
+        self.last_call = time.time()
+
+
 class BaseAPI:
-    """Base class for Orion API clients with shared request handling."""
+    """Base class for Orion API clients with shared request handling.
+
+    Args:
+        rate_limit: Maximum API calls per second (default 10, set to 0 to disable)
+    """
 
     base_url = None
+
+    def __init__(self, rate_limit=10, verify_ssl=True, ca_bundle=None):
+        """Initialize base API with rate limiting and SSL configuration.
+
+        Args:
+            rate_limit: Maximum API calls per second (default 10, set to 0 to disable)
+            verify_ssl: Verify SSL certificates (default True)
+            ca_bundle: Path to custom CA bundle file (optional)
+        """
+        self._rate_limiter = RateLimiter(calls_per_second=rate_limit)
+        self.verify_ssl = verify_ssl
+        self.ca_bundle = ca_bundle
 
     def _get_auth_header(self):
         """Return authorization header dict. Subclasses must implement."""
         raise NotImplementedError("Subclasses must implement _get_auth_header()")
 
-    def api_request(self, url, req_func=requests.get, **kwargs):
+    def _sanitize_for_logging(self, data):
+        """Remove sensitive fields from data before logging.
+
+        Args:
+            data: Dict or list to sanitize
+
+        Returns:
+            Sanitized copy of data with sensitive fields redacted
+        """
+        if not isinstance(data, (dict, list)):
+            return data
+
+        sensitive_keys = {
+            "token",
+            "password",
+            "pwd",
+            "access_token",
+            "accessToken",
+            "eclipse_access_token",
+            "session",
+            "sessionToken",
+            "authorization",
+            "api_key",
+            "apiKey",
+        }
+
+        if isinstance(data, dict):
+            sanitized = {}
+            for key, value in data.items():
+                if key.lower() in sensitive_keys or any(
+                    s in key.lower() for s in ["token", "password", "secret", "key"]
+                ):
+                    sanitized[key] = "***REDACTED***"
+                elif isinstance(value, (dict, list)):
+                    sanitized[key] = self._sanitize_for_logging(value)
+                else:
+                    sanitized[key] = value
+            return sanitized
+        elif isinstance(data, list):
+            return [self._sanitize_for_logging(item) for item in data]
+
+        return data
+
+    def api_request(self, url, req_func=requests.get, timeout=30, **kwargs):
         """Make an authenticated API request with error handling.
 
         Args:
             url: The API endpoint URL
             req_func: The requests function to use (get, post, put, delete)
+            timeout: Request timeout in seconds (default 30)
             **kwargs: Additional arguments passed to the request
 
         Returns:
@@ -90,15 +201,30 @@ class BaseAPI:
             NotFoundError: On 404 responses
             OrionAPIError: On other 4xx/5xx responses
         """
-        headers = kwargs.pop('headers', {})
+        # Apply rate limiting
+        self._rate_limiter.wait()
+
+        headers = kwargs.pop("headers", {})
         headers.update(self._get_auth_header())
+
+        # Set default timeout if not provided in kwargs
+        if "timeout" not in kwargs:
+            kwargs["timeout"] = timeout
+
+        # Set SSL verification if not provided in kwargs
+        if "verify" not in kwargs:
+            if self.ca_bundle:
+                kwargs["verify"] = self.ca_bundle
+            else:
+                kwargs["verify"] = self.verify_ssl
+
         res = req_func(url, headers=headers, **kwargs)
 
         if not res.ok:
             # Try to get error message from response body
             try:
                 error_body = res.json()
-                message = error_body.get('message', str(error_body))
+                message = error_body.get("message", str(error_body))
             except ValueError:
                 message = res.text or res.reason
 
@@ -120,6 +246,9 @@ class OrionAPI(BaseAPI):
     Args:
         usr: Username for authentication
         pwd: Password for authentication
+        rate_limit: Maximum API calls per second (default 10, set to 0 to disable)
+        verify_ssl: Verify SSL certificates (default True)
+        ca_bundle: Path to custom CA bundle file (optional)
 
     Example:
         >>> api = OrionAPI(usr="user@example.com", pwd="password")
@@ -127,14 +256,14 @@ class OrionAPI(BaseAPI):
         'user@example.com'
     """
 
-    def __init__(self, usr=None, pwd=None):
+    def __init__(self, usr=None, pwd=None, rate_limit=10, verify_ssl=True, ca_bundle=None):
+        super().__init__(rate_limit=rate_limit, verify_ssl=verify_ssl, ca_bundle=ca_bundle)
         self.token = None
-        self.usr = usr
-        self.pwd = pwd
         self.base_url = "https://api.orionadvisor.com/api/v1/"
 
-        if self.usr is not None:
-            self.login(self.usr, self.pwd)
+        if usr is not None:
+            self.login(usr, pwd)
+            # Credentials are not stored to prevent memory exposure
 
     def login(self, usr=None, pwd=None):
         """Authenticate with the Orion API.
@@ -146,19 +275,16 @@ class OrionAPI(BaseAPI):
         Raises:
             AuthenticationError: If credentials are invalid
         """
-        res = requests.get(
-            f"{self.base_url}/security/token",
-            auth=(usr, pwd)
-        )
+        res = requests.get(f"{self.base_url}/security/token", auth=(usr, pwd))
         if not res.ok:
             raise AuthenticationError(f"Login failed: {res.status_code} {res.reason}")
         try:
-            self.token = res.json()['access_token']
+            self.token = res.json()["access_token"]
         except (KeyError, ValueError) as e:
-            raise AuthenticationError(f"Invalid response from auth endpoint: {e}")
+            raise AuthenticationError(f"Invalid response from auth endpoint: {e}") from e
 
     def _get_auth_header(self):
-        return {'Authorization': 'Session ' + self.token}
+        return {"Authorization": "Session " + self.token}
 
     def check_username(self):
         """Get the authenticated user's login ID.
@@ -167,7 +293,7 @@ class OrionAPI(BaseAPI):
             str: The user's login ID
         """
         res = self.api_request(f"{self.base_url}/authorization/user")
-        return res.json()['loginUserId']
+        return res.json()["loginUserId"]
 
     def get_query_payload(self, id):
         """Get the full payload for a custom query.
@@ -189,7 +315,7 @@ class OrionAPI(BaseAPI):
         Returns:
             list: List of parameter definitions with codes and default values
         """
-        return self.get_query_payload(id)['prompts']
+        return self.get_query_payload(id)["prompts"]
 
     def get_query_params_description(self, id):
         """Print a formatted table of query parameters.
@@ -216,23 +342,21 @@ class OrionAPI(BaseAPI):
         params = params or {}
 
         payload_template = {
-            "runTo": 'null',
-            "databaseIdList": 'null',
+            "runTo": "null",
+            "databaseIdList": "null",
             "prompts": [],
         }
         run_params = []
         for p in default_params:
-            if p['code'] in params:
-                p['defaultValue'] = params[p['code']]
+            if p["code"] in params:
+                p["defaultValue"] = params[p["code"]]
             run_params.append(p)
 
         payload = payload_template.copy()
-        payload['prompts'] = run_params
+        payload["prompts"] = run_params
 
         res = self.api_request(
-            f"{self.base_url}/Reporting/Custom/{id}/Generate/Table",
-            requests.post,
-            json=payload
+            f"{self.base_url}/Reporting/Custom/{id}/Generate/Table", requests.post, json=payload
         )
         return res.json()
 
@@ -256,7 +380,7 @@ class OrionAPI(BaseAPI):
 
         # Cache the display name -> code mapping
         self._custom_field_cache[entity] = {
-            f['description']: f['code'] for f in fields if f.get('description')
+            f["description"]: f["code"] for f in fields if f.get("description")
         }
         return fields
 
@@ -301,7 +425,12 @@ class OrionAPI(BaseAPI):
         Returns:
             list: Matching clients with id, name, status
         """
-        params = f"search={search_term}&top={top}&isActive={str(is_active).lower()}"
+        if not isinstance(search_term, str) or not search_term.strip():
+            raise ValueError("search_term must be a non-empty string")
+        if not isinstance(top, int) or top < 1:
+            raise ValueError("top must be a positive integer")
+
+        params = urlencode({"search": search_term, "top": top, "isActive": str(is_active).lower()})
         res = self.api_request(f"{self.base_url}/Portfolio/Clients/Simple/Search?{params}")
         return res.json()
 
@@ -328,11 +457,9 @@ class OrionAPI(BaseAPI):
         Returns:
             dict: Updated client
         """
-        translated = self._translate_custom_fields('client', data)
+        translated = self._translate_custom_fields("client", data)
         res = self.api_request(
-            f"{self.base_url}/Portfolio/Clients/{client_id}",
-            requests.put,
-            json=translated
+            f"{self.base_url}/Portfolio/Clients/{client_id}", requests.put, json=translated
         )
         return res.json()
 
@@ -351,7 +478,12 @@ class OrionAPI(BaseAPI):
         Returns:
             list: Matching registrations with id, name, type
         """
-        params = f"search={search_term}&top={top}&isActive={str(is_active).lower()}"
+        if not isinstance(search_term, str) or not search_term.strip():
+            raise ValueError("search_term must be a non-empty string")
+        if not isinstance(top, int) or top < 1:
+            raise ValueError("top must be a positive integer")
+
+        params = urlencode({"search": search_term, "top": top, "isActive": str(is_active).lower()})
         res = self.api_request(f"{self.base_url}/Portfolio/Registrations/Simple/Search?{params}")
         return res.json()
 
@@ -392,11 +524,11 @@ class OrionAPI(BaseAPI):
         Returns:
             dict: Updated registration
         """
-        translated = self._translate_custom_fields('registration', data)
+        translated = self._translate_custom_fields("registration", data)
         res = self.api_request(
             f"{self.base_url}/Portfolio/Registrations/{registration_id}",
             requests.put,
-            json=translated
+            json=translated,
         )
         return res.json()
 
@@ -424,7 +556,12 @@ class OrionAPI(BaseAPI):
         Returns:
             list: Matching accounts with id, number, name, custodian
         """
-        params = f"search={search_term}&top={top}&isActive={str(is_active).lower()}"
+        if not isinstance(search_term, str) or not search_term.strip():
+            raise ValueError("search_term must be a non-empty string")
+        if not isinstance(top, int) or top < 1:
+            raise ValueError("top must be a positive integer")
+
+        params = urlencode({"search": search_term, "top": top, "isActive": str(is_active).lower()})
         res = self.api_request(f"{self.base_url}/Portfolio/Accounts/Simple/Search?{params}")
         return res.json()
 
@@ -450,11 +587,9 @@ class OrionAPI(BaseAPI):
         Returns:
             dict: Updated account
         """
-        translated = self._translate_custom_fields('account', data)
+        translated = self._translate_custom_fields("account", data)
         res = self.api_request(
-            f"{self.base_url}/Portfolio/Accounts/{account_id}",
-            requests.put,
-            json=translated
+            f"{self.base_url}/Portfolio/Accounts/{account_id}", requests.put, json=translated
         )
         return res.json()
 
@@ -468,6 +603,9 @@ class EclipseAPI(BaseAPI):
         usr: Username for authentication
         pwd: Password for authentication
         orion_token: Orion session token (alternative to usr/pwd)
+        rate_limit: Maximum API calls per second (default 10, set to 0 to disable)
+        verify_ssl: Verify SSL certificates (default True)
+        ca_bundle: Path to custom CA bundle file (optional)
 
     Example:
         >>> api = EclipseAPI(usr="user@example.com", pwd="password")
@@ -475,17 +613,18 @@ class EclipseAPI(BaseAPI):
         'user@example.com'
     """
 
-    def __init__(self, usr=None, pwd=None, orion_token=None):
+    def __init__(
+        self, usr=None, pwd=None, orion_token=None, rate_limit=10, verify_ssl=True, ca_bundle=None
+    ):
+        super().__init__(rate_limit=rate_limit, verify_ssl=verify_ssl, ca_bundle=ca_bundle)
         self.eclipse_token = None
-        self.orion_token = orion_token
-        self.usr = usr
-        self.pwd = pwd
         self.base_url = "https://api.orioneclipse.com/v1"
 
-        if self.usr is not None:
-            self.login(self.usr, self.pwd)
-        elif self.orion_token is not None:
-            self.login(orion_token=self.orion_token)
+        if usr is not None:
+            self.login(usr, pwd)
+            # Credentials are not stored to prevent memory exposure
+        elif orion_token is not None:
+            self.login(orion_token=orion_token)
 
     def login(self, usr=None, pwd=None, orion_token=None):
         """Authenticate with the Eclipse API.
@@ -506,31 +645,28 @@ class EclipseAPI(BaseAPI):
             raise AuthenticationError("Must provide either usr/pwd or orion_token")
 
         if usr is not None:
-            res = requests.get(
-                f"{self.base_url}/admin/token",
-                auth=(usr, pwd)
-            )
+            res = requests.get(f"{self.base_url}/admin/token", auth=(usr, pwd))
             if not res.ok:
                 raise AuthenticationError(f"Login failed: {res.status_code} {res.reason}")
             try:
-                self.eclipse_token = res.json()['eclipse_access_token']
+                self.eclipse_token = res.json()["eclipse_access_token"]
             except (KeyError, ValueError) as e:
-                raise AuthenticationError(f"Invalid response from auth endpoint: {e}")
+                raise AuthenticationError(f"Invalid response from auth endpoint: {e}") from e
 
         elif self.orion_token is not None:
             res = requests.get(
                 f"{self.base_url}/admin/token",
-                headers={'Authorization': 'Session ' + self.orion_token}
+                headers={"Authorization": "Session " + self.orion_token},
             )
             if not res.ok:
                 raise AuthenticationError(f"Token exchange failed: {res.status_code} {res.reason}")
             try:
-                self.eclipse_token = res.json()['eclipse_access_token']
+                self.eclipse_token = res.json()["eclipse_access_token"]
             except (KeyError, ValueError) as e:
-                raise AuthenticationError(f"Invalid response from auth endpoint: {e}")
+                raise AuthenticationError(f"Invalid response from auth endpoint: {e}") from e
 
     def _get_auth_header(self):
-        return {'Authorization': 'Session ' + self.eclipse_token}
+        return {"Authorization": "Session " + self.eclipse_token}
 
     def check_username(self):
         """Get the authenticated user's login ID.
@@ -539,7 +675,7 @@ class EclipseAPI(BaseAPI):
             str: The user's login ID
         """
         res = self.api_request(f"{self.base_url}/admin/authorization/user")
-        return res.json()['userLoginId']
+        return res.json()["userLoginId"]
 
     def get_all_accounts(self):
         """Get a simplified list of all accounts.
@@ -595,7 +731,7 @@ class EclipseAPI(BaseAPI):
         logging.debug("search_accounts result: %s", res)
         if not res:
             raise NotFoundError(f"No account found for search: {search_param}")
-        return res[0]['id']
+        return res[0]["id"]
 
     def search_accounts(self, search_param):
         """Search for accounts by various criteria.
@@ -635,10 +771,7 @@ class EclipseAPI(BaseAPI):
 
         # First: filter by exact trailing account-number match
         accounts = self.search_accounts(from_acct)
-        num_match = [
-            a for a in accounts
-            if a["accountNumber"].endswith(from_acct)
-        ]
+        num_match = [a for a in accounts if a["accountNumber"].endswith(from_acct)]
 
         if not num_match:
             raise NotFoundError(f"No accounts found for acct# {acct_num_portion}")
@@ -649,33 +782,43 @@ class EclipseAPI(BaseAPI):
                 "Multiple accounts share trailing digits '%s': %s",
                 from_acct,
                 [
-                    {k: a[k] for k in ["id","name","accountId","accountNumber","accountType"]}
+                    {k: a[k] for k in ["id", "name", "accountId", "accountNumber", "accountType"]}
                     for a in num_match
-                ]
+                ],
             )
 
         ### Pick the best fuzzy name match
         best_acct = max(
             num_match,
             key=lambda a: rapidfuzz.fuzz.partial_ratio(
-                name_portion,
-                self.normalize_name(a["name"])
-            )
+                name_portion, self.normalize_name(a["name"])
+            ),
         )
-        return best_acct['id'], best_acct['accountNumber']
-        
-    def create_set_aside(self, account_number, amount, min_amount=None, max_amount=None,
-                         description=None, min=None, max=None, cash_type='$',
-                         start_date=None, expire_type='None', expire_date=None,
-                         expire_trans_tol=0, expire_trans_type=1, percent_calc_type=0,
-                         sync=True):
+        return best_acct["id"], best_acct["accountNumber"]
+
+    def create_set_aside(
+        self,
+        account_number,
+        amount,
+        min_amount=0.0,
+        max_amount=0.0,
+        description=None,
+        cash_type="$",
+        start_date=None,
+        expire_type="None",
+        expire_date=None,
+        expire_trans_tol=0,
+        expire_trans_type=1,
+        percent_calc_type=0,
+        sync=True,
+    ):
         """Create a set-aside cash reservation for an account.
 
         Args:
             account_number: Full custodial account number
             amount: Cash amount to set aside
-            min_amount: Minimum cash amount
-            max_amount: Maximum cash amount
+            min_amount: Minimum cash amount (default 0.0)
+            max_amount: Maximum cash amount (default 0.0)
             description: Description of the set-aside
             cash_type: '$' for dollar amount, '%' for percentage (default '$')
             start_date: Start date for the set-aside
@@ -694,17 +837,17 @@ class EclipseAPI(BaseAPI):
 
         cash_type_map = {
             # end point account/accounts/asideCashAmountType
-            '$': 1,
-            '%': 2,
+            "$": 1,
+            "%": 2,
         }
         if isinstance(cash_type, str):
             cash_type = cash_type_map[cash_type]
 
         expire_type_map = {
             # end point account/accounts/asideCashExpirationType
-            'Date': 1,
-            'Transaction': 2,
-            'None': 3,
+            "Date": 1,
+            "Transaction": 2,
+            "None": 3,
         }
         if isinstance(expire_type, str):
             logging.debug("mapping expire type")
@@ -713,39 +856,44 @@ class EclipseAPI(BaseAPI):
 
         expire_trans_type_map = {
             # end point account/accounts/asideCashTransactionType
-            'Distribution / Merge Out': 1,
-            'Fee': 3,
+            "Distribution / Merge Out": 1,
+            "Fee": 3,
         }
         if isinstance(expire_trans_type, str):
             expire_trans_type = expire_trans_type_map[expire_trans_type]
-            
+
         if expire_type == 1:
             expire_value = expire_date
         elif expire_type == 2:
-            expire_value = expire_trans_type
+            # Use tolerance value, not the transaction type ID
+            expire_value = expire_trans_tol
         elif expire_type == 3:
             expire_value = 0
 
         percent_calc_type_map = {
-            'Use Default/Managed Value': 0,
-            'Use Total Value': 1,
-            'Use Excluded Value': 2,
+            "Use Default/Managed Value": 0,
+            "Use Total Value": 1,
+            "Use Excluded Value": 2,
         }
         if isinstance(percent_calc_type, str):
             percent_calc_type = percent_calc_type_map[percent_calc_type]
-            
-        res = self.api_request(f"{self.base_url}/account/accounts/{account_id}/asidecash",
-            requests.post, json={
+
+        res = self.api_request(
+            f"{self.base_url}/account/accounts/{account_id}/asidecash",
+            requests.post,
+            json={
                 "cashAmountTypeId": cash_type,
                 "cashAmount": float(amount),
-                'minCashAmount': float(min_amount),
-                'maxCashAmount': float(max_amount),
+                "minCashAmount": float(min_amount),
+                "maxCashAmount": float(max_amount),
                 "expirationTypeId": expire_type,
                 "expirationValue": expire_value,
                 "toleranceValue": expire_trans_tol,
+                "transactionTypeId": expire_trans_type,
                 "description": description,
                 "percentCalculationTypeId": percent_calc_type,
-            })
+            },
+        )
         result = res.json()
         self._maybe_wait_for_analytics(sync)
         return result
@@ -781,7 +929,7 @@ class EclipseAPI(BaseAPI):
             float: Available cash amount
         """
         res = self.get_account_details(internal_id)
-        return res['summarySection']['cashAvailable']
+        return res["summarySection"]["cashAvailable"]
 
     def get_portfolio(self, portfolio_id):
         """Get portfolio details by ID.
@@ -811,7 +959,7 @@ class EclipseAPI(BaseAPI):
         """
         res = self.api_request(
             f"{self.base_url}/portfolio/portfolios/{portfolio_id}/ModelMACTolerance/{account_id}",
-            params={"accountType": account_type}
+            params={"accountType": account_type},
         )
         return res.json()
 
@@ -900,7 +1048,7 @@ class EclipseAPI(BaseAPI):
         start = time.time()
         while True:
             status = self.get_analytics_status()
-            if not status.get('isAnalysisRunning'):
+            if not status.get("isAnalysisRunning"):
                 return True
             if time.time() - start > timeout:
                 raise TimeoutError(f"Analytics did not complete within {timeout} seconds")
@@ -927,9 +1075,15 @@ class EclipseAPI(BaseAPI):
         """
         return self.api_request(f"{self.base_url}/tradeorder/trades?isPending=true").json()
 
-    def cash_needs_trade(self, portfolio_ids, portfolio_trade_group_ids=None,
-                         is_view_only=True, reason="", is_excel_import=False,
-                         sync=True):
+    def cash_needs_trade(
+        self,
+        portfolio_ids,
+        portfolio_trade_group_ids=None,
+        is_view_only=True,
+        reason="",
+        is_excel_import=False,
+        sync=True,
+    ):
         """Rebalance CashNeeds Portfolios.
 
         Args:
@@ -951,13 +1105,11 @@ class EclipseAPI(BaseAPI):
             "portfolioTradeGroupIds": portfolio_trade_group_ids,
             "isViewOnly": is_view_only,
             "reason": reason,
-            "isExcelImport": is_excel_import
+            "isExcelImport": is_excel_import,
         }
 
         res = self.api_request(
-            f"{self.base_url}/tradetool/cashneeds/action/generatetrade",
-            requests.post,
-            json=payload
+            f"{self.base_url}/tradetool/cashneeds/action/generatetrade", requests.post, json=payload
         )
         result = res.json()
         self._maybe_wait_for_analytics(sync)
@@ -988,10 +1140,12 @@ class EclipseAPI(BaseAPI):
 
         # Convert type/subtype IDs to friendly names
         for inst in instances:
-            type_id = inst.get('tradeInstanceType')
-            subtype_id = inst.get('tradeInstanceSubType')
-            inst['tradeInstanceType'] = TRADE_INSTANCE_TYPES.get(type_id) if type_id else None
-            inst['tradeInstanceSubType'] = TRADE_INSTANCE_SUBTYPES.get(subtype_id) if subtype_id else None
+            type_id = inst.get("tradeInstanceType")
+            subtype_id = inst.get("tradeInstanceSubType")
+            inst["tradeInstanceType"] = TRADE_INSTANCE_TYPES.get(type_id) if type_id else None
+            inst["tradeInstanceSubType"] = (
+                TRADE_INSTANCE_SUBTYPES.get(subtype_id) if subtype_id else None
+            )
 
         return instances
 
@@ -1027,7 +1181,9 @@ class EclipseAPI(BaseAPI):
         Returns:
             list: List of allocation dicts with target percentages
         """
-        res = self.api_request(f"{self.base_url}/modeling/models/{id}/allocations?aggregateAllocations=true")
+        res = self.api_request(
+            f"{self.base_url}/modeling/models/{id}/allocations?aggregateAllocations=true"
+        )
         return res.json()
 
     def get_all_security_sets(self):
@@ -1051,9 +1207,18 @@ class EclipseAPI(BaseAPI):
         res = self.api_request(f"{self.base_url}/security/securityset/details/{id}")
         return res.json()
 
-    def add_model(self, name, name_space="Default", description=None, tags=None, status_id=1,
-                  management_style_id=2, is_community_model=False, is_dynamic=False,
-                  exclude_rebalance_sleeve=False):
+    def add_model(
+        self,
+        name,
+        name_space="Default",
+        description=None,
+        tags=None,
+        status_id=1,
+        management_style_id=2,
+        is_community_model=False,
+        is_dynamic=False,
+        exclude_rebalance_sleeve=False,
+    ):
         """Create a new model.
 
         Args:
@@ -1079,14 +1244,10 @@ class EclipseAPI(BaseAPI):
             "managementStyleId": management_style_id,
             "isCommunityModel": is_community_model,
             "isDynamic": 1 if is_dynamic else 0,
-            "excludeRebalanceSleeve": exclude_rebalance_sleeve
+            "excludeRebalanceSleeve": exclude_rebalance_sleeve,
         }
 
-        res = self.api_request(
-            f"{self.base_url}/modeling/models",
-            requests.post,
-            json=payload
-        )
+        res = self.api_request(f"{self.base_url}/modeling/models", requests.post, json=payload)
         return res.json()
 
     def add_model_detail(self, model_id, model_detail, sync=True):
@@ -1116,7 +1277,7 @@ class EclipseAPI(BaseAPI):
         res = self.api_request(
             f"{self.base_url}/modeling/models/{model_id}/modelDetail",
             requests.post,
-            json={"modelDetail": model_detail}
+            json={"modelDetail": model_detail},
         )
         result = res.json()
         self._maybe_wait_for_analytics(sync)
@@ -1131,14 +1292,12 @@ class EclipseAPI(BaseAPI):
         Returns:
             dict with success message
         """
-        res = self.api_request(
-            f"{self.base_url}/modeling/models/{model_id}",
-            requests.delete
-        )
+        res = self.api_request(f"{self.base_url}/modeling/models/{model_id}", requests.delete)
         return res.json()
 
-    def create_security_set(self, name, securities, description=None,
-                            tolerance_type="ABSOLUTE", tolerance_type_value=0):
+    def create_security_set(
+        self, name, securities, description=None, tolerance_type="ABSOLUTE", tolerance_type_value=0
+    ):
         """Create a new security set.
 
         Args:
@@ -1163,19 +1322,22 @@ class EclipseAPI(BaseAPI):
             "description": description,
             "toleranceType": tolerance_type,
             "toleranceTypeValue": tolerance_type_value,
-            "securities": securities
+            "securities": securities,
         }
 
-        res = self.api_request(
-            f"{self.base_url}/security/securityset",
-            requests.post,
-            json=payload
-        )
+        res = self.api_request(f"{self.base_url}/security/securityset", requests.post, json=payload)
         return res.json()
 
-    def update_security_set(self, set_id, name, securities, description=None,
-                            tolerance_type="ABSOLUTE", tolerance_type_value=0,
-                            sync=True):
+    def update_security_set(
+        self,
+        set_id,
+        name,
+        securities,
+        description=None,
+        tolerance_type="ABSOLUTE",
+        tolerance_type_value=0,
+        sync=True,
+    ):
         """Update an existing security set.
 
         Args:
@@ -1200,13 +1362,11 @@ class EclipseAPI(BaseAPI):
             "description": description,
             "toleranceType": tolerance_type,
             "toleranceTypeValue": tolerance_type_value,
-            "securities": securities
+            "securities": securities,
         }
 
         res = self.api_request(
-            f"{self.base_url}/security/securityset/{set_id}",
-            requests.put,
-            json=payload
+            f"{self.base_url}/security/securityset/{set_id}", requests.put, json=payload
         )
         result = res.json()
         self._maybe_wait_for_analytics(sync)
@@ -1223,11 +1383,7 @@ class EclipseAPI(BaseAPI):
         Returns:
             list: List of matching security dicts with id, name, symbol, price, etc.
         """
-        params = {
-            "search": search,
-            "top": top,
-            "excludeCashSecurity": str(exclude_cash).lower()
-        }
+        params = {"search": search, "top": top, "excludeCashSecurity": str(exclude_cash).lower()}
         res = self.api_request(f"{self.base_url}/security/securities", params=params)
         return res.json()
 
@@ -1246,7 +1402,7 @@ class EclipseAPI(BaseAPI):
         results = self.search_securities(ticker, top=10)
         # Find exact ticker match
         for sec in results:
-            if sec.get('symbol', '').upper() == ticker.upper():
+            if sec.get("symbol", "").upper() == ticker.upper():
                 return sec
         raise NotFoundError(f"No security found with ticker: {ticker}")
 
@@ -1273,54 +1429,58 @@ class EclipseAPI(BaseAPI):
         Returns:
             dict with 'name', 'description', and 'securities' list (each with optional 'equivalents')
         """
+        # Validate file path
+        file_path = Path(file_path).resolve()
+        if not file_path.exists():
+            raise FileNotFoundError(f"File not found: {file_path}")
+        if not file_path.is_file():
+            raise ValueError(f"Path is not a file: {file_path}")
+
         name = None
         description = None
         securities = []
 
-        with open(file_path, 'r') as f:
+        with open(file_path) as f:
             for line in f:
-                raw_line = line
                 line = line.strip()
                 if not line:
                     continue
 
                 # Parse header comments
-                if line.startswith('#'):
-                    if line.lower().startswith('# security set:'):
-                        name = line.split(':', 1)[1].strip()
-                    elif line.lower().startswith('# description:'):
-                        description = line.split(':', 1)[1].strip()
+                if line.startswith("#"):
+                    if line.lower().startswith("# security set:"):
+                        name = line.split(":", 1)[1].strip()
+                    elif line.lower().startswith("# description:"):
+                        description = line.split(":", 1)[1].strip()
                     continue
 
                 # Parse equivalent security line (indented, starts with =)
-                if line.startswith('='):
+                if line.startswith("="):
                     equiv_ticker = line[1:].strip()
                     if securities and equiv_ticker:
-                        if 'equivalents' not in securities[-1]:
-                            securities[-1]['equivalents'] = []
-                        securities[-1]['equivalents'].append(equiv_ticker)
+                        if "equivalents" not in securities[-1]:
+                            securities[-1]["equivalents"] = []
+                        securities[-1]["equivalents"].append(equiv_ticker)
                     continue
 
                 # Parse security line: TICKER LOWER TARGET UPPER
                 parts = line.split()
                 if len(parts) >= 4:
                     ticker = parts[0]
-                    lower = float(parts[1].rstrip('%'))
-                    target = float(parts[2].rstrip('%'))
-                    upper = float(parts[3].rstrip('%'))
+                    lower = float(parts[1].rstrip("%"))
+                    target = float(parts[2].rstrip("%"))
+                    upper = float(parts[3].rstrip("%"))
 
-                    securities.append({
-                        'ticker': ticker,
-                        'lower_bound': lower,
-                        'target': target,
-                        'upper_bound': upper
-                    })
+                    securities.append(
+                        {
+                            "ticker": ticker,
+                            "lower_bound": lower,
+                            "target": target,
+                            "upper_bound": upper,
+                        }
+                    )
 
-        return {
-            'name': name,
-            'description': description,
-            'securities': securities
-        }
+        return {"name": name, "description": description, "securities": securities}
 
     def convert_to_eclipse_tolerances(self, securities):
         """Convert absolute bounds to Eclipse tolerance format.
@@ -1338,32 +1498,32 @@ class EclipseAPI(BaseAPI):
         """
         result = []
         for i, sec in enumerate(securities):
-            security_info = self.get_security_by_ticker(sec['ticker'])
+            security_info = self.get_security_by_ticker(sec["ticker"])
 
             # Convert absolute bounds to relative tolerances
-            lower_tolerance = sec['target'] - sec['lower_bound']
-            upper_tolerance = sec['upper_bound'] - sec['target']
+            lower_tolerance = sec["target"] - sec["lower_bound"]
+            upper_tolerance = sec["upper_bound"] - sec["target"]
 
             sec_data = {
-                'id': security_info['id'],
-                'targetPercent': sec['target'],
-                'lowerModelTolerancePercent': lower_tolerance,
-                'upperModelTolerancePercent': upper_tolerance,
-                'rank': i
+                "id": security_info["id"],
+                "targetPercent": sec["target"],
+                "lowerModelTolerancePercent": lower_tolerance,
+                "upperModelTolerancePercent": upper_tolerance,
+                "rank": i,
             }
 
             # Add equivalences if present
-            if sec.get('equivalents'):
+            if sec.get("equivalents"):
                 equivalences = []
-                for equiv_ticker in sec['equivalents']:
+                for equiv_ticker in sec["equivalents"]:
                     try:
                         equiv_info = self.get_security_by_ticker(equiv_ticker)
-                        equivalences.append({'id': equiv_info['id']})
+                        equivalences.append({"id": equiv_info["id"]})
                     except NotFoundError:
                         # Skip equivalents that can't be found
                         pass
                 if equivalences:
-                    sec_data['equivalences'] = equivalences
+                    sec_data["equivalences"] = equivalences
 
             result.append(sec_data)
 
@@ -1389,75 +1549,77 @@ class EclipseAPI(BaseAPI):
         """
         parsed = self.parse_security_set_file(file_path)
 
-        if not parsed['name']:
+        if not parsed["name"]:
             raise ValueError("Security set file must have '# Security Set: Name' header")
 
-        existing = self.find_security_set_by_name(parsed['name'])
+        existing = self.find_security_set_by_name(parsed["name"])
 
         result = {
-            'action': 'update' if existing else 'create',
-            'name': parsed['name'],
-            'existing_id': existing['id'] if existing else None,
-            'changes': [],
-            'new_securities': [],
-            'old_securities': []
+            "action": "update" if existing else "create",
+            "name": parsed["name"],
+            "existing_id": existing["id"] if existing else None,
+            "changes": [],
+            "new_securities": [],
+            "old_securities": [],
         }
 
         # Build new securities list with bounds
-        for sec in parsed['securities']:
+        for sec in parsed["securities"]:
             sec_info = {
-                'ticker': sec['ticker'],
-                'lower': sec['lower_bound'],
-                'target': sec['target'],
-                'upper': sec['upper_bound'],
-                'equivalents': sec.get('equivalents', [])
+                "ticker": sec["ticker"],
+                "lower": sec["lower_bound"],
+                "target": sec["target"],
+                "upper": sec["upper_bound"],
+                "equivalents": sec.get("equivalents", []),
             }
-            result['new_securities'].append(sec_info)
+            result["new_securities"].append(sec_info)
 
         if existing:
             # Get current Eclipse data
-            eclipse_ss = self.get_security_set(existing['id'])
+            eclipse_ss = self.get_security_set(existing["id"])
 
             # Build old securities lookup
             old_by_ticker = {}
-            for sec in eclipse_ss.get('securities', []):
-                ticker = sec.get('symbol', '')
-                target = sec.get('targetPercent', 0)
-                lower_tol = sec.get('lowerModelTolerancePercent', 0)
-                upper_tol = sec.get('upperModelTolerancePercent', 0)
-                equiv_tickers = [e.get('symbol', '') for e in sec.get('equivalences', [])]
+            for sec in eclipse_ss.get("securities", []):
+                ticker = sec.get("symbol", "")
+                target = sec.get("targetPercent", 0)
+                lower_tol = sec.get("lowerModelTolerancePercent", 0)
+                upper_tol = sec.get("upperModelTolerancePercent", 0)
+                equiv_tickers = [e.get("symbol", "") for e in sec.get("equivalences", [])]
 
                 old_info = {
-                    'ticker': ticker,
-                    'lower': target - lower_tol,
-                    'target': target,
-                    'upper': target + upper_tol,
-                    'equivalents': equiv_tickers
+                    "ticker": ticker,
+                    "lower": target - lower_tol,
+                    "target": target,
+                    "upper": target + upper_tol,
+                    "equivalents": equiv_tickers,
                 }
-                result['old_securities'].append(old_info)
+                result["old_securities"].append(old_info)
                 old_by_ticker[ticker.upper()] = old_info
 
             # Compare and find changes
             new_tickers = set()
-            for new_sec in result['new_securities']:
-                ticker = new_sec['ticker'].upper()
+            for new_sec in result["new_securities"]:
+                ticker = new_sec["ticker"].upper()
                 new_tickers.add(ticker)
                 old_sec = old_by_ticker.get(ticker)
 
                 if not old_sec:
-                    result['changes'].append(f"+ ADD {new_sec['ticker']}: {new_sec['lower']}/{new_sec['target']}/{new_sec['upper']}")
+                    result["changes"].append(
+                        f"+ ADD {new_sec['ticker']}: {new_sec['lower']}/{new_sec['target']}/{new_sec['upper']}"
+                    )
                 else:
                     changes = []
-                    if old_sec['lower'] != new_sec['lower']:
+                    if old_sec["lower"] != new_sec["lower"]:
                         changes.append(f"lower {old_sec['lower']} -> {new_sec['lower']}")
-                    if old_sec['target'] != new_sec['target']:
+                    if old_sec["target"] != new_sec["target"]:
                         changes.append(f"target {old_sec['target']} -> {new_sec['target']}")
-                    if old_sec['upper'] != new_sec['upper']:
+                    if old_sec["upper"] != new_sec["upper"]:
                         changes.append(f"upper {old_sec['upper']} -> {new_sec['upper']}")
 
                     # Compare equivalents
-                    old_equiv = set(old_sec.get('equivalents', []))
-                    new_equiv = set(new_sec.get('equivalents', []))
+                    old_equiv = set(old_sec.get("equivalents", []))
+                    new_equiv = set(new_sec.get("equivalents", []))
                     added_equiv = new_equiv - old_equiv
                     removed_equiv = old_equiv - new_equiv
                     if added_equiv:
@@ -1466,12 +1628,14 @@ class EclipseAPI(BaseAPI):
                         changes.append(f"-equiv: {', '.join(removed_equiv)}")
 
                     if changes:
-                        result['changes'].append(f"~ {new_sec['ticker']}: {', '.join(changes)}")
+                        result["changes"].append(f"~ {new_sec['ticker']}: {', '.join(changes)}")
 
             # Check for removed securities
-            for old_sec in result['old_securities']:
-                if old_sec['ticker'].upper() not in new_tickers:
-                    result['changes'].append(f"- REMOVE {old_sec['ticker']}: {old_sec['lower']}/{old_sec['target']}/{old_sec['upper']}")
+            for old_sec in result["old_securities"]:
+                if old_sec["ticker"].upper() not in new_tickers:
+                    result["changes"].append(
+                        f"- REMOVE {old_sec['ticker']}: {old_sec['lower']}/{old_sec['target']}/{old_sec['upper']}"
+                    )
 
         return result
 
@@ -1490,23 +1654,23 @@ class EclipseAPI(BaseAPI):
         """
         parsed = self.parse_security_set_file(file_path)
 
-        if not parsed['name']:
+        if not parsed["name"]:
             raise ValueError("Security set file must have '# Security Set: Name' header")
 
-        eclipse_securities = self.convert_to_eclipse_tolerances(parsed['securities'])
+        eclipse_securities = self.convert_to_eclipse_tolerances(parsed["securities"])
 
         if set_id:
             return self.update_security_set(
                 set_id=set_id,
-                name=parsed['name'],
+                name=parsed["name"],
                 securities=eclipse_securities,
-                description=parsed['description']
+                description=parsed["description"],
             )
         else:
             return self.create_security_set(
-                name=parsed['name'],
+                name=parsed["name"],
                 securities=eclipse_securities,
-                description=parsed['description']
+                description=parsed["description"],
             )
 
     def find_security_set_by_name(self, name):
@@ -1520,7 +1684,7 @@ class EclipseAPI(BaseAPI):
         """
         all_sets = self.get_all_security_sets()
         for ss in all_sets:
-            if ss.get('name', '').lower() == name.lower():
+            if ss.get("name", "").lower() == name.lower():
                 return ss
         return None
 
@@ -1538,17 +1702,17 @@ class EclipseAPI(BaseAPI):
         """
         parsed = self.parse_security_set_file(file_path)
 
-        if not parsed['name']:
+        if not parsed["name"]:
             raise ValueError("Security set file must have '# Security Set: Name' header")
 
-        existing = self.find_security_set_by_name(parsed['name'])
+        existing = self.find_security_set_by_name(parsed["name"])
 
         if existing:
-            result = self.sync_security_set_from_file(file_path, set_id=existing['id'])
-            return result, 'updated'
+            result = self.sync_security_set_from_file(file_path, set_id=existing["id"])
+            return result, "updated"
         else:
             result = self.sync_security_set_from_file(file_path)
-            return result, 'created'
+            return result, "created"
 
     def export_security_set_to_file(self, set_id, file_path):
         """Export a security set to a definition file.
@@ -1560,20 +1724,27 @@ class EclipseAPI(BaseAPI):
             set_id: ID of the security set to export
             file_path: Path to write the definition file
         """
+        # Validate file path
+        file_path = Path(file_path).resolve()
+        if not file_path.parent.exists():
+            raise FileNotFoundError(f"Parent directory does not exist: {file_path.parent}")
+        if file_path.exists() and not file_path.is_file():
+            raise ValueError(f"Path exists but is not a file: {file_path}")
+
         ss = self.get_security_set(set_id)
 
         lines = [
             f"# Security Set: {ss.get('name', 'Unknown')}",
             f"# Description: {ss.get('description', '')}",
             "",
-            "# Ticker  Lower%  Target%  Upper%"
+            "# Ticker  Lower%  Target%  Upper%",
         ]
 
-        for sec in ss.get('securities', []):
-            ticker = sec.get('symbol', sec.get('name', f"ID:{sec.get('id')}"))
-            target = sec.get('targetPercent', 0)
-            lower_tol = sec.get('lowerModelTolerancePercent', 0)
-            upper_tol = sec.get('upperModelTolerancePercent', 0)
+        for sec in ss.get("securities", []):
+            ticker = sec.get("symbol", sec.get("name", f"ID:{sec.get('id')}"))
+            target = sec.get("targetPercent", 0)
+            lower_tol = sec.get("lowerModelTolerancePercent", 0)
+            upper_tol = sec.get("upperModelTolerancePercent", 0)
 
             # Convert back to absolute bounds
             lower_bound = target - lower_tol
@@ -1582,13 +1753,13 @@ class EclipseAPI(BaseAPI):
             lines.append(f"{ticker:<8} {lower_bound:<7.2f} {target:<7.2f} {upper_bound:<7.2f}")
 
             # Add equivalent securities
-            for equiv in sec.get('equivalences', []):
-                equiv_symbol = equiv.get('symbol', equiv.get('name', ''))
+            for equiv in sec.get("equivalences", []):
+                equiv_symbol = equiv.get("symbol", equiv.get("name", ""))
                 if equiv_symbol:
                     lines.append(f"  = {equiv_symbol}")
 
-        with open(file_path, 'w') as f:
-            f.write('\n'.join(lines) + '\n')
+        with open(file_path, "w") as f:
+            f.write("\n".join(lines) + "\n")
 
     # Model Sync Helpers
 
@@ -1606,7 +1777,7 @@ class EclipseAPI(BaseAPI):
         res = self.api_request(
             f"{self.base_url}/modeling/models/{model_id}/modelDetail",
             requests.put,
-            json={"modelDetail": model_detail}
+            json={"modelDetail": model_detail},
         )
         result = res.json()
         self._maybe_wait_for_analytics(sync)
@@ -1623,7 +1794,7 @@ class EclipseAPI(BaseAPI):
         """
         all_models = self.get_all_models()
         for m in all_models:
-            if m.get('name', '').lower() == name.lower():
+            if m.get("name", "").lower() == name.lower():
                 return m
         return None
 
@@ -1646,22 +1817,29 @@ class EclipseAPI(BaseAPI):
         Returns:
             dict with 'name', 'description', and 'components' list
         """
+        # Validate file path
+        file_path = Path(file_path).resolve()
+        if not file_path.exists():
+            raise FileNotFoundError(f"File not found: {file_path}")
+        if not file_path.is_file():
+            raise ValueError(f"Path is not a file: {file_path}")
+
         name = None
         description = None
         components = []
 
-        with open(file_path, 'r') as f:
+        with open(file_path) as f:
             for line in f:
                 line = line.strip()
                 if not line:
                     continue
 
                 # Parse header comments
-                if line.startswith('#'):
-                    if line.lower().startswith('# model:'):
-                        name = line.split(':', 1)[1].strip()
-                    elif line.lower().startswith('# description:'):
-                        description = line.split(':', 1)[1].strip()
+                if line.startswith("#"):
+                    if line.lower().startswith("# model:"):
+                        name = line.split(":", 1)[1].strip()
+                    elif line.lower().startswith("# description:"):
+                        description = line.split(":", 1)[1].strip()
                     continue
 
                 # Parse component line: NAME LOWER TARGET UPPER
@@ -1670,22 +1848,20 @@ class EclipseAPI(BaseAPI):
                 if len(parts) >= 4:
                     # Last 3 parts are numbers, rest is the name
                     component_name = parts[0]
-                    lower = float(parts[1].rstrip('%'))
-                    target = float(parts[2].rstrip('%'))
-                    upper = float(parts[3].rstrip('%'))
+                    lower = float(parts[1].rstrip("%"))
+                    target = float(parts[2].rstrip("%"))
+                    upper = float(parts[3].rstrip("%"))
 
-                    components.append({
-                        'name': component_name,
-                        'lower_bound': lower,
-                        'target': target,
-                        'upper_bound': upper
-                    })
+                    components.append(
+                        {
+                            "name": component_name,
+                            "lower_bound": lower,
+                            "target": target,
+                            "upper_bound": upper,
+                        }
+                    )
 
-        return {
-            'name': name,
-            'description': description,
-            'components': components
-        }
+        return {"name": name, "description": description, "components": components}
 
     def convert_model_to_eclipse_format(self, components, existing_model=None, model_name=None):
         """Convert parsed model components to Eclipse modelDetail format.
@@ -1701,65 +1877,61 @@ class EclipseAPI(BaseAPI):
         # Build a lookup of existing children by name if we have an existing model
         existing_children = {}
         root_info = {}
-        model_detail = existing_model.get('modelDetail') if existing_model else None
+        model_detail = existing_model.get("modelDetail") if existing_model else None
         if model_detail:
             root_info = {
-                'id': model_detail.get('id'),
-                'modelDetailId': model_detail.get('modelDetailId'),
-                'name': model_detail.get('name'),
-                'nameSpace': model_detail.get('nameSpace'),
+                "id": model_detail.get("id"),
+                "modelDetailId": model_detail.get("modelDetailId"),
+                "name": model_detail.get("name"),
+                "nameSpace": model_detail.get("nameSpace"),
             }
-            for child in model_detail.get('children', []):
-                existing_children[child.get('name', '').lower()] = child
+            for child in model_detail.get("children", []):
+                existing_children[child.get("name", "").lower()] = child
 
         children = []
         for i, comp in enumerate(components):
             # Look up security set by name
-            ss = self.find_security_set_by_name(comp['name'])
+            ss = self.find_security_set_by_name(comp["name"])
             if not ss:
                 raise NotFoundError(f"Security set not found: {comp['name']}")
 
             # Convert absolute bounds to relative tolerances
-            lower_tolerance = comp['target'] - comp['lower_bound']
-            upper_tolerance = comp['upper_bound'] - comp['target']
+            lower_tolerance = comp["target"] - comp["lower_bound"]
+            upper_tolerance = comp["upper_bound"] - comp["target"]
 
             child = {
-                'name': comp['name'],
-                'modelTypeId': 4,  # Security Set
-                'securityAsset': {'id': ss['id']},
-                'targetPercent': comp['target'],
-                'lowerModelTolerancePercent': lower_tolerance,
-                'upperModelTolerancePercent': upper_tolerance,
-                'rank': i,
-                'children': []
+                "name": comp["name"],
+                "modelTypeId": 4,  # Security Set
+                "securityAsset": {"id": ss["id"]},
+                "targetPercent": comp["target"],
+                "lowerModelTolerancePercent": lower_tolerance,
+                "upperModelTolerancePercent": upper_tolerance,
+                "rank": i,
+                "children": [],
             }
 
             # Preserve existing IDs if updating
-            existing = existing_children.get(comp['name'].lower())
+            existing = existing_children.get(comp["name"].lower())
             if existing:
-                if 'id' in existing:
-                    child['id'] = existing['id']
-                if 'modelDetailId' in existing:
-                    child['modelDetailId'] = existing['modelDetailId']
+                if "id" in existing:
+                    child["id"] = existing["id"]
+                if "modelDetailId" in existing:
+                    child["modelDetailId"] = existing["modelDetailId"]
 
             children.append(child)
 
         # For updates with existing detail, include root node info
         if model_detail:
             return {
-                'id': root_info.get('id'),
-                'modelDetailId': root_info.get('modelDetailId'),
-                'name': root_info.get('name'),
-                'nameSpace': root_info.get('nameSpace'),
-                'children': children
+                "id": root_info.get("id"),
+                "modelDetailId": root_info.get("modelDetailId"),
+                "name": root_info.get("name"),
+                "nameSpace": root_info.get("nameSpace"),
+                "children": children,
             }
         else:
             # For new models or models with null detail, include name and nameSpace
-            return {
-                'name': model_name or 'Model',
-                'nameSpace': 'Default',
-                'children': children
-            }
+            return {"name": model_name or "Model", "nameSpace": "Default", "children": children}
 
     def preview_model_changes(self, file_path):
         """Preview changes between a model file and Eclipse.
@@ -1781,77 +1953,81 @@ class EclipseAPI(BaseAPI):
         """
         parsed = self.parse_model_file(file_path)
 
-        if not parsed['name']:
+        if not parsed["name"]:
             raise ValueError("Model file must have '# Model: Name' header")
 
-        existing = self.find_model_by_name(parsed['name'])
+        existing = self.find_model_by_name(parsed["name"])
 
         result = {
-            'action': 'update' if existing else 'create',
-            'name': parsed['name'],
-            'existing_id': existing['id'] if existing else None,
-            'changes': [],
-            'new_components': [],
-            'old_components': []
+            "action": "update" if existing else "create",
+            "name": parsed["name"],
+            "existing_id": existing["id"] if existing else None,
+            "changes": [],
+            "new_components": [],
+            "old_components": [],
         }
 
         # Build new components list with bounds
-        for comp in parsed['components']:
+        for comp in parsed["components"]:
             comp_info = {
-                'name': comp['name'],
-                'lower': comp['lower_bound'],
-                'target': comp['target'],
-                'upper': comp['upper_bound']
+                "name": comp["name"],
+                "lower": comp["lower_bound"],
+                "target": comp["target"],
+                "upper": comp["upper_bound"],
             }
-            result['new_components'].append(comp_info)
+            result["new_components"].append(comp_info)
 
         if existing:
             # Get current Eclipse data
-            eclipse_model = self.get_model(existing['id'])
-            model_detail = eclipse_model.get('modelDetail', {})
+            eclipse_model = self.get_model(existing["id"])
+            model_detail = eclipse_model.get("modelDetail", {})
 
             # Build old components lookup
             old_by_name = {}
-            for child in model_detail.get('children', []):
-                name = child.get('name', '')
-                target = child.get('targetPercent', 0) or 0
-                lower_tol = child.get('lowerModelTolerancePercent', 0) or 0
-                upper_tol = child.get('upperModelTolerancePercent', 0) or 0
+            for child in model_detail.get("children", []):
+                name = child.get("name", "")
+                target = child.get("targetPercent", 0) or 0
+                lower_tol = child.get("lowerModelTolerancePercent", 0) or 0
+                upper_tol = child.get("upperModelTolerancePercent", 0) or 0
 
                 old_info = {
-                    'name': name,
-                    'lower': target - lower_tol,
-                    'target': target,
-                    'upper': target + upper_tol
+                    "name": name,
+                    "lower": target - lower_tol,
+                    "target": target,
+                    "upper": target + upper_tol,
                 }
-                result['old_components'].append(old_info)
+                result["old_components"].append(old_info)
                 old_by_name[name.lower()] = old_info
 
             # Compare and find changes
             new_names = set()
-            for new_comp in result['new_components']:
-                name_key = new_comp['name'].lower()
+            for new_comp in result["new_components"]:
+                name_key = new_comp["name"].lower()
                 new_names.add(name_key)
                 old_comp = old_by_name.get(name_key)
 
                 if not old_comp:
-                    result['changes'].append(f"+ ADD {new_comp['name']}: {new_comp['lower']}/{new_comp['target']}/{new_comp['upper']}")
+                    result["changes"].append(
+                        f"+ ADD {new_comp['name']}: {new_comp['lower']}/{new_comp['target']}/{new_comp['upper']}"
+                    )
                 else:
                     changes = []
-                    if old_comp['lower'] != new_comp['lower']:
+                    if old_comp["lower"] != new_comp["lower"]:
                         changes.append(f"lower {old_comp['lower']} -> {new_comp['lower']}")
-                    if old_comp['target'] != new_comp['target']:
+                    if old_comp["target"] != new_comp["target"]:
                         changes.append(f"target {old_comp['target']} -> {new_comp['target']}")
-                    if old_comp['upper'] != new_comp['upper']:
+                    if old_comp["upper"] != new_comp["upper"]:
                         changes.append(f"upper {old_comp['upper']} -> {new_comp['upper']}")
 
                     if changes:
-                        result['changes'].append(f"~ {new_comp['name']}: {', '.join(changes)}")
+                        result["changes"].append(f"~ {new_comp['name']}: {', '.join(changes)}")
 
             # Check for removed components
-            for old_comp in result['old_components']:
-                if old_comp['name'].lower() not in new_names:
-                    result['changes'].append(f"- REMOVE {old_comp['name']}: {old_comp['lower']}/{old_comp['target']}/{old_comp['upper']}")
+            for old_comp in result["old_components"]:
+                if old_comp["name"].lower() not in new_names:
+                    result["changes"].append(
+                        f"- REMOVE {old_comp['name']}: {old_comp['lower']}/{old_comp['target']}/{old_comp['upper']}"
+                    )
 
         return result
 
@@ -1870,29 +2046,26 @@ class EclipseAPI(BaseAPI):
         """
         parsed = self.parse_model_file(file_path)
 
-        if not parsed['name']:
+        if not parsed["name"]:
             raise ValueError("Model file must have '# Model: Name' header")
 
         if model_id:
             # Update existing model
             existing_model = self.get_model(model_id)
             model_detail = self.convert_model_to_eclipse_format(
-                parsed['components'], existing_model
+                parsed["components"], existing_model
             )
             # Use PUT if model has detail, POST if not
-            if existing_model.get('modelDetail'):
+            if existing_model.get("modelDetail"):
                 return self.update_model_detail(model_id, model_detail)
             else:
                 return self.add_model_detail(model_id, model_detail)
         else:
             # Create new model
-            new_model = self.add_model(
-                name=parsed['name'],
-                description=parsed['description']
-            )
+            new_model = self.add_model(name=parsed["name"], description=parsed["description"])
             # For new models, use POST (add_model_detail)
-            model_detail = self.convert_model_to_eclipse_format(parsed['components'])
-            return self.add_model_detail(new_model['id'], model_detail)
+            model_detail = self.convert_model_to_eclipse_format(parsed["components"])
+            return self.add_model_detail(new_model["id"], model_detail)
 
     def sync_model_from_file_by_name(self, file_path):
         """Sync a model from file, auto-detecting create vs update.
@@ -1908,17 +2081,17 @@ class EclipseAPI(BaseAPI):
         """
         parsed = self.parse_model_file(file_path)
 
-        if not parsed['name']:
+        if not parsed["name"]:
             raise ValueError("Model file must have '# Model: Name' header")
 
-        existing = self.find_model_by_name(parsed['name'])
+        existing = self.find_model_by_name(parsed["name"])
 
         if existing:
-            result = self.sync_model_from_file(file_path, model_id=existing['id'])
-            return result, 'updated'
+            result = self.sync_model_from_file(file_path, model_id=existing["id"])
+            return result, "updated"
         else:
             result = self.sync_model_from_file(file_path)
-            return result, 'created'
+            return result, "created"
 
     def export_model_to_file(self, model_id, file_path):
         """Export a model to a definition file.
@@ -1929,21 +2102,28 @@ class EclipseAPI(BaseAPI):
             model_id: ID of the model to export
             file_path: Path to write the definition file
         """
+        # Validate file path
+        file_path = Path(file_path).resolve()
+        if not file_path.parent.exists():
+            raise FileNotFoundError(f"Parent directory does not exist: {file_path.parent}")
+        if file_path.exists() and not file_path.is_file():
+            raise ValueError(f"Path exists but is not a file: {file_path}")
+
         model = self.get_model(model_id)
 
         lines = [
             f"# Model: {model.get('name', 'Unknown')}",
             f"# Description: {model.get('description', '')}",
             "",
-            "# Component                      Lower%  Target%  Upper%"
+            "# Component                      Lower%  Target%  Upper%",
         ]
 
-        model_detail = model.get('modelDetail', {})
-        for child in model_detail.get('children', []):
-            name = child.get('name', f"ID:{child.get('id')}")
-            target = child.get('targetPercent', 0) or 0
-            lower_tol = child.get('lowerModelTolerancePercent', 0) or 0
-            upper_tol = child.get('upperModelTolerancePercent', 0) or 0
+        model_detail = model.get("modelDetail", {})
+        for child in model_detail.get("children", []):
+            name = child.get("name", f"ID:{child.get('id')}")
+            target = child.get("targetPercent", 0) or 0
+            lower_tol = child.get("lowerModelTolerancePercent", 0) or 0
+            upper_tol = child.get("upperModelTolerancePercent", 0) or 0
 
             # Convert back to absolute bounds
             lower_bound = target - lower_tol
@@ -1951,5 +2131,5 @@ class EclipseAPI(BaseAPI):
 
             lines.append(f"{name:<32} {lower_bound:<7.2f} {target:<7.2f} {upper_bound:<7.2f}")
 
-        with open(file_path, 'w') as f:
-            f.write('\n'.join(lines) + '\n')
+        with open(file_path, "w") as f:
+            f.write("\n".join(lines) + "\n")

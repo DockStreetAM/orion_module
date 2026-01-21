@@ -23,6 +23,26 @@ poetry run pytest
 poetry run pytest tests/test_orion_module.py::TestBasics::test_version
 ```
 
+## Linting and Formatting
+
+Code quality is enforced with [Ruff](https://docs.astral.sh/ruff/), a fast Python linter and formatter.
+
+```bash
+# Check for linting issues
+poetry run ruff check orionapi/ tests/
+
+# Auto-fix linting issues
+poetry run ruff check --fix orionapi/ tests/
+
+# Format code
+poetry run ruff format orionapi/ tests/
+
+# Check formatting without making changes
+poetry run ruff format --check orionapi/ tests/
+```
+
+Configuration is in `pyproject.toml` under `[tool.ruff]`.
+
 ## Version Management
 
 Version must be updated in two places when releasing:
