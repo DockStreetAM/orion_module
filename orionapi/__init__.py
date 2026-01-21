@@ -98,7 +98,7 @@ class RateLimiter:
 
     def __init__(self, calls_per_second=10):
         self.calls_per_second = calls_per_second
-        self.min_interval = 1.0 / calls_per_second
+        self.min_interval = 1.0 / calls_per_second if calls_per_second > 0 else 0
         self.last_call = 0
 
     def wait(self):
@@ -637,10 +637,6 @@ class EclipseAPI(BaseAPI):
         Raises:
             AuthenticationError: If credentials are invalid or missing
         """
-        self.usr = usr
-        self.pwd = pwd
-        self.orion_token = orion_token
-
         if orion_token is None and usr is None:
             raise AuthenticationError("Must provide either usr/pwd or orion_token")
 
@@ -653,10 +649,10 @@ class EclipseAPI(BaseAPI):
             except (KeyError, ValueError) as e:
                 raise AuthenticationError(f"Invalid response from auth endpoint: {e}") from e
 
-        elif self.orion_token is not None:
+        elif orion_token is not None:
             res = requests.get(
                 f"{self.base_url}/admin/token",
-                headers={"Authorization": "Session " + self.orion_token},
+                headers={"Authorization": "Session " + orion_token},
             )
             if not res.ok:
                 raise AuthenticationError(f"Token exchange failed: {res.status_code} {res.reason}")
