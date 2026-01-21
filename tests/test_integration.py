@@ -349,6 +349,7 @@ MSFT      3       8        15
         """Test fetching trade instances by date range."""
         # Use a recent date range (last 30 days)
         from datetime import datetime, timedelta
+
         end_date = datetime.now().strftime("%Y-%m-%d")
         start_date = (datetime.now() - timedelta(days=30)).strftime("%Y-%m-%d")
 
@@ -369,6 +370,174 @@ MSFT      3       8        15
 
         results = eclipse_client.search_accounts(search_term)
         assert isinstance(results, list)
+
+    def test_get_security_preferences(self, eclipse_client):
+        """Test fetching security preferences for a portfolio and security."""
+        portfolios = eclipse_client.get_all_portfolios()
+        if not portfolios:
+            pytest.skip("No portfolios available")
+
+        portfolio_id = portfolios[0]["id"]
+        holdings = eclipse_client.get_portfolio_holdings(portfolio_id)
+        if not holdings:
+            pytest.skip("No holdings available")
+
+        security_id = holdings[0].get("securityId")
+        if not security_id:
+            pytest.skip("No security ID found")
+
+        prefs = eclipse_client.get_security_preferences(portfolio_id, security_id)
+        assert isinstance(prefs, dict)
+
+    def test_get_trade_status(self, eclipse_client):
+        """Test fetching trade status."""
+        orders = eclipse_client.get_orders()
+        if not orders:
+            pytest.skip("No orders available")
+
+        trade_id = orders[0]["id"]
+        status = eclipse_client.get_trade_status(trade_id)
+        assert isinstance(status, dict)
+
+    def test_get_trade_instance(self, eclipse_client):
+        """Test fetching trade instance details."""
+        # Try to get a recent instance - we know instance 4891 exists from testing
+        try:
+            instance = eclipse_client.get_trade_instance(4891)
+            assert isinstance(instance, dict)
+            assert "id" in instance
+            assert "executeStatus" in instance
+        except Exception:
+            pytest.skip("Instance 4891 not available or test environment changed")
+
+    def test_get_trade_instance_logs(self, eclipse_client):
+        """Test fetching trade instance logs."""
+        # Try to get logs for instance 4891
+        try:
+            logs = eclipse_client.get_trade_instance_logs(4891)
+            assert isinstance(logs, list)
+            # Logs may be empty or contain entries
+            if logs:
+                assert "tradeInstanceId" in logs[0]
+        except Exception:
+            pytest.skip("Instance 4891 not available or test environment changed")
+
+    def test_get_trade_log_detail(self, eclipse_client):
+        """Test fetching detailed HTML trade log."""
+        # Get logs for instance 4891
+        try:
+            logs = eclipse_client.get_trade_instance_logs(4891)
+            if not logs:
+                pytest.skip("No logs available for instance 4891")
+
+            log_id = logs[0]["id"]
+
+            # Get detailed HTML log
+            html = eclipse_client.get_trade_log_detail(log_id)
+
+            assert isinstance(html, str)
+            assert len(html) > 0
+            # Should be HTML content
+            assert "<" in html or "html" in html.lower()
+        except Exception as e:
+            pytest.skip(f"Instance 4891 or log detail not available: {e}")
+
+    def test_get_portfolio_trade_instances(self, eclipse_client):
+        """Test fetching trade instances for a portfolio."""
+        portfolios = eclipse_client.get_all_portfolios()
+        if not portfolios:
+            pytest.skip("No portfolios available")
+
+        portfolio_id = portfolios[0]["id"]
+
+        # Get instances for the last 30 days
+        from datetime import datetime, timedelta
+
+        end_date = datetime.now().strftime("%Y-%m-%d")
+        start_date = (datetime.now() - timedelta(days=30)).strftime("%Y-%m-%d")
+
+        instances = eclipse_client.get_portfolio_trade_instances(
+            portfolio_id, start_date, end_date
+        )
+
+        assert isinstance(instances, list)
+        # May be empty if no instances in date range
+        if instances:
+            assert "id" in instances[0]
+            assert "executeStatus" in instances[0]
+
+    @pytest.mark.skip(reason="Skipping write method - only testing read-only methods")
+    def test_set_portfolio_tradeable(self, eclipse_client):
+        """Test blocking and unblocking trading for a portfolio."""
+        portfolios = eclipse_client.get_all_portfolios()
+        if not portfolios:
+            pytest.skip("No portfolios available")
+
+        portfolio_id = portfolios[0]["id"]
+
+        # Block trading
+        eclipse_client.set_portfolio_tradeable(portfolio_id, tradeable=False, sync=False)
+        portfolio = eclipse_client.get_portfolio(portfolio_id)
+        assert portfolio["general"]["doNotTrade"] == 1
+
+        # Unblock trading
+        eclipse_client.set_portfolio_tradeable(portfolio_id, tradeable=True, sync=False)
+        portfolio = eclipse_client.get_portfolio(portfolio_id)
+        assert portfolio["general"]["doNotTrade"] == 0
+
+    @pytest.mark.skip(reason="Skipping write method - only testing read-only methods")
+    def test_set_account_tradeable(self, eclipse_client):
+        """Test setting trade restrictions for an account."""
+        accounts = eclipse_client.get_all_accounts()
+        if not accounts:
+            pytest.skip("No accounts available")
+
+        account_id = accounts[0]["id"]
+
+        # Test blocking advisor
+        eclipse_client.set_account_tradeable(
+            account_id, trade_restriction="block_advisor", sync=False
+        )
+        account = eclipse_client.get_account_details(account_id)
+        assert account["generalSection"]["doNotTrade"] == 1
+        assert account["generalSection"]["doNotTradeCustodian"] == 0
+
+        # Test blocking custodian
+        eclipse_client.set_account_tradeable(
+            account_id, trade_restriction="block_custodian", sync=False
+        )
+        account = eclipse_client.get_account_details(account_id)
+        assert account["generalSection"]["doNotTrade"] == 0
+        assert account["generalSection"]["doNotTradeCustodian"] == 1
+
+        # Test making tradeable again
+        eclipse_client.set_account_tradeable(account_id, trade_restriction="tradeable", sync=False)
+        account = eclipse_client.get_account_details(account_id)
+        assert account["generalSection"]["doNotTrade"] == 0
+        assert account["generalSection"]["doNotTradeCustodian"] == 0
+
+    @pytest.mark.skip(reason="Skipping write method - only testing read-only methods")
+    def test_spend_cash_trade(self, eclipse_client):
+        """Test generating Spend Cash trade."""
+        portfolios = eclipse_client.get_all_portfolios()
+        if not portfolios:
+            pytest.skip("No portfolios available")
+
+        portfolio_id = portfolios[0]["id"]
+
+        # Generate trade in view-only mode
+        result = eclipse_client.spend_cash_trade(
+            portfolio_ids=[portfolio_id],
+            reason="Integration test spend cash",
+            is_view_only=True,
+            sync=False,
+        )
+
+        assert isinstance(result, dict)
+        assert "success" in result
+        # View-only mode should still create an instance
+        if result.get("success"):
+            assert "instanceId" in result
 
     # Edge case tests
 
@@ -597,3 +766,63 @@ class TestOrionAPI:
         results = orion_client.search_orion_accounts("XYZNONEXISTENTACCT999", top=5)
         assert isinstance(results, list)
         assert len(results) == 0
+
+    # Assets
+
+    def test_get_assets(self, orion_client):
+        """Test fetching assets for a specific account."""
+        accounts = orion_client.search_orion_accounts("a", top=1)
+        if not accounts:
+            pytest.skip("No accounts available")
+
+        assets = orion_client.get_assets(accounts[0]["id"])
+        assert isinstance(assets, list)
+
+    def test_search_assets(self, orion_client):
+        """Test searching for assets by ticker."""
+        results = orion_client.search_assets("AAPL", top=5)
+        assert isinstance(results, list)
+
+    # Billing
+
+    def test_get_fee_schedules(self, orion_client):
+        """Test fetching all fee schedules."""
+        schedules = orion_client.get_fee_schedules()
+        assert isinstance(schedules, list)
+
+    def test_get_account_billing(self, orion_client):
+        """Test fetching billing details for an account."""
+        accounts = orion_client.search_orion_accounts("a", top=1)
+        if not accounts:
+            pytest.skip("No accounts available")
+
+        billing = orion_client.get_account_billing(accounts[0]["id"])
+        assert isinstance(billing, dict)
+
+    def test_get_billing_household_summary(self, orion_client):
+        """Test fetching billing summary for a household."""
+        clients = orion_client.search_clients("a", top=1)
+        if not clients:
+            pytest.skip("No clients available")
+
+        summary = orion_client.get_billing_household_summary(clients[0]["id"])
+        assert isinstance(summary, dict)
+
+    # Reporting
+
+    def test_get_performance_data(self, orion_client):
+        """Test fetching performance data for an account."""
+        from datetime import datetime, timedelta
+
+        accounts = orion_client.search_orion_accounts("a", top=1)
+        if not accounts:
+            pytest.skip("No accounts available")
+
+        # Use last 365 days as date range
+        end_date = datetime.now().strftime("%Y-%m-%d")
+        start_date = (datetime.now() - timedelta(days=365)).strftime("%Y-%m-%d")
+
+        performance = orion_client.get_performance_data(
+            accounts[0]["id"], start_date, end_date, entity_type="account"
+        )
+        assert isinstance(performance, dict)

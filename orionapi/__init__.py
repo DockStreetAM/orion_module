@@ -1,4 +1,4 @@
-__version__ = "1.3.0"
+__version__ = "1.4.0"
 
 import logging
 import re
@@ -612,6 +612,147 @@ class OrionAPI(BaseAPI):
         )
         return res.json()
 
+    # -------------------------------------------------------------------------
+    # Assets
+    # -------------------------------------------------------------------------
+
+    def get_assets(self, account_id, has_value=True):
+        """Get assets for a specific account.
+
+        Args:
+            account_id: Account ID
+            has_value: Filter to assets with current value (default True)
+
+        Returns:
+            list: Assets with positions, tickers, values, etc.
+        """
+        if not isinstance(account_id, int) or account_id < 1:
+            raise ValueError("account_id must be a positive integer")
+        if not isinstance(has_value, bool):
+            raise ValueError("has_value must be a boolean")
+
+        params = urlencode({"accountId": account_id, "hasValue": str(has_value).lower()})
+        res = self.api_request(f"{self.base_url}/Portfolio/Assets?{params}")
+        return res.json()
+
+    def search_assets(self, search_term, top=20):
+        """Search for assets by ticker, CUSIP, or name.
+
+        Args:
+            search_term: Ticker, CUSIP, or asset name to search for
+            top: Max results to return (default 20)
+
+        Returns:
+            list: Matching assets with basic info
+        """
+        if not isinstance(search_term, str) or not search_term.strip():
+            raise ValueError("search_term must be a non-empty string")
+        if not isinstance(top, int) or top < 1:
+            raise ValueError("top must be a positive integer")
+
+        params = urlencode({"search": search_term, "top": top})
+        res = self.api_request(f"{self.base_url}/Portfolio/Assets/Simple/Search?{params}")
+        return res.json()
+
+    # -------------------------------------------------------------------------
+    # Billing
+    # -------------------------------------------------------------------------
+
+    def get_fee_schedules(self):
+        """Get all fee schedules.
+
+        Returns:
+            list: Fee schedules with billing rates and structures
+
+        Note:
+            Uses /v1/Billing/Schedules endpoint with schedule=Fee filter.
+        """
+        params = urlencode({"schedule": "Fee"})
+        res = self.api_request(f"{self.base_url}/Billing/Schedules?{params}")
+        return res.json()
+
+    def get_account_billing(self, account_id):
+        """Get billing information for a specific billing account.
+
+        Args:
+            account_id: Billing account ID (key)
+
+        Returns:
+            dict: Billing account details including fee schedule assignments
+
+        Note:
+            This is the billing account ID, which may be different from the
+            portfolio account ID. Use /v1/Billing/Accounts endpoint.
+        """
+        if not isinstance(account_id, int) or account_id < 1:
+            raise ValueError("account_id must be a positive integer")
+
+        res = self.api_request(f"{self.base_url}/Billing/Accounts/{account_id}")
+        return res.json()
+
+    def get_billing_household_summary(self, household_id):
+        """Get billing summary for a specific household.
+
+        Args:
+            household_id: Household ID (client ID)
+
+        Returns:
+            dict: Household billing summary with aggregated fee information
+
+        Note:
+            Uses /v1/Billing/HouseholdSummary/{key} endpoint.
+            Requires a specific household/client ID.
+        """
+        if not isinstance(household_id, int) or household_id < 1:
+            raise ValueError("household_id must be a positive integer")
+
+        res = self.api_request(f"{self.base_url}/Billing/HouseholdSummary/{household_id}")
+        return res.json()
+
+    # -------------------------------------------------------------------------
+    # Reporting
+    # -------------------------------------------------------------------------
+
+    def get_performance_data(self, entity_id, start_date, end_date, entity_type="account"):
+        """Get performance metrics for an account, client, or registration over a date range.
+
+        Args:
+            entity_id: Account ID, Registration ID, or Client ID
+            start_date: Start date (YYYY-MM-DD format)
+            end_date: End date (YYYY-MM-DD format)
+            entity_type: Type of entity - "account", "registration", or "client" (default "account")
+
+        Returns:
+            dict: Performance metrics including returns, benchmarks, and statistics
+
+        Note:
+            Uses the Orion Connect API entity-specific performance endpoints:
+            - /v1/Portfolio/Accounts/{key}/Performance
+            - /v1/Portfolio/Clients/{key}/Performance
+            - /v1/Portfolio/Registrations/{key}/Performance
+        """
+        if not isinstance(entity_id, int) or entity_id < 1:
+            raise ValueError("entity_id must be a positive integer")
+        if not isinstance(start_date, str) or not start_date.strip():
+            raise ValueError("start_date must be a non-empty string")
+        if not isinstance(end_date, str) or not end_date.strip():
+            raise ValueError("end_date must be a non-empty string")
+
+        valid_types = ["account", "registration", "client"]
+        if entity_type not in valid_types:
+            raise ValueError(f"entity_type must be one of {valid_types}")
+
+        # Map entity type to endpoint path
+        endpoint_map = {
+            "account": f"{self.base_url}/Portfolio/Accounts/{entity_id}/Performance",
+            "registration": f"{self.base_url}/Portfolio/Registrations/{entity_id}/Performance",
+            "client": f"{self.base_url}/Portfolio/Clients/{entity_id}/Performance",
+        }
+
+        params = urlencode({"startDate": start_date, "endDate": end_date})
+        res = self.api_request(f"{endpoint_map[entity_type]}?{params}")
+        return res.json()
+
 
 class EclipseAPI(BaseAPI):
     """Client for the Eclipse Trading Platform API.
@@ -1125,6 +1266,46 @@ class EclipseAPI(BaseAPI):
 
         res = self.api_request(
             f"{self.base_url}/tradetool/cashneeds/action/generatetrade", requests.post, json=payload
+        )
+        result = res.json()
+        self._maybe_wait_for_analytics(sync)
+        return result
+
+    def spend_cash_trade(
+        self,
+        portfolio_ids,
+        portfolio_trade_group_ids=None,
+        is_view_only=True,
+        reason="",
+        is_excel_import=False,
+        sync=True,
+    ):
+        """Generate Spend Cash trade for portfolios.
+
+        Args:
+            portfolio_ids: List of portfolio IDs to process
+            portfolio_trade_group_ids: List of portfolio trade group IDs (optional)
+            is_view_only: If True, preview trades without executing (default True)
+            reason: Reason for the trade
+            is_excel_import: Whether this is from an Excel import (default False)
+            sync: Wait for analytics to complete (default True)
+
+        Returns:
+            dict with 'issues', 'success', and 'instanceId' fields
+        """
+        if portfolio_trade_group_ids is None:
+            portfolio_trade_group_ids = []
+
+        payload = {
+            "portfolioIds": portfolio_ids,
+            "portfolioTradeGroupIds": portfolio_trade_group_ids,
+            "isViewOnly": is_view_only,
+            "reason": reason,
+            "isExcelImport": is_excel_import,
+        }
+
+        res = self.api_request(
+            f"{self.base_url}/tradetool/spendcash/action/generatetrade", requests.post, json=payload
         )
         result = res.json()
         self._maybe_wait_for_analytics(sync)
@@ -2148,3 +2329,220 @@ class EclipseAPI(BaseAPI):
 
         with open(file_path, "w") as f:
             f.write("\n".join(lines) + "\n")
+
+    # -------------------------------------------------------------------------
+    # Security Preferences
+    # -------------------------------------------------------------------------
+
+    def get_security_preferences(self, portfolio_id, security_id):
+        """Get rebalance preferences/rules for a security in a portfolio.
+
+        Args:
+            portfolio_id: Portfolio ID
+            security_id: Security ID
+
+        Returns:
+            dict: Security preferences including buy/sell restrictions
+        """
+        if not isinstance(portfolio_id, int) or portfolio_id < 1:
+            raise ValueError("portfolio_id must be a positive integer")
+        if not isinstance(security_id, int) or security_id < 1:
+            raise ValueError("security_id must be a positive integer")
+
+        res = self.api_request(
+            f"{self.base_url}/preference/Portfolio/securityPreference/{portfolio_id}/{security_id}/0/0"
+        )
+        return res.json()
+
+    # -------------------------------------------------------------------------
+    # Trade Management
+    # -------------------------------------------------------------------------
+
+    def get_trade_status(self, trade_id):
+        """Get status and details for a specific trade.
+
+        Args:
+            trade_id: Trade ID
+
+        Returns:
+            dict: Trade details including status, execution info
+        """
+        if not isinstance(trade_id, int) or trade_id < 1:
+            raise ValueError("trade_id must be a positive integer")
+
+        res = self.api_request(f"{self.base_url}/tradeorder/trades/{trade_id}")
+        return res.json()
+
+    def get_trade_instance(self, instance_id):
+        """Get details for a specific trade instance.
+
+        Args:
+            instance_id: Trade instance ID
+
+        Returns:
+            dict: Instance details including status, order counts, creation info
+        """
+        if not isinstance(instance_id, int) or instance_id < 1:
+            raise ValueError("instance_id must be a positive integer")
+
+        res = self.api_request(f"{self.base_url}/tradeorder/instances/{instance_id}")
+        return res.json()
+
+    def get_trade_instance_logs(self, instance_id):
+        """Get trade logs for a specific trade instance.
+
+        Args:
+            instance_id: Trade instance ID
+
+        Returns:
+            list: Trade log entries with portfolio, application, and error info
+        """
+        if not isinstance(instance_id, int) or instance_id < 1:
+            raise ValueError("instance_id must be a positive integer")
+
+        res = self.api_request(f"{self.base_url}/tradeorder/instances/{instance_id}/tradeLogs")
+        return res.json()
+
+    def get_trade_log_detail(self, log_id):
+        """Get detailed HTML trade log showing trading engine decision-making.
+
+        Args:
+            log_id: Trade log ID (from get_trade_instance_logs)
+
+        Returns:
+            str: Decoded HTML content showing detailed trade log
+        """
+        if not isinstance(log_id, int) or log_id < 1:
+            raise ValueError("log_id must be a positive integer")
+
+        # Note: This endpoint uses v2 API (different path structure)
+        # base_url is https://api.orioneclipse.com/v1
+        # v2 endpoint is https://api.orioneclipse.com/api/v2/Trading/TradeLogById/{id}
+        base_url_v2 = self.base_url.replace("/v1", "/api/v2")
+        res = self.api_request(f"{base_url_v2}/Trading/TradeLogById/{log_id}")
+        response_data = res.json()
+
+        if not response_data.get("isSuccess"):
+            raise OrionAPIError("Failed to retrieve trade log detail")
+
+        # Decode base64 content
+        import base64
+
+        html_content = base64.b64decode(response_data["content"]).decode("utf-8")
+        return html_content
+
+    def get_portfolio_trade_instances(self, portfolio_id, start_date, end_date):
+        """Get all trade instances for a specific portfolio within a date range.
+
+        Args:
+            portfolio_id: Portfolio ID
+            start_date: Start date (YYYY-MM-DD format)
+            end_date: End date (YYYY-MM-DD format)
+
+        Returns:
+            list: Trade instances for the portfolio
+        """
+        if not isinstance(portfolio_id, int) or portfolio_id < 1:
+            raise ValueError("portfolio_id must be a positive integer")
+        if not isinstance(start_date, str) or not start_date.strip():
+            raise ValueError("start_date must be a non-empty string")
+        if not isinstance(end_date, str) or not end_date.strip():
+            raise ValueError("end_date must be a non-empty string")
+
+        res = self.api_request(
+            f"{self.base_url}/tradeorder/instances/portfolio/{portfolio_id}/search"
+            f"?startDate={start_date}&endDate={end_date}"
+        )
+        return res.json()
+
+    def set_portfolio_tradeable(self, portfolio_id, tradeable=True, sync=True):
+        """Set whether trading is allowed for a portfolio.
+
+        Args:
+            portfolio_id: Portfolio ID
+            tradeable: True to allow trading, False to block (default True)
+            sync: Wait for analytics to complete (default True)
+
+        Returns:
+            dict: Updated portfolio details
+        """
+        if not isinstance(portfolio_id, int) or portfolio_id < 1:
+            raise ValueError("portfolio_id must be a positive integer")
+        if not isinstance(tradeable, bool):
+            raise ValueError("tradeable must be a boolean")
+
+        # Get current portfolio to preserve other fields
+        portfolio = self.get_portfolio(portfolio_id)
+        general = portfolio.get("general", {})
+
+        # Build payload preserving existing fields
+        payload = {
+            "name": general.get("portfolioName"),
+            "modelId": general.get("modelId"),
+            "isSleevePortfolio": general.get("sleevePortfolio", False),
+            "doNotTrade": 0 if tradeable else 1,
+            "tags": general.get("tags", ""),
+            "teamIds": general.get("teamIds", []),
+            "primaryTeamId": general.get("primaryTeamId"),
+        }
+
+        res = self.api_request(
+            f"{self.base_url}/portfolio/portfolios/{portfolio_id}",
+            requests.put,
+            json=payload,
+        )
+        result = res.json()
+        self._maybe_wait_for_analytics(sync)
+        return result
+
+    def set_account_tradeable(self, account_id, trade_restriction="tradeable", sync=True):
+        """Set trading restrictions for an account.
+
+        Args:
+            account_id: Internal Eclipse account ID
+            trade_restriction: One of:
+                - "tradeable": Allow both advisor and custodian trading (default)
+                - "block_advisor": Block advisor trading only
+                - "block_custodian": Block custodian trading only
+            sync: Wait for analytics to complete (default True)
+
+        Returns:
+            dict: Updated account details
+
+        Note:
+            These are mutually exclusive options - only one can be active at a time.
+        """
+        if not isinstance(account_id, int) or account_id < 1:
+            raise ValueError("account_id must be a positive integer")
+
+        valid_restrictions = ["tradeable", "block_advisor", "block_custodian"]
+        if trade_restriction not in valid_restrictions:
+            raise ValueError(f"trade_restriction must be one of {valid_restrictions}")
+
+        # Get current account details
+        account = self.get_account_details(account_id)
+        general = account.get("generalSection", {})
+
+        # Build payload
+        payload = {
+            "accountName": general.get("accountName"),
+            "portfolioId": general.get("portfolioId"),
+        }
+
+        # Set flags based on restriction type
+        if trade_restriction == "tradeable":
+            payload["doNotTrade"] = 0
+            payload["doNotTradeCustodian"] = 0
+        elif trade_restriction == "block_advisor":
+            payload["doNotTrade"] = 1
+            payload["doNotTradeCustodian"] = 0
+        elif trade_restriction == "block_custodian":
+            payload["doNotTrade"] = 0
+            payload["doNotTradeCustodian"] = 1
+
+        res = self.api_request(
+            f"{self.base_url}/account/accounts/{account_id}", requests.put, json=payload
+        )
+        result = res.json()
+        self._maybe_wait_for_analytics(sync)
+        return result
