@@ -52,6 +52,23 @@ class TestEclipseAPI:
         if portfolios:
             assert "id" in portfolios[0]
 
+    def test_get_all_portfolios_with_search(self, eclipse_client):
+        """Test fetching portfolios with search filter."""
+        # Get all portfolios first to find a name to search for
+        all_portfolios = eclipse_client.get_all_portfolios()
+        if not all_portfolios:
+            pytest.skip("No portfolios available")
+
+        # Use part of the first portfolio's name
+        search_term = all_portfolios[0].get("portfolioName", "")[:3]
+        if not search_term:
+            pytest.skip("No portfolio name to search")
+
+        filtered = eclipse_client.get_all_portfolios(search=search_term)
+        assert isinstance(filtered, list)
+        # Search should return subset or equal
+        assert len(filtered) <= len(all_portfolios)
+
     def test_get_portfolio_accounts(self, eclipse_client):
         """Test that we can fetch accounts for a portfolio."""
         portfolios = eclipse_client.get_all_portfolios()
@@ -72,6 +89,27 @@ class TestEclipseAPI:
         holdings = eclipse_client.get_portfolio_holdings(portfolio_id)
         assert isinstance(holdings, list)
 
+    def test_get_portfolio_holdings_with_search(self, eclipse_client):
+        """Test fetching portfolio holdings with search filter."""
+        portfolios = eclipse_client.get_all_portfolios()
+        if not portfolios:
+            pytest.skip("No portfolios available")
+
+        portfolio_id = portfolios[0]["id"]
+        all_holdings = eclipse_client.get_portfolio_holdings(portfolio_id)
+        if not all_holdings:
+            pytest.skip("No holdings available")
+
+        # Use part of the first holding's ticker/symbol if available
+        search_term = all_holdings[0].get("ticker", all_holdings[0].get("symbol", ""))[:2]
+        if not search_term:
+            pytest.skip("No searchable holding field found")
+
+        filtered = eclipse_client.get_portfolio_holdings(portfolio_id, search=search_term)
+        assert isinstance(filtered, list)
+        # Search should return subset or equal
+        assert len(filtered) <= len(all_holdings)
+
     def test_get_account_holdings(self, eclipse_client):
         """Test that we can fetch holdings for an account."""
         accounts = eclipse_client.get_all_accounts()
@@ -81,6 +119,27 @@ class TestEclipseAPI:
         account_id = accounts[0]["id"]
         holdings = eclipse_client.get_account_holdings(account_id)
         assert isinstance(holdings, list)
+
+    def test_get_account_holdings_with_search(self, eclipse_client):
+        """Test fetching account holdings with search filter."""
+        accounts = eclipse_client.get_all_accounts()
+        if not accounts:
+            pytest.skip("No accounts available")
+
+        account_id = accounts[0]["id"]
+        all_holdings = eclipse_client.get_account_holdings(account_id)
+        if not all_holdings:
+            pytest.skip("No holdings available")
+
+        # Use part of the first holding's ticker/symbol if available
+        search_term = all_holdings[0].get("ticker", all_holdings[0].get("symbol", ""))[:2]
+        if not search_term:
+            pytest.skip("No searchable holding field found")
+
+        filtered = eclipse_client.get_account_holdings(account_id, search=search_term)
+        assert isinstance(filtered, list)
+        # Search should return subset or equal
+        assert len(filtered) <= len(all_holdings)
 
     # High priority tests
 
@@ -311,6 +370,49 @@ MSFT      3       8        15
         results = eclipse_client.search_accounts(search_term)
         assert isinstance(results, list)
 
+    # Edge case tests
+
+    def test_get_portfolio_invalid_id(self, eclipse_client):
+        """Test fetching portfolio with invalid ID returns 404."""
+        from orionapi import NotFoundError
+
+        with pytest.raises(NotFoundError):
+            eclipse_client.get_portfolio(999999999)
+
+    def test_get_account_details_invalid_id(self, eclipse_client):
+        """Test fetching account details with invalid ID returns empty data."""
+        # This endpoint returns success with no data for invalid IDs
+        result = eclipse_client.get_account_details(999999999)
+        # API returns success but with empty or minimal data
+        assert result is not None
+
+    def test_get_model_invalid_id(self, eclipse_client):
+        """Test fetching model with invalid ID returns 422."""
+        from orionapi import OrionAPIError
+
+        with pytest.raises(OrionAPIError, match="Model does not exist"):
+            eclipse_client.get_model(999999999)
+
+    def test_get_security_set_invalid_id(self, eclipse_client):
+        """Test fetching security set with invalid ID returns empty data."""
+        # This endpoint returns success with no data for invalid IDs
+        result = eclipse_client.get_security_set(999999999)
+        # API returns success but with empty or minimal data
+        assert result is not None
+
+    def test_search_securities_no_results(self, eclipse_client):
+        """Test searching securities with term that should return no results."""
+        results = eclipse_client.search_securities("XYZNONEXISTENTSYMBOL999", top=5)
+        assert isinstance(results, list)
+        assert len(results) == 0
+
+    def test_get_all_portfolios_empty_search(self, eclipse_client):
+        """Test fetching portfolios with search term that returns no results."""
+        filtered = eclipse_client.get_all_portfolios(search="XYZNONEXISTENTPORTFOLIO999")
+        assert isinstance(filtered, list)
+        # Should return empty list or very few results
+        assert len(filtered) == 0 or len(filtered) < 5
+
 
 class TestOrionAPI:
     def test_check_username(self, orion_client):
@@ -429,3 +531,44 @@ class TestOrionAPI:
         # Verify something was printed
         captured = capsys.readouterr()
         assert len(captured.out) > 0
+
+    # Edge case tests
+
+    def test_get_client_invalid_id(self, orion_client):
+        """Test fetching client with invalid ID returns 404."""
+        from orionapi import NotFoundError
+
+        with pytest.raises(NotFoundError):
+            orion_client.get_client(999999999)
+
+    def test_get_registration_invalid_id(self, orion_client):
+        """Test fetching registration with invalid ID returns 500."""
+        from orionapi import OrionAPIError
+
+        with pytest.raises(OrionAPIError):
+            orion_client.get_registration(999999999)
+
+    def test_get_orion_account_invalid_id(self, orion_client):
+        """Test fetching account with invalid ID returns 404."""
+        from orionapi import NotFoundError
+
+        with pytest.raises(NotFoundError):
+            orion_client.get_orion_account(999999999)
+
+    def test_search_clients_no_results(self, orion_client):
+        """Test searching clients with term that should return no results."""
+        results = orion_client.search_clients("XYZNONEXISTENTCLIENT999", top=5)
+        assert isinstance(results, list)
+        assert len(results) == 0
+
+    def test_search_registrations_no_results(self, orion_client):
+        """Test searching registrations with term that should return no results."""
+        results = orion_client.search_registrations("XYZNONEXISTENTREG999", top=5)
+        assert isinstance(results, list)
+        assert len(results) == 0
+
+    def test_search_orion_accounts_no_results(self, orion_client):
+        """Test searching accounts with term that should return no results."""
+        results = orion_client.search_orion_accounts("XYZNONEXISTENTACCT999", top=5)
+        assert isinstance(results, list)
+        assert len(results) == 0
