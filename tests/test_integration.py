@@ -275,6 +275,42 @@ MSFT      3       8        15
         # upper_tolerance = upper_bound - target = 20 - 10 = 10
         assert result[0]["upperModelTolerancePercent"] == 10
 
+    def test_get_analytics_status(self, eclipse_client):
+        """Test checking analytics status."""
+        status = eclipse_client.get_analytics_status()
+        assert isinstance(status, dict)
+        assert "isAnalysisRunning" in status or "doRunAnalytics" in status
+
+    def test_get_closed_trades(self, eclipse_client):
+        """Test fetching closed/executed trades."""
+        trades = eclipse_client.get_closed_trades()
+        assert isinstance(trades, list)
+
+    def test_get_trade_instances(self, eclipse_client):
+        """Test fetching trade instances by date range."""
+        # Use a recent date range (last 30 days)
+        from datetime import datetime, timedelta
+        end_date = datetime.now().strftime("%Y-%m-%d")
+        start_date = (datetime.now() - timedelta(days=30)).strftime("%Y-%m-%d")
+
+        instances = eclipse_client.get_trade_instances(start_date, end_date)
+        assert isinstance(instances, list)
+
+    def test_search_accounts(self, eclipse_client):
+        """Test searching accounts by various criteria."""
+        # Get an account to use as search term
+        accounts = eclipse_client.get_all_accounts()
+        if not accounts:
+            pytest.skip("No accounts available")
+
+        # Search using part of the first account's name or number
+        search_term = accounts[0].get("accountName", accounts[0].get("accountNumber", ""))[:3]
+        if not search_term:
+            pytest.skip("No searchable account field found")
+
+        results = eclipse_client.search_accounts(search_term)
+        assert isinstance(results, list)
+
 
 class TestOrionAPI:
     def test_check_username(self, orion_client):
@@ -384,3 +420,12 @@ class TestOrionAPI:
         account = orion_client.get_orion_account(results[0]["id"])
         assert isinstance(account, dict)
         assert "id" in account
+
+    def test_get_query_params_description(self, orion_client, orion_query_id, capsys):
+        """Test printing formatted query parameters."""
+        # This method prints to stdout, so we capture it
+        orion_client.get_query_params_description(orion_query_id)
+
+        # Verify something was printed
+        captured = capsys.readouterr()
+        assert len(captured.out) > 0
