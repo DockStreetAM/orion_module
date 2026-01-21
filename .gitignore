@@ -8,4 +8,9 @@ EclipseAPIDocs.html
 .venv/
 .obsidian/
 
+# Coverage reports
+.coverage
+.coverage.*
+htmlcov/
+
 prod_-_CLI_Quickstart-oauth-credentials.txt
