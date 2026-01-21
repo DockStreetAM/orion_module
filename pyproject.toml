@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "orionapi"
-version = "1.3.0"
+version = "1.4.0"
 description = "A python interface for the Orion Advisors platform web API"
 authors = ["spencerogden-dsam <67068943+spencerogden-dsam@users.noreply.github.com>"]
 
