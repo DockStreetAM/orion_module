@@ -437,6 +437,31 @@ class TestOrionAPI:
         result = orion_client.query(orion_query_id, {})
         assert isinstance(result, (dict, list))
 
+    def test_get_all_queries(self, orion_client):
+        """Test that we can get all custom queries."""
+        queries = orion_client.get_all_queries()
+        assert isinstance(queries, list)
+        # Should have at least some queries available
+        if queries:
+            assert "id" in queries[0]
+
+    def test_get_all_queries_with_search(self, orion_client):
+        """Test getting queries with search filter."""
+        # First get all queries to find one to search for
+        all_queries = orion_client.get_all_queries()
+        if not all_queries:
+            pytest.skip("No queries available")
+
+        # Use part of first query name
+        search_term = all_queries[0].get("name", "")[:3]
+        if not search_term:
+            pytest.skip("No query name to search")
+
+        filtered = orion_client.get_all_queries(search_term=search_term)
+        assert isinstance(filtered, list)
+        # Search should return subset or equal
+        assert len(filtered) <= len(all_queries)
+
     # Custom Field Definitions
 
     def test_get_custom_field_definitions_client(self, orion_client):

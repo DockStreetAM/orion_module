@@ -360,6 +360,25 @@ class OrionAPI(BaseAPI):
         )
         return res.json()
 
+    def get_all_queries(self, search_term="", top=100):
+        """Get all custom queries/reports available in Orion Connect.
+
+        Args:
+            search_term: Optional search term to filter queries by name (default "")
+            top: Max results to return (default 100)
+
+        Returns:
+            list: Matching queries with id, name, and other metadata
+        """
+        if not isinstance(search_term, str):
+            raise ValueError("search_term must be a string")
+        if not isinstance(top, int) or top < 1:
+            raise ValueError("top must be a positive integer")
+
+        params = urlencode({"search": search_term, "top": top})
+        res = self.api_request(f"{self.base_url}/Reporting/Custom/Simple/Search?{params}")
+        return res.json()
+
     # -------------------------------------------------------------------------
     # Custom Field Definitions
     # -------------------------------------------------------------------------
