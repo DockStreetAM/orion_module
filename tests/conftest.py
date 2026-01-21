@@ -1,4 +1,5 @@
 import os
+
 import pytest
 from dotenv import load_dotenv
 
@@ -27,6 +28,7 @@ def eclipse_credentials():
 def eclipse_client(eclipse_credentials):
     """Return authenticated EclipseAPI client."""
     from orionapi import EclipseAPI
+
     return EclipseAPI(**eclipse_credentials)
 
 
@@ -43,6 +45,7 @@ def orion_credentials():
 def orion_client(orion_credentials):
     """Return authenticated OrionAPI client."""
     from orionapi import OrionAPI
+
     return OrionAPI(**orion_credentials)
 
 
