@@ -2,11 +2,11 @@
 
 Tests security features, error handling, and bug fixes.
 """
+
 import time
 from unittest.mock import Mock, patch
 
 import pytest
-import requests
 
 from orionapi import (
     AuthenticationError,
@@ -205,8 +205,9 @@ class TestTimeouts:
             # Mock the request function directly
             mock_req = Mock(return_value=Mock(ok=True, json=lambda: {}))
 
-            with patch.object(api._rate_limiter, "wait"), \
-                 patch.object(api, "_get_auth_header", return_value={}):
+            with patch.object(api._rate_limiter, "wait"), patch.object(
+                api, "_get_auth_header", return_value={}
+            ):
                 api.api_request("http://test.com", req_func=mock_req, timeout=60)
 
                 # Verify timeout was passed
@@ -249,8 +250,9 @@ class TestSSLVerification:
             # Mock the request function directly
             mock_req = Mock(return_value=Mock(ok=True, json=lambda: {}))
 
-            with patch.object(api._rate_limiter, "wait"), \
-                 patch.object(api, "_get_auth_header", return_value={}):
+            with patch.object(api._rate_limiter, "wait"), patch.object(
+                api, "_get_auth_header", return_value={}
+            ):
                 api.api_request("http://test.com", req_func=mock_req)
 
                 # Verify SSL verification was passed
@@ -315,8 +317,9 @@ class TestAPIErrors:
             mock_response.json.return_value = {"message": "Resource not found"}
             mock_req = Mock(return_value=mock_response)
 
-            with patch.object(api._rate_limiter, "wait"), \
-                 patch.object(api, "_get_auth_header", return_value={}):
+            with patch.object(api._rate_limiter, "wait"), patch.object(
+                api, "_get_auth_header", return_value={}
+            ):
                 with pytest.raises(NotFoundError, match="Resource not found"):
                     api.api_request("http://test.com/missing", req_func=mock_req)
 
@@ -333,8 +336,9 @@ class TestAPIErrors:
             mock_response.json.return_value = {"message": "Server error"}
             mock_req = Mock(return_value=mock_response)
 
-            with patch.object(api._rate_limiter, "wait"), \
-                 patch.object(api, "_get_auth_header", return_value={}):
+            with patch.object(api._rate_limiter, "wait"), patch.object(
+                api, "_get_auth_header", return_value={}
+            ):
                 with pytest.raises(OrionAPIError, match="500.*Server error"):
                     api.api_request("http://test.com", req_func=mock_req)
 
@@ -352,8 +356,9 @@ class TestAPIErrors:
             mock_response.json.side_effect = ValueError("No JSON")
             mock_req = Mock(return_value=mock_response)
 
-            with patch.object(api._rate_limiter, "wait"), \
-                 patch.object(api, "_get_auth_header", return_value={}):
+            with patch.object(api._rate_limiter, "wait"), patch.object(
+                api, "_get_auth_header", return_value={}
+            ):
                 with pytest.raises(OrionAPIError, match="HTML error page"):
                     api.api_request("http://test.com", req_func=mock_req)
 
@@ -455,7 +460,7 @@ class TestBugFixes:
                 mock_post.return_value = mock_response
 
                 # This should NOT raise TypeError
-                result = api.create_set_aside(account_number="12345", amount=1000)
+                api.create_set_aside(account_number="12345", amount=1000)
 
                 # Verify the request was made with proper values
                 mock_post.assert_called_once()
@@ -498,7 +503,7 @@ class TestBugFixes:
                 mock_post.assert_called_once()
                 request_json = mock_post.call_args[1]["json"]
 
-                # Should use tolerance value (50), not type ID (1)
-                assert request_json["expirationValue"] == 50
+                # For Transaction expiration, expirationValue should be 0
+                assert request_json["expirationValue"] == 0
                 assert request_json["toleranceValue"] == 50
                 assert request_json["transactionTypeId"] == 1

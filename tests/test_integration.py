@@ -456,9 +456,7 @@ MSFT      3       8        15
         end_date = datetime.now().strftime("%Y-%m-%d")
         start_date = (datetime.now() - timedelta(days=30)).strftime("%Y-%m-%d")
 
-        instances = eclipse_client.get_portfolio_trade_instances(
-            portfolio_id, start_date, end_date
-        )
+        instances = eclipse_client.get_portfolio_trade_instances(portfolio_id, start_date, end_date)
 
         assert isinstance(instances, list)
         # May be empty if no instances in date range

@@ -1,4 +1,4 @@
-__version__ = "1.4.0"
+__version__ = "1.4.1"
 
 import logging
 import re
@@ -1021,8 +1021,8 @@ class EclipseAPI(BaseAPI):
         if expire_type == 1:
             expire_value = expire_date
         elif expire_type == 2:
-            # Use tolerance value, not the transaction type ID
-            expire_value = expire_trans_tol
+            # Transaction-based expiration uses toleranceValue, expirationValue should be 0
+            expire_value = 0
         elif expire_type == 3:
             expire_value = 0
 
