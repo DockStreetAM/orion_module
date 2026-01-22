@@ -2,6 +2,7 @@
 
 Tests for medium-priority features identified in coverage analysis.
 """
+
 import time
 from unittest.mock import Mock, patch
 
@@ -17,7 +18,9 @@ class TestOrionUpdateOperations:
         """Test updating a client/household."""
         with patch.object(OrionAPI, "login"), patch.object(
             OrionAPI, "_get_auth_header", return_value={}
-        ), patch.object(OrionAPI, "_translate_custom_fields", return_value={"name": "Updated Name"}):
+        ), patch.object(
+            OrionAPI, "_translate_custom_fields", return_value={"name": "Updated Name"}
+        ):
             api = OrionAPI(usr="test", pwd="pass")
 
             with patch("requests.put") as mock_put:
@@ -57,9 +60,7 @@ class TestOrionUpdateOperations:
         """Test updating an Orion account."""
         with patch.object(OrionAPI, "login"), patch.object(
             OrionAPI, "_get_auth_header", return_value={}
-        ), patch.object(
-            OrionAPI, "_translate_custom_fields", return_value={"accountType": "IRA"}
-        ):
+        ), patch.object(OrionAPI, "_translate_custom_fields", return_value={"accountType": "IRA"}):
             api = OrionAPI(usr="test", pwd="pass")
 
             with patch("requests.put") as mock_put:
@@ -137,7 +138,9 @@ class TestEclipseAnalytics:
         ):
             api = EclipseAPI(usr="test", pwd="pass")
 
-            with patch.object(api, "get_analytics_status", return_value={"isAnalysisRunning": False}):
+            with patch.object(
+                api, "get_analytics_status", return_value={"isAnalysisRunning": False}
+            ):
                 start = time.time()
                 result = api.wait_for_analytics(poll_interval=0.1)
                 duration = time.time() - start
@@ -188,9 +191,7 @@ class TestEclipseAnalytics:
         ):
             api = EclipseAPI(usr="test", pwd="pass")
 
-            with patch.object(
-                api, "wait_for_analytics", return_value=True
-            ) as mock_wait:
+            with patch.object(api, "wait_for_analytics", return_value=True) as mock_wait:
                 api._maybe_wait_for_analytics(sync=True)
 
                 mock_wait.assert_called_once()
@@ -202,9 +203,7 @@ class TestEclipseAnalytics:
         ):
             api = EclipseAPI(usr="test", pwd="pass")
 
-            with patch.object(
-                api, "wait_for_analytics", return_value=True
-            ) as mock_wait:
+            with patch.object(api, "wait_for_analytics", return_value=True) as mock_wait:
                 api._maybe_wait_for_analytics(sync=False)
 
                 mock_wait.assert_not_called()
@@ -228,7 +227,7 @@ class TestCreateSetAsideExtended:
                 mock_response.json.return_value = {"id": 1, "description": "Emergency Fund"}
                 mock_post.return_value = mock_response
 
-                result = api.create_set_aside(
+                api.create_set_aside(
                     account_number="12345",
                     amount=5000,
                     min_amount=4000,
@@ -259,8 +258,10 @@ class TestCreateSetAsideExtended:
                 mock_response.json.return_value = {"id": 1}
                 mock_post.return_value = mock_response
 
-                result = api.create_set_aside(
-                    account_number="12345", amount=10, cash_type="%"  # Percentage
+                api.create_set_aside(
+                    account_number="12345",
+                    amount=10,
+                    cash_type="%",  # Percentage
                 )
 
                 mock_post.assert_called_once()
@@ -283,7 +284,7 @@ class TestCreateSetAsideExtended:
                 mock_response.json.return_value = {"id": 1}
                 mock_post.return_value = mock_response
 
-                result = api.create_set_aside(
+                api.create_set_aside(
                     account_number="12345",
                     amount=1000,
                     expire_type="Date",
@@ -311,9 +312,7 @@ class TestCreateSetAsideExtended:
                 mock_response.json.return_value = {"id": 1}
                 mock_post.return_value = mock_response
 
-                result = api.create_set_aside(
-                    account_number="12345", amount=1000, sync=False
-                )
+                api.create_set_aside(account_number="12345", amount=1000, sync=False)
 
                 # Verify _maybe_wait_for_analytics was called with False
                 mock_wait.assert_called_once_with(False)
