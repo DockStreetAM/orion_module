@@ -1,4 +1,4 @@
-__version__ = "1.4.1"
+__version__ = "1.5.0"
 
 import logging
 import re
@@ -67,6 +67,31 @@ PERCENT_CALC_TOTAL_VALUE = 1
 PERCENT_CALC_EXCLUDED_VALUE = 2
 
 MODEL_TYPE_SECURITY_SET = 4
+
+# Billing Constants (from Orion API BillGeneratorInfoDto)
+BILLING_RUN_FOR_TYPES = [
+    "AllHouseholds",
+    "FundFamily",
+    "Custodian",
+    "Representative",
+    "BusinessLine",
+    "SingleHHNewBill",
+    "SingleHHRerun",
+    "Accounts",
+    "ImportedHouseholds",
+]
+
+BILLING_ACCOUNT_FILTERS = ["ActiveAccounts", "InActiveAccounts", "AllAccounts"]
+
+BILLING_BILL_TYPES = [
+    "Unknown",
+    "Renewal",
+    "NewMoney",
+    "NewAccount",
+    "FinancialPlanningFee",
+    "Performance",
+    "AdvanceCreditDebit",
+]
 
 
 class OrionAPIError(Exception):
@@ -707,6 +732,230 @@ class OrionAPI(BaseAPI):
             raise ValueError("household_id must be a positive integer")
 
         res = self.api_request(f"{self.base_url}/Billing/HouseholdSummary/{household_id}")
+        return res.json()
+
+    def get_billing_instances(self, start_date=None, end_date=None):
+        """List billing instances, optionally filtered by date range.
+
+        Args:
+            start_date: Optional start date filter (YYYY-MM-DD format)
+            end_date: Optional end date filter (YYYY-MM-DD format)
+
+        Returns:
+            list: Billing instances
+        """
+        params = {}
+        if start_date is not None:
+            params["startDate"] = start_date
+        if end_date is not None:
+            params["endDate"] = end_date
+
+        url = f"{self.base_url}/Billing/Instances"
+        if params:
+            url += "?" + urlencode(params)
+        res = self.api_request(url)
+        return res.json()
+
+    def get_billing_instance(self, instance_id):
+        """Get details for a single billing instance.
+
+        Args:
+            instance_id: Billing instance ID
+
+        Returns:
+            dict: Billing instance details including status
+        """
+        if not isinstance(instance_id, int) or instance_id < 1:
+            raise ValueError("instance_id must be a positive integer")
+
+        res = self.api_request(f"{self.base_url}/Billing/Instances/{instance_id}")
+        return res.json()
+
+    def create_billing_instance(
+        self,
+        is_forecast=False,
+        run_for="AllHouseholds",
+        run_for_accounts="ActiveAccounts",
+        bill_type="Renewal",
+        nickname=None,
+        keys=None,
+        as_of_date=None,
+        end_date_override=None,
+        include_cash_flow=False,
+    ):
+        """Create a new billing instance (live or forecast).
+
+        Args:
+            is_forecast: If True, creates a forecast/mock bill (default False)
+            run_for: Scope of the billing run. One of: AllHouseholds, FundFamily,
+                Custodian, Representative, BusinessLine, SingleHHNewBill,
+                SingleHHRerun, Accounts, ImportedHouseholds
+            run_for_accounts: Account filter. One of: ActiveAccounts,
+                InActiveAccounts, AllAccounts
+            bill_type: Type of bill. One of: Unknown, Renewal, NewMoney,
+                NewAccount, FinancialPlanningFee, Performance, AdvanceCreditDebit
+            nickname: Optional nickname for this billing instance
+            keys: Optional list of integer IDs for the selected run_for scope
+            as_of_date: Optional as-of date (YYYY-MM-DD format)
+            end_date_override: Optional end date override (YYYY-MM-DD format)
+            include_cash_flow: Whether to include cash flow (default False)
+
+        Returns:
+            dict: Created billing instance details
+        """
+        if run_for not in BILLING_RUN_FOR_TYPES:
+            raise ValueError(f"run_for must be one of {BILLING_RUN_FOR_TYPES}")
+
+        if run_for_accounts not in BILLING_ACCOUNT_FILTERS:
+            raise ValueError(f"run_for_accounts must be one of {BILLING_ACCOUNT_FILTERS}")
+
+        if bill_type not in BILLING_BILL_TYPES:
+            raise ValueError(f"bill_type must be one of {BILLING_BILL_TYPES}")
+
+        if keys is not None and not isinstance(keys, list):
+            raise ValueError("keys must be a list of integers")
+
+        payload = {
+            "isMockBill": is_forecast,
+            "runFor": run_for,
+            "runForAccounts": run_for_accounts,
+            "billType": bill_type,
+            "includeCashFlow": include_cash_flow,
+        }
+        if nickname is not None:
+            payload["nickName"] = nickname
+        if keys is not None:
+            payload["keys"] = keys
+        if as_of_date is not None:
+            payload["asOfDate"] = as_of_date
+        if end_date_override is not None:
+            payload["endDateOverride"] = end_date_override
+
+        res = self.api_request(
+            f"{self.base_url}/Billing/BillGenerator/Action/Instance",
+            requests.post,
+            json=payload,
+        )
+        return res.json()
+
+    def generate_billing(self, instance_id, lock_down=True):
+        """Generate bills for a billing instance.
+
+        Args:
+            instance_id: Billing instance ID
+            lock_down: Whether to lock down the instance during generation (default True)
+
+        Returns:
+            dict: Generation result
+        """
+        if not isinstance(instance_id, int) or instance_id < 1:
+            raise ValueError("instance_id must be a positive integer")
+
+        params = urlencode({"lockDown": str(lock_down).lower()})
+        res = self.api_request(
+            f"{self.base_url}/Billing/Instances/{instance_id}/Action/Generate?{params}",
+            requests.put,
+        )
+        return res.json()
+
+    def complete_billing_instance(self, instance_id):
+        """Finalize/complete a billing instance.
+
+        Args:
+            instance_id: Billing instance ID
+
+        Returns:
+            dict: Updated billing instance
+        """
+        if not isinstance(instance_id, int) or instance_id < 1:
+            raise ValueError("instance_id must be a positive integer")
+
+        res = self.api_request(
+            f"{self.base_url}/Billing/Instances/{instance_id}/Action/Complete",
+            requests.post,
+        )
+        return res.json()
+
+    def invalidate_billing_instance(self, instance_id):
+        """Invalidate/cancel a billing instance.
+
+        Args:
+            instance_id: Billing instance ID
+
+        Returns:
+            dict: Updated billing instance
+        """
+        if not isinstance(instance_id, int) or instance_id < 1:
+            raise ValueError("instance_id must be a positive integer")
+
+        res = self.api_request(
+            f"{self.base_url}/Billing/Instances/{instance_id}/Action/Invalidate",
+            requests.post,
+        )
+        return res.json()
+
+    def generate_fee_files(self, instance_id, custodian_id=None):
+        """Generate fee files for a billing instance.
+
+        Args:
+            instance_id: Billing instance ID
+            custodian_id: Optional custodian ID to filter fee files
+
+        Returns:
+            dict: Fee file generation result
+        """
+        if not isinstance(instance_id, int) or instance_id < 1:
+            raise ValueError("instance_id must be a positive integer")
+
+        url = f"{self.base_url}/Billing/Instances/Action/FeeFiles"
+        if custodian_id is not None:
+            if not isinstance(custodian_id, int) or custodian_id < 1:
+                raise ValueError("custodian_id must be a positive integer")
+            url += "?" + urlencode({"custodianId": custodian_id})
+
+        res = self.api_request(url, requests.post, json={"ids": [instance_id]})
+        return res.json()
+
+    def get_fee_files(self, instance_id):
+        """Get fee files for a billing instance.
+
+        Args:
+            instance_id: Billing instance ID
+
+        Returns:
+            list: Fee file details including fileName, status, etc.
+        """
+        if not isinstance(instance_id, int) or instance_id < 1:
+            raise ValueError("instance_id must be a positive integer")
+
+        res = self.api_request(f"{self.base_url}/Billing/FeeFile/instance/{instance_id}")
+        return res.json()
+
+    def get_bills(self, instance_id=None, is_valid=None, bill_type=None):
+        """Get bills, optionally filtered.
+
+        Args:
+            instance_id: Optional billing instance ID to filter by
+            is_valid: Optional boolean to filter by validity
+            bill_type: Optional bill type string to filter by
+
+        Returns:
+            list: Bill records
+        """
+        params = {}
+        if instance_id is not None:
+            if not isinstance(instance_id, int) or instance_id < 1:
+                raise ValueError("instance_id must be a positive integer")
+            params["instanceId"] = instance_id
+        if is_valid is not None:
+            params["isValid"] = str(is_valid).lower()
+        if bill_type is not None:
+            params["billType"] = bill_type
+
+        url = f"{self.base_url}/Billing/Bills"
+        if params:
+            url += "?" + urlencode(params)
+        res = self.api_request(url)
         return res.json()
 
     # -------------------------------------------------------------------------
