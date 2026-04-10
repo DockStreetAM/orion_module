@@ -945,3 +945,776 @@ class TestOrionBillingAdjustments:
         api = self._make_api()
         with pytest.raises(ValueError, match="adjustments must be a non-empty list"):
             api.update_bill_item_adjustments(bill_account_item_id=1, adjustments="bad")
+
+
+class TestOrionBillingOperations:
+    """Test OrionAPI billing workflow gap methods."""
+
+    def _make_api(self):
+        with patch.object(OrionAPI, "login"), patch.object(
+            OrionAPI, "_get_auth_header", return_value={}
+        ):
+            return OrionAPI(usr="test", pwd="pass")
+
+    # --- Cash Funding ---
+
+    def test_get_cash_funding(self):
+        """Test getting cash funding data."""
+        api = self._make_api()
+        with patch.object(api, "api_request") as mock:
+            mock.return_value = Mock(
+                json=Mock(
+                    return_value=[
+                        {"registrationName": "Acme", "balanceDue": 500.0, "accountNumber": "123"}
+                    ]
+                )
+            )
+            result = api.get_cash_funding(start_date="2026-01-01", end_date="2026-03-31")
+            assert len(result) == 1
+            assert result[0]["balanceDue"] == 500.0
+            call_url = mock.call_args[0][0]
+            assert "startDate=2026-01-01" in call_url
+            assert "endDate=2026-03-31" in call_url
+            assert "forecast=0" in call_url
+            assert "take=10000" in call_url
+
+    def test_get_cash_funding_forecast(self):
+        """Test getting forecast cash funding data."""
+        api = self._make_api()
+        with patch.object(api, "api_request") as mock:
+            mock.return_value = Mock(json=Mock(return_value=[]))
+            api.get_cash_funding(start_date="2026-01-01", end_date="2026-03-31", is_forecast=True)
+            call_url = mock.call_args[0][0]
+            assert "forecast=1" in call_url
+
+    def test_get_cash_funding_with_skip(self):
+        """Test getting cash funding data with skip."""
+        api = self._make_api()
+        with patch.object(api, "api_request") as mock:
+            mock.return_value = Mock(json=Mock(return_value=[]))
+            api.get_cash_funding(start_date="2026-01-01", end_date="2026-03-31", skip=100)
+            call_url = mock.call_args[0][0]
+            assert "skip=100" in call_url
+
+    def test_get_cash_funding_invalid_dates(self):
+        """Test get_cash_funding with invalid dates."""
+        api = self._make_api()
+        with pytest.raises(ValueError, match="start_date must be a non-empty string"):
+            api.get_cash_funding(start_date="", end_date="2026-03-31")
+        with pytest.raises(ValueError, match="end_date must be a non-empty string"):
+            api.get_cash_funding(start_date="2026-01-01", end_date="")
+
+    def test_get_cash_funding_invalid_take(self):
+        """Test get_cash_funding with invalid take."""
+        api = self._make_api()
+        with pytest.raises(ValueError, match="take must be a positive integer"):
+            api.get_cash_funding(start_date="2026-01-01", end_date="2026-03-31", take=0)
+
+    def test_generate_cash_funding(self):
+        """Test generating cash funding data."""
+        api = self._make_api()
+        with patch.object(api, "api_request") as mock:
+            mock.return_value = Mock(json=Mock(return_value={"success": True}))
+            result = api.generate_cash_funding(instance_ids=[1, 2])
+            assert result["success"] is True
+            call_url = mock.call_args[0][0]
+            assert "/Billing/Instances/GenerateCashFunding" in call_url
+            assert "billInstanceIds=1" in call_url
+            assert "billInstanceIds=2" in call_url
+
+    def test_generate_cash_funding_with_dates(self):
+        """Test generating cash funding with date range."""
+        api = self._make_api()
+        with patch.object(api, "api_request") as mock:
+            mock.return_value = Mock(json=Mock(return_value={}))
+            api.generate_cash_funding(
+                instance_ids=[1],
+                start_date="2026-01-01",
+                end_date="2026-03-31",
+                is_forecast=True,
+            )
+            call_url = mock.call_args[0][0]
+            assert "startDate=2026-01-01" in call_url
+            assert "endDate=2026-03-31" in call_url
+            assert "isForecast=true" in call_url
+
+    def test_generate_cash_funding_invalid_ids(self):
+        """Test generate_cash_funding with invalid instance_ids."""
+        api = self._make_api()
+        with pytest.raises(ValueError, match="instance_ids must be a non-empty list"):
+            api.generate_cash_funding(instance_ids=[])
+        with pytest.raises(ValueError, match="instance_ids must be a non-empty list"):
+            api.generate_cash_funding(instance_ids="bad")
+
+    # --- Bill Management ---
+
+    def test_delete_bills(self):
+        """Test deleting bills."""
+        api = self._make_api()
+        with patch.object(api, "api_request") as mock:
+            mock.return_value = Mock(json=Mock(return_value=[10, 20]))
+            result = api.delete_bills(bill_ids=[10, 20])
+            assert result == [10, 20]
+            call_url = mock.call_args[0][0]
+            assert "/Billing/Bills/Action/Delete" in call_url
+            assert "deleteRelatedHouseholds" not in call_url
+            payload = mock.call_args[1]["json"]
+            assert payload == {"ids": [10, 20]}
+
+    def test_delete_bills_with_related_households(self):
+        """Test deleting bills with related households."""
+        api = self._make_api()
+        with patch.object(api, "api_request") as mock:
+            mock.return_value = Mock(json=Mock(return_value=[10]))
+            api.delete_bills(bill_ids=[10], delete_related_households=True)
+            call_url = mock.call_args[0][0]
+            assert "deleteRelatedHouseholds=true" in call_url
+
+    def test_delete_bills_invalid_ids(self):
+        """Test delete_bills with invalid bill_ids."""
+        api = self._make_api()
+        with pytest.raises(ValueError, match="bill_ids must be a non-empty list"):
+            api.delete_bills(bill_ids=[])
+        with pytest.raises(ValueError, match="bill_ids must be a non-empty list"):
+            api.delete_bills(bill_ids="bad")
+
+    # --- Receivables / Post Payment ---
+
+    def test_get_receivables(self):
+        """Test getting receivables for a billing instance."""
+        api = self._make_api()
+        with patch.object(api, "api_request") as mock:
+            mock.return_value = Mock(json=Mock(return_value={"totalDue": 1500.0, "items": []}))
+            result = api.get_receivables(instance_id=42)
+            assert result["totalDue"] == 1500.0
+            assert "/Billing/PostPayments/BillInstance/42" in mock.call_args[0][0]
+
+    def test_get_receivables_invalid_id(self):
+        """Test get_receivables with invalid ID."""
+        api = self._make_api()
+        with pytest.raises(ValueError, match="instance_id must be a positive integer"):
+            api.get_receivables(instance_id=0)
+        with pytest.raises(ValueError, match="instance_id must be a positive integer"):
+            api.get_receivables(instance_id=-1)
+
+    def test_post_payments(self):
+        """Test posting payments."""
+        api = self._make_api()
+        with patch.object(api, "api_request") as mock:
+            mock.return_value = Mock(json=Mock(return_value={"posted": 2}))
+            payments = [
+                {"accountId": 1, "billId": 10, "amountToPost": 100.0},
+                {"accountId": 2, "billId": 20, "amountToPost": 200.0},
+            ]
+            result = api.post_payments(batch_number="BATCH001", payments=payments)
+            assert result["posted"] == 2
+            call_url = mock.call_args[0][0]
+            assert "batchNumber=BATCH001" in call_url
+            payload = mock.call_args[1]["json"]
+            assert len(payload) == 2
+
+    def test_post_payments_invalid_batch(self):
+        """Test post_payments with invalid batch number."""
+        api = self._make_api()
+        with pytest.raises(ValueError, match="batch_number must be a non-empty string"):
+            api.post_payments(batch_number="", payments=[{"id": 1}])
+
+    def test_post_payments_invalid_payments(self):
+        """Test post_payments with invalid payments list."""
+        api = self._make_api()
+        with pytest.raises(ValueError, match="payments must be a non-empty list"):
+            api.post_payments(batch_number="B1", payments=[])
+        with pytest.raises(ValueError, match="payments must be a non-empty list"):
+            api.post_payments(batch_number="B1", payments="bad")
+
+    def test_write_off_bills(self):
+        """Test writing off bills."""
+        api = self._make_api()
+        with patch.object(api, "api_request") as mock:
+            mock.return_value = Mock(json=Mock(return_value={"written_off": 1}))
+            payments = [{"accountId": 1, "billId": 10, "amountToPost": 50.0}]
+            result = api.write_off_bills(payments=payments)
+            assert result["written_off"] == 1
+            call_url = mock.call_args[0][0]
+            assert "/Billing/PostPayments/WriteOffBills" in call_url
+            assert "paymentFrom=Household" in call_url
+
+    def test_write_off_bills_account_with_batch(self):
+        """Test writing off bills from account with batch number."""
+        api = self._make_api()
+        with patch.object(api, "api_request") as mock:
+            mock.return_value = Mock(json=Mock(return_value={}))
+            api.write_off_bills(
+                payments=[{"id": 1}],
+                payment_from="Account",
+                batch_number="WO-001",
+            )
+            call_url = mock.call_args[0][0]
+            assert "paymentFrom=Account" in call_url
+            assert "batchNumber=WO-001" in call_url
+
+    def test_write_off_bills_invalid_payment_from(self):
+        """Test write_off_bills with invalid payment_from."""
+        api = self._make_api()
+        with pytest.raises(ValueError, match="payment_from must be one of"):
+            api.write_off_bills(payments=[{"id": 1}], payment_from="Invalid")
+
+    def test_write_off_bills_invalid_payments(self):
+        """Test write_off_bills with invalid payments list."""
+        api = self._make_api()
+        with pytest.raises(ValueError, match="payments must be a non-empty list"):
+            api.write_off_bills(payments=[])
+
+
+class TestOrionHierarchyManagement:
+    """Test OrionAPI hierarchy management methods."""
+
+    def _make_api(self):
+        with patch.object(OrionAPI, "login"):
+            return OrionAPI(usr="test", pwd="pass")
+
+    def _make_api_with_mock(self):
+        with patch.object(OrionAPI, "login"), patch.object(
+            OrionAPI, "_get_auth_header", return_value={}
+        ):
+            api = OrionAPI(usr="test", pwd="pass")
+        return api
+
+    def test_create_client(self):
+        """Test creating a client."""
+        api = self._make_api_with_mock()
+        with patch.object(api, "api_request") as mock_req:
+            mock_resp = Mock()
+            mock_resp.json.return_value = {"id": 1, "name": "Test Household"}
+            mock_req.return_value = mock_resp
+
+            result = api.create_client({"name": "Test Household"})
+
+            mock_req.assert_called_once()
+            call_args = mock_req.call_args
+            assert "Portfolio/Clients/Verbose" in call_args[0][0]
+            assert call_args[1]["json"] == {"name": "Test Household"}
+            assert result["name"] == "Test Household"
+
+    def test_create_client_invalid_data(self):
+        """Test create_client with invalid data."""
+        api = self._make_api()
+        with pytest.raises(ValueError, match="data must be a non-empty dict"):
+            api.create_client({})
+        with pytest.raises(ValueError, match="data must be a non-empty dict"):
+            api.create_client("not a dict")
+
+    def test_cancel_client_full(self):
+        """Test full client cancellation."""
+        api = self._make_api_with_mock()
+        with patch.object(api, "api_request") as mock_req:
+            mock_resp = Mock()
+            mock_resp.json.return_value = {"success": True}
+            mock_req.return_value = mock_resp
+
+            api.cancel_client(client_id=1, cancel_type="Full")
+
+            mock_req.assert_called_once()
+            call_args = mock_req.call_args
+            assert "Portfolio/Clients/Action/Cancel" in call_args[0][0]
+            body = call_args[1]["json"]
+            assert body["clientId"] == 1
+            assert body["cancelType"] == "Full"
+
+    def test_cancel_client_partial(self):
+        """Test partial client cancellation with account IDs."""
+        api = self._make_api_with_mock()
+        with patch.object(api, "api_request") as mock_req:
+            mock_resp = Mock()
+            mock_resp.json.return_value = {"success": True}
+            mock_req.return_value = mock_resp
+
+            api.cancel_client(client_id=1, cancel_type="Partial", account_ids=[10, 20])
+
+            body = mock_req.call_args[1]["json"]
+            assert body["cancelType"] == "Partial"
+            assert body["accountIds"] == [10, 20]
+
+    def test_cancel_client_partial_no_accounts(self):
+        """Test partial cancellation without account_ids raises ValueError."""
+        api = self._make_api()
+        with pytest.raises(ValueError, match="account_ids must be a non-empty list"):
+            api.cancel_client(client_id=1, cancel_type="Partial")
+
+    def test_delete_clients(self):
+        """Test deleting clients."""
+        api = self._make_api_with_mock()
+        with patch.object(api, "api_request") as mock_req:
+            mock_resp = Mock()
+            mock_resp.json.return_value = [1, 2]
+            mock_req.return_value = mock_resp
+
+            result = api.delete_clients([1, 2])
+
+            call_args = mock_req.call_args
+            assert "Portfolio/Clients/Action/Delete" in call_args[0][0]
+            assert call_args[1]["json"] == [1, 2]
+            assert result == [1, 2]
+
+    def test_delete_clients_invalid(self):
+        """Test delete_clients with empty list."""
+        api = self._make_api()
+        with pytest.raises(ValueError, match="client_ids must be a non-empty list"):
+            api.delete_clients([])
+
+    def test_get_portfolio_tree(self):
+        """Test getting portfolio tree."""
+        api = self._make_api_with_mock()
+        with patch.object(api, "api_request") as mock_req:
+            mock_resp = Mock()
+            mock_resp.json.return_value = {"clientId": 1, "registrations": []}
+            mock_req.return_value = mock_resp
+
+            result = api.get_portfolio_tree(client_id=1, filter_type="AccountsOnly")
+
+            call_url = mock_req.call_args[0][0]
+            assert "Portfolio/Clients/1/PortfolioTree" in call_url
+            assert "filterType=AccountsOnly" in call_url
+            assert result["clientId"] == 1
+
+    def test_get_portfolio_tree_invalid_id(self):
+        """Test get_portfolio_tree with invalid ID."""
+        api = self._make_api()
+        with pytest.raises(ValueError, match="client_id must be a positive integer"):
+            api.get_portfolio_tree(client_id=0)
+
+    def test_create_registration(self):
+        """Test creating a registration."""
+        api = self._make_api_with_mock()
+        with patch.object(api, "api_request") as mock_req:
+            mock_resp = Mock()
+            mock_resp.json.return_value = {"id": 10, "name": "Test Reg"}
+            mock_req.return_value = mock_resp
+
+            data = {"name": "Test Reg", "portfolio": {"clientId": 1}}
+            result = api.create_registration(data)
+
+            call_args = mock_req.call_args
+            assert "Portfolio/Registrations/Verbose" in call_args[0][0]
+            assert call_args[1]["json"] == data
+            assert result["name"] == "Test Reg"
+
+    def test_move_registration(self):
+        """Test moving registrations to a different client."""
+        api = self._make_api_with_mock()
+        with patch.object(api, "api_request") as mock_req:
+            mock_resp = Mock()
+            mock_resp.json.return_value = {"success": True}
+            mock_req.return_value = mock_resp
+
+            api.move_registration(registration_ids=[10, 20], target_client_id=5)
+
+            call_args = mock_req.call_args
+            assert "Portfolio/Registrations/Action/MoveToClient/5" in call_args[0][0]
+            assert call_args[1]["json"] == [10, 20]
+
+    def test_move_registration_invalid(self):
+        """Test move_registration with invalid parameters."""
+        api = self._make_api()
+        with pytest.raises(ValueError, match="registration_ids must be a non-empty list"):
+            api.move_registration(registration_ids=[], target_client_id=5)
+        with pytest.raises(ValueError, match="target_client_id must be a positive integer"):
+            api.move_registration(registration_ids=[1], target_client_id=0)
+
+    def test_split_registration(self):
+        """Test splitting a registration."""
+        api = self._make_api_with_mock()
+        with patch.object(api, "api_request") as mock_req:
+            mock_resp = Mock()
+            mock_resp.json.return_value = {"success": True}
+            mock_req.return_value = mock_resp
+
+            api.split_registration(registration_id=10)
+
+            call_url = mock_req.call_args[0][0]
+            assert "Portfolio/Registrations/10/Action/Split" in call_url
+
+    def test_split_registration_invalid_id(self):
+        """Test split_registration with invalid ID."""
+        api = self._make_api()
+        with pytest.raises(ValueError, match="registration_id must be a positive integer"):
+            api.split_registration(registration_id=-1)
+
+    def test_delete_registrations(self):
+        """Test deleting registrations."""
+        api = self._make_api_with_mock()
+        with patch.object(api, "api_request") as mock_req:
+            mock_resp = Mock()
+            mock_resp.json.return_value = [10, 20]
+            mock_req.return_value = mock_resp
+
+            result = api.delete_registrations([10, 20])
+
+            call_args = mock_req.call_args
+            assert "Portfolio/Registrations/Action/Delete" in call_args[0][0]
+            assert call_args[1]["json"] == [10, 20]
+            assert result == [10, 20]
+
+    def test_create_orion_account(self):
+        """Test creating an account."""
+        api = self._make_api_with_mock()
+        with patch.object(api, "api_request") as mock_req:
+            mock_resp = Mock()
+            mock_resp.json.return_value = {"id": 100, "name": "Test Account"}
+            mock_req.return_value = mock_resp
+
+            data = {"name": "Test Account", "number": "12345"}
+            result = api.create_orion_account(data)
+
+            call_args = mock_req.call_args
+            assert "Portfolio/Accounts/Verbose" in call_args[0][0]
+            assert "generateAccountNumber" not in call_args[0][0]
+            assert call_args[1]["json"] == data
+            assert result["name"] == "Test Account"
+
+    def test_create_orion_account_generate_number(self):
+        """Test creating an account with auto-generated number."""
+        api = self._make_api_with_mock()
+        with patch.object(api, "api_request") as mock_req:
+            mock_resp = Mock()
+            mock_resp.json.return_value = {"id": 100}
+            mock_req.return_value = mock_resp
+
+            api.create_orion_account({"name": "Test"}, generate_account_number=True)
+
+            call_url = mock_req.call_args[0][0]
+            assert "generateAccountNumber=true" in call_url
+
+    def test_move_account(self):
+        """Test moving an account to a different registration."""
+        api = self._make_api_with_mock()
+        with patch.object(api, "api_request") as mock_req:
+            mock_resp = Mock()
+            mock_resp.json.return_value = {"id": 100}
+            mock_req.return_value = mock_resp
+
+            api.move_account(account_id=100, target_registration_id=50)
+
+            call_url = mock_req.call_args[0][0]
+            assert "Portfolio/Accounts/100/Action/MoveToRegistration/50" in call_url
+
+    def test_move_account_invalid(self):
+        """Test move_account with invalid IDs."""
+        api = self._make_api()
+        with pytest.raises(ValueError, match="account_id must be a positive integer"):
+            api.move_account(account_id=0, target_registration_id=5)
+        with pytest.raises(ValueError, match="target_registration_id must be a positive integer"):
+            api.move_account(account_id=1, target_registration_id=-1)
+
+    def test_merge_accounts(self):
+        """Test merging accounts."""
+        api = self._make_api_with_mock()
+        with patch.object(api, "api_request") as mock_req:
+            mock_resp = Mock()
+            mock_resp.json.return_value = [1, 2]
+            mock_req.return_value = mock_resp
+
+            merges = [{"oldAccountId": 1, "newAccountId": 2}]
+            result = api.merge_accounts(merges)
+
+            call_args = mock_req.call_args
+            assert "Portfolio/Accounts/Action/Merge" in call_args[0][0]
+            assert call_args[1]["json"] == merges
+            assert result == [1, 2]
+
+    def test_merge_accounts_invalid(self):
+        """Test merge_accounts with empty list."""
+        api = self._make_api()
+        with pytest.raises(ValueError, match="merges must be a non-empty list"):
+            api.merge_accounts([])
+
+    def test_convert_account(self):
+        """Test converting an account."""
+        api = self._make_api_with_mock()
+        with patch.object(api, "api_request") as mock_req:
+            mock_resp = Mock()
+            mock_resp.json.return_value = {"id": 200}
+            mock_req.return_value = mock_resp
+
+            result = api.convert_account(
+                from_account_id=100, convert_date="2026-01-01", copy_assets=True
+            )
+
+            call_args = mock_req.call_args
+            assert "Portfolio/Accounts/Action/ConvertAccount" in call_args[0][0]
+            body = call_args[1]["json"]
+            assert body["fromAccountId"] == 100
+            assert body["convertDate"] == "2026-01-01"
+            assert body["copyAssets"] is True
+            assert result["id"] == 200
+
+    def test_convert_account_invalid_id(self):
+        """Test convert_account with invalid ID."""
+        api = self._make_api()
+        with pytest.raises(ValueError, match="from_account_id must be a positive integer"):
+            api.convert_account(from_account_id=0, convert_date="2026-01-01")
+
+    def test_delete_accounts(self):
+        """Test deleting accounts."""
+        api = self._make_api_with_mock()
+        with patch.object(api, "api_request") as mock_req:
+            mock_resp = Mock()
+            mock_resp.json.return_value = [100, 200]
+            mock_req.return_value = mock_resp
+
+            result = api.delete_accounts([100, 200])
+
+            call_args = mock_req.call_args
+            assert "Portfolio/Accounts/Action/Delete" in call_args[0][0]
+            assert call_args[1]["json"] == [100, 200]
+            assert result == [100, 200]
+
+    def test_undo_account_conversion(self):
+        """Test undoing an account conversion."""
+        api = self._make_api_with_mock()
+        with patch.object(api, "api_request") as mock_req:
+            mock_resp = Mock()
+            mock_resp.json.return_value = {"success": True}
+            mock_req.return_value = mock_resp
+
+            import requests
+
+            api.undo_account_conversion(account_id=100)
+
+            call_args = mock_req.call_args
+            assert "Portfolio/Accounts/100/Action/UndoConversion" in call_args[0][0]
+            assert call_args[0][1] == requests.delete
+
+
+class TestOrionTransactions:
+    """Test OrionAPI transaction methods."""
+
+    def _make_api(self):
+        with patch.object(OrionAPI, "login"):
+            return OrionAPI(usr="test", pwd="pass")
+
+    def _make_api_with_mock(self):
+        with patch.object(OrionAPI, "login"), patch.object(
+            OrionAPI, "_get_auth_header", return_value={}
+        ):
+            api = OrionAPI(usr="test", pwd="pass")
+        return api
+
+    def test_get_transactions_no_filter(self):
+        """Test getting transactions without filters."""
+        api = self._make_api_with_mock()
+        with patch.object(api, "api_request") as mock_req:
+            mock_resp = Mock()
+            mock_resp.json.return_value = [{"id": 1, "transAmount": 100}]
+            mock_req.return_value = mock_resp
+
+            result = api.get_transactions()
+
+            call_url = mock_req.call_args[0][0]
+            assert "Portfolio/Transactions" in call_url
+            assert "?" not in call_url
+            assert len(result) == 1
+
+    def test_get_transactions_by_account(self):
+        """Test getting transactions filtered by account."""
+        api = self._make_api_with_mock()
+        with patch.object(api, "api_request") as mock_req:
+            mock_resp = Mock()
+            mock_resp.json.return_value = []
+            mock_req.return_value = mock_resp
+
+            api.get_transactions(account_id=123)
+
+            call_url = mock_req.call_args[0][0]
+            assert "accountId=123" in call_url
+
+    def test_get_transactions_by_date_range(self):
+        """Test getting transactions filtered by date range."""
+        api = self._make_api_with_mock()
+        with patch.object(api, "api_request") as mock_req:
+            mock_resp = Mock()
+            mock_resp.json.return_value = []
+            mock_req.return_value = mock_resp
+
+            api.get_transactions(start_date="2026-01-01", end_date="2026-03-31")
+
+            call_url = mock_req.call_args[0][0]
+            assert "startDate=2026-01-01" in call_url
+            assert "endDate=2026-03-31" in call_url
+
+    def test_get_transactions_by_status(self):
+        """Test getting transactions filtered by status."""
+        api = self._make_api_with_mock()
+        with patch.object(api, "api_request") as mock_req:
+            mock_resp = Mock()
+            mock_resp.json.return_value = []
+            mock_req.return_value = mock_resp
+
+            api.get_transactions(status="Complete")
+
+            call_url = mock_req.call_args[0][0]
+            assert "status=Complete" in call_url
+
+    def test_get_transactions_invalid_status(self):
+        """Test get_transactions with invalid status."""
+        api = self._make_api()
+        with pytest.raises(ValueError, match="status must be one of"):
+            api.get_transactions(status="InvalidStatus")
+
+    def test_get_transactions_invalid_account_id(self):
+        """Test get_transactions with invalid account_id."""
+        api = self._make_api()
+        with pytest.raises(ValueError, match="account_id must be a positive integer"):
+            api.get_transactions(account_id=0)
+
+
+class TestOrionReportBatches:
+    """Test OrionAPI report batch methods."""
+
+    def _make_api(self):
+        with patch.object(OrionAPI, "login"):
+            return OrionAPI(usr="test", pwd="pass")
+
+    def _make_api_with_mock(self):
+        with patch.object(OrionAPI, "login"), patch.object(
+            OrionAPI, "_get_auth_header", return_value={}
+        ):
+            api = OrionAPI(usr="test", pwd="pass")
+        return api
+
+    def test_get_report_batches(self):
+        """Test listing report batches."""
+        api = self._make_api_with_mock()
+        with patch.object(api, "api_request") as mock_req:
+            mock_resp = Mock()
+            mock_resp.json.return_value = [{"id": 1, "name": "Q1 2026"}]
+            mock_req.return_value = mock_resp
+
+            result = api.get_report_batches()
+
+            call_url = mock_req.call_args[0][0]
+            assert "Reporting/Batch" in call_url
+            assert "?" not in call_url
+            assert len(result) == 1
+
+    def test_get_report_batches_with_filter(self):
+        """Test listing report batches with QPE filter."""
+        api = self._make_api_with_mock()
+        with patch.object(api, "api_request") as mock_req:
+            mock_resp = Mock()
+            mock_resp.json.return_value = []
+            mock_req.return_value = mock_resp
+
+            api.get_report_batches(qpe_item_id=42)
+
+            call_url = mock_req.call_args[0][0]
+            assert "qpeItemId=42" in call_url
+
+    def test_get_report_batch(self):
+        """Test getting a single report batch."""
+        api = self._make_api_with_mock()
+        with patch.object(api, "api_request") as mock_req:
+            mock_resp = Mock()
+            mock_resp.json.return_value = {"id": 5, "name": "Batch 5"}
+            mock_req.return_value = mock_resp
+
+            result = api.get_report_batch(batch_id=5)
+
+            call_url = mock_req.call_args[0][0]
+            assert "Reporting/Batch/5" in call_url
+            assert result["id"] == 5
+
+    def test_get_report_batch_invalid_id(self):
+        """Test get_report_batch with invalid ID."""
+        api = self._make_api()
+        with pytest.raises(ValueError, match="batch_id must be a positive integer"):
+            api.get_report_batch(batch_id=0)
+
+    def test_get_report_batch_entities(self):
+        """Test getting batch entities."""
+        api = self._make_api_with_mock()
+        with patch.object(api, "api_request") as mock_req:
+            mock_resp = Mock()
+            mock_resp.json.return_value = [{"id": 1, "entityName": "Client A"}]
+            mock_req.return_value = mock_resp
+
+            result = api.get_report_batch_entities(batch_id=5)
+
+            call_url = mock_req.call_args[0][0]
+            assert "Reporting/Batch/5/Entities" in call_url
+            assert len(result) == 1
+
+    def test_get_report_batch_entities_by_status(self):
+        """Test getting batch entities filtered by generation status."""
+        api = self._make_api_with_mock()
+        with patch.object(api, "api_request") as mock_req:
+            mock_resp = Mock()
+            mock_resp.json.return_value = []
+            mock_req.return_value = mock_resp
+
+            api.get_report_batch_entities(batch_id=5, generation_status="Generated")
+
+            call_url = mock_req.call_args[0][0]
+            assert "generationStatus=Generated" in call_url
+
+    def test_generate_statements(self):
+        """Test generating statements with entity IDs."""
+        api = self._make_api_with_mock()
+        with patch.object(api, "api_request") as mock_req:
+            mock_resp = Mock()
+            mock_resp.json.return_value = [1, 2, 3]
+            mock_req.return_value = mock_resp
+
+            import requests
+
+            result = api.generate_statements(batch_id=5, entity_ids=[1, 2, 3])
+
+            call_args = mock_req.call_args
+            assert "Reporting/Batch/5/Entities/Action/Generate" in call_args[0][0]
+            assert call_args[0][1] == requests.post
+            assert call_args[1]["json"] == [1, 2, 3]
+            assert result == [1, 2, 3]
+
+    def test_generate_statements_all(self):
+        """Test generating all statements (no entity IDs)."""
+        api = self._make_api_with_mock()
+        with patch.object(api, "api_request") as mock_req:
+            mock_resp = Mock()
+            mock_resp.json.return_value = []
+            mock_req.return_value = mock_resp
+
+            api.generate_statements(batch_id=5)
+
+            call_args = mock_req.call_args
+            assert "Reporting/Batch/5/Entities/Action/Generate" in call_args[0][0]
+            assert "json" not in call_args[1]
+
+    def test_generate_statements_invalid_id(self):
+        """Test generate_statements with invalid batch ID."""
+        api = self._make_api()
+        with pytest.raises(ValueError, match="batch_id must be a positive integer"):
+            api.generate_statements(batch_id=-1)
+
+    def test_send_electronic_statements(self):
+        """Test sending electronic statements."""
+        api = self._make_api_with_mock()
+        with patch.object(api, "api_request") as mock_req:
+            mock_resp = Mock()
+            mock_resp.json.return_value = [1, 2]
+            mock_req.return_value = mock_resp
+
+            import requests
+
+            result = api.send_electronic_statements(batch_id=5, entity_ids=[1, 2])
+
+            call_args = mock_req.call_args
+            assert "Reporting/Batch/5/Entities/Action/SendElectronicStatement" in call_args[0][0]
+            assert call_args[0][1] == requests.post
+            assert call_args[1]["json"] == [1, 2]
+            assert result == [1, 2]
+
+    def test_send_electronic_statements_invalid_id(self):
+        """Test send_electronic_statements with invalid batch ID."""
+        api = self._make_api()
+        with pytest.raises(ValueError, match="batch_id must be a positive integer"):
+            api.send_electronic_statements(batch_id=0)

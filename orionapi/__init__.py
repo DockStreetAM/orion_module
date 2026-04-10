@@ -1,4 +1,4 @@
-__version__ = "1.5.0"
+__version__ = "1.6.0"
 
 import logging
 import re
@@ -82,6 +82,33 @@ BILLING_RUN_FOR_TYPES = [
 ]
 
 BILLING_ACCOUNT_FILTERS = ["ActiveAccounts", "InActiveAccounts", "AllAccounts"]
+
+TRANSACTION_STATUSES = {
+    "Complete",
+    "Pending",
+    "Rejected",
+    "Reversed",
+    "Inactive",
+    "PendingCorpAction",
+}
+
+REPORT_GENERATION_STATUSES = {
+    "NotGenerated",
+    "ErroredReport",
+    "OnHold",
+    "Generated",
+    "PendingGeneration",
+    "WillNotBeGenerated",
+}
+
+PORTFOLIO_TREE_FILTER_TYPES = {
+    "PortfolioTree",
+    "PortfolioGroups",
+    "RegistrationsOnly",
+    "AccountsOnly",
+}
+
+CANCEL_TYPES = {"Full", "Partial"}
 
 BILLING_BILL_TYPES = [
     "Unknown",
@@ -507,6 +534,121 @@ class OrionAPI(BaseAPI):
         )
         return res.json()
 
+    def create_client(self, data):
+        """Create a new client/household.
+
+        Args:
+            data: Dict of client fields. Minimum required: {"name": "Household Name"}.
+                Body is a ClientVerboseDto.
+
+        Returns:
+            dict: Created client
+        """
+        if not isinstance(data, dict) or not data:
+            raise ValueError("data must be a non-empty dict")
+
+        res = self.api_request(
+            f"{self.base_url}/Portfolio/Clients/Verbose", requests.post, json=data
+        )
+        return res.json()
+
+    def cancel_client(
+        self,
+        client_id,
+        cancel_type="Full",
+        account_ids=None,
+        as_of_date=None,
+        zero_assets=False,
+        exclude_download=False,
+        create_final_bill=False,
+    ):
+        """Cancel a client/household (full or partial).
+
+        Args:
+            client_id: Client ID
+            cancel_type: "Full" or "Partial" (default "Full")
+            account_ids: List of account IDs (required if cancel_type is "Partial")
+            as_of_date: Optional as-of date (YYYY-MM-DD format)
+            zero_assets: Whether to zero out assets (default False)
+            exclude_download: Whether to exclude from downloads (default False)
+            create_final_bill: Whether to create a final bill (default False)
+
+        Returns:
+            dict: Cancellation result
+        """
+        if not isinstance(client_id, int) or client_id < 1:
+            raise ValueError("client_id must be a positive integer")
+        if cancel_type not in CANCEL_TYPES:
+            raise ValueError(f"cancel_type must be one of {CANCEL_TYPES}")
+        if cancel_type == "Partial":
+            if not isinstance(account_ids, list) or not account_ids:
+                raise ValueError("account_ids must be a non-empty list when cancel_type is Partial")
+
+        payload = {
+            "clientId": client_id,
+            "cancelType": cancel_type,
+            "zeroAssets": zero_assets,
+            "excludeDownload": exclude_download,
+            "createFinalBill": create_final_bill,
+        }
+        if account_ids is not None:
+            payload["accountIds"] = account_ids
+        if as_of_date is not None:
+            payload["asOfDate"] = as_of_date
+
+        res = self.api_request(
+            f"{self.base_url}/Portfolio/Clients/Action/Cancel", requests.put, json=payload
+        )
+        return res.json()
+
+    def delete_clients(self, client_ids):
+        """Delete clients/households by ID.
+
+        Args:
+            client_ids: List of client IDs to delete
+
+        Returns:
+            list: Deleted client IDs
+        """
+        if not isinstance(client_ids, list) or not client_ids:
+            raise ValueError("client_ids must be a non-empty list")
+
+        res = self.api_request(
+            f"{self.base_url}/Portfolio/Clients/Action/Delete", requests.put, json=client_ids
+        )
+        return res.json()
+
+    def get_portfolio_tree(
+        self, client_id, include_additional=False, include_rep=False, filter_type=None
+    ):
+        """Get hierarchical portfolio tree for a client.
+
+        Args:
+            client_id: Client ID
+            include_additional: Include additional info (default False)
+            include_rep: Include representative info (default False)
+            filter_type: Optional filter - "PortfolioTree", "PortfolioGroups",
+                "RegistrationsOnly", or "AccountsOnly"
+
+        Returns:
+            dict: Hierarchical client -> registrations -> accounts view
+        """
+        if not isinstance(client_id, int) or client_id < 1:
+            raise ValueError("client_id must be a positive integer")
+        if filter_type is not None and filter_type not in PORTFOLIO_TREE_FILTER_TYPES:
+            raise ValueError(f"filter_type must be one of {PORTFOLIO_TREE_FILTER_TYPES}")
+
+        params = {
+            "includeAdditional": str(include_additional).lower(),
+            "includeRep": str(include_rep).lower(),
+        }
+        if filter_type is not None:
+            params["filterType"] = filter_type
+
+        url = f"{self.base_url}/Portfolio/Clients/{client_id}/PortfolioTree?" + urlencode(params)
+        res = self.api_request(url)
+        return res.json()
+
     # -------------------------------------------------------------------------
     # Registrations
     # -------------------------------------------------------------------------
@@ -585,6 +727,83 @@ class OrionAPI(BaseAPI):
         res = self.api_request(f"{self.base_url}/Portfolio/Registrations/Types")
         return res.json()
 
+    def create_registration(self, data):
+        """Create a new registration.
+
+        Args:
+            data: Dict of registration fields. Minimum required: name + nested
+                portfolio.clientId. Body is a RegistrationVerboseDto.
+
+        Returns:
+            dict: Created registration
+        """
+        if not isinstance(data, dict) or not data:
+            raise ValueError("data must be a non-empty dict")
+
+        res = self.api_request(
+            f"{self.base_url}/Portfolio/Registrations/Verbose", requests.post, json=data
+        )
+        return res.json()
+
+    def move_registration(self, registration_ids, target_client_id):
+        """Move registrations to a different client/household.
+
+        Args:
+            registration_ids: List of registration IDs to move
+            target_client_id: Target client ID
+
+        Returns:
+            dict: Move result
+        """
+        if not isinstance(registration_ids, list) or not registration_ids:
+            raise ValueError("registration_ids must be a non-empty list")
+        if not isinstance(target_client_id, int) or target_client_id < 1:
+            raise ValueError("target_client_id must be a positive integer")
+
+        res = self.api_request(
+            f"{self.base_url}/Portfolio/Registrations/Action/MoveToClient/{target_client_id}",
+            requests.put,
+            json=registration_ids,
+        )
+        return res.json()
+
+    def split_registration(self, registration_id):
+        """Split a registration so each active non-sleeved account gets its own registration.
+
+        Args:
+            registration_id: Registration ID to split
+
+        Returns:
+            dict: Split result
+        """
+        if not isinstance(registration_id, int) or registration_id < 1:
+            raise ValueError("registration_id must be a positive integer")
+
+        res = self.api_request(
+            f"{self.base_url}/Portfolio/Registrations/{registration_id}/Action/Split",
+            requests.put,
+        )
+        return res.json()
+
+    def delete_registrations(self, registration_ids):
+        """Delete registrations by ID.
+
+        Args:
+            registration_ids: List of registration IDs to delete
+
+        Returns:
+            list: Deleted registration IDs
+        """
+        if not isinstance(registration_ids, list) or not registration_ids:
+            raise ValueError("registration_ids must be a non-empty list")
+
+        res = self.api_request(
+            f"{self.base_url}/Portfolio/Registrations/Action/Delete",
+            requests.put,
+            json=registration_ids,
+        )
+        return res.json()
+
     # -------------------------------------------------------------------------
     # Accounts
     # -------------------------------------------------------------------------
@@ -637,6 +856,145 @@ class OrionAPI(BaseAPI):
         )
         return res.json()
 
+    def create_orion_account(self, data, generate_account_number=False):
+        """Create a new account.
+
+        Args:
+            data: Dict of account fields. Minimum: name + either number or
+                generate_account_number=True. Body is an AccountVerboseDto.
+            generate_account_number: Auto-generate account number (default False)
+
+        Returns:
+            dict: Created account
+        """
+        if not isinstance(data, dict) or not data:
+            raise ValueError("data must be a non-empty dict")
+
+        params = {}
+        if generate_account_number:
+            params["generateAccountNumber"] = "true"
+
+        url = f"{self.base_url}/Portfolio/Accounts/Verbose"
+        if params:
+            url += "?" + urlencode(params)
+
+        res = self.api_request(url, requests.post, json=data)
+        return res.json()
+
+    def move_account(self, account_id, target_registration_id):
+        """Move an account to a different registration.
+
+        Args:
+            account_id: Account ID to move
+            target_registration_id: Target registration ID
+
+        Returns:
+            dict: AccountBaseDto
+        """
+        if not isinstance(account_id, int) or account_id < 1:
+            raise ValueError("account_id must be a positive integer")
+        if not isinstance(target_registration_id, int) or target_registration_id < 1:
+            raise ValueError("target_registration_id must be a positive integer")
+
+        res = self.api_request(
+            f"{self.base_url}/Portfolio/Accounts/{account_id}/Action/MoveToRegistration/{target_registration_id}",
+            requests.put,
+        )
+        return res.json()
+
+    def merge_accounts(self, merges):
+        """Merge accounts.
+
+        Args:
+            merges: List of dicts with old/new account ID pairs for merging
+
+        Returns:
+            list: Merged account IDs
+        """
+        if not isinstance(merges, list) or not merges:
+            raise ValueError("merges must be a non-empty list")
+
+        res = self.api_request(
+            f"{self.base_url}/Portfolio/Accounts/Action/Merge", requests.put, json=merges
+        )
+        return res.json()
+
+    def convert_account(
+        self,
+        from_account_id,
+        convert_date,
+        copy_assets=True,
+        copy_billing=True,
+        copy_transactions=True,
+        old_active=False,
+    ):
+        """Convert an account (e.g., IRA to Roth conversion).
+
+        Args:
+            from_account_id: Source account ID
+            convert_date: Conversion date (YYYY-MM-DD format)
+            copy_assets: Copy assets to new account (default True)
+            copy_billing: Copy billing settings (default True)
+            copy_transactions: Copy transactions (default True)
+            old_active: Keep old account active (default False)
+
+        Returns:
+            dict: AccountBaseDto for the new account
+        """
+        if not isinstance(from_account_id, int) or from_account_id < 1:
+            raise ValueError("from_account_id must be a positive integer")
+
+        payload = {
+            "fromAccountId": from_account_id,
+            "convertDate": convert_date,
+            "copyAssets": copy_assets,
+            "copyBilling": copy_billing,
+            "copyTransactions": copy_transactions,
+            "oldActive": old_active,
+        }
+
+        res = self.api_request(
+            f"{self.base_url}/Portfolio/Accounts/Action/ConvertAccount",
+            requests.post,
+            json=payload,
+        )
+        return res.json()
+
+    def delete_accounts(self, account_ids):
+        """Delete accounts by ID.
+
+        Args:
+            account_ids: List of account IDs to delete
+
+        Returns:
+            list: Deleted account IDs
+        """
+        if not isinstance(account_ids, list) or not account_ids:
+            raise ValueError("account_ids must be a non-empty list")
+
+        res = self.api_request(
+            f"{self.base_url}/Portfolio/Accounts/Action/Delete", requests.put, json=account_ids
+        )
+        return res.json()
+
+    def undo_account_conversion(self, account_id):
+        """Undo an account conversion.
+
+        Args:
+            account_id: Account ID to undo conversion for
+
+        Returns:
+            dict: Result of the undo operation
+        """
+        if not isinstance(account_id, int) or account_id < 1:
+            raise ValueError("account_id must be a positive integer")
+
+        res = self.api_request(
+            f"{self.base_url}/Portfolio/Accounts/{account_id}/Action/UndoConversion",
+            requests.delete,
+        )
+        return res.json()
+
     # -------------------------------------------------------------------------
     # Assets
     # -------------------------------------------------------------------------
@@ -677,6 +1035,72 @@ class OrionAPI(BaseAPI):
 
         params = urlencode({"search": search_term, "top": top})
         res = self.api_request(f"{self.base_url}/Portfolio/Assets/Simple/Search?{params}")
+        return res.json()
+
+    # -------------------------------------------------------------------------
+    # Transactions
+    # -------------------------------------------------------------------------
+
+    def get_transactions(
+        self,
+        account_id=None,
+        client_id=None,
+        registration_id=None,
+        start_date=None,
+        end_date=None,
+        status=None,
+        trans_type_ids=None,
+        has_errors=None,
+    ):
+        """Get transactions, optionally filtered.
+
+        Args:
+            account_id: Optional account ID filter
+            client_id: Optional client ID filter
+            registration_id: Optional registration ID filter
+            start_date: Optional start date (YYYY-MM-DD format)
+            end_date: Optional end date (YYYY-MM-DD format)
+            status: Optional status filter - "Complete", "Pending", "Rejected",
+                "Reversed", "Inactive", or "PendingCorpAction"
+            trans_type_ids: Optional list of transaction type IDs
+            has_errors: Optional boolean to filter by error status
+
+        Returns:
+            list: TransactionBaseDto records
+        """
+        if account_id is not None and (not isinstance(account_id, int) or account_id < 1):
+            raise ValueError("account_id must be a positive integer")
+        if client_id is not None and (not isinstance(client_id, int) or client_id < 1):
+            raise ValueError("client_id must be a positive integer")
+        if registration_id is not None and (
+            not isinstance(registration_id, int) or registration_id < 1
+        ):
+            raise ValueError("registration_id must be a positive integer")
+        if status is not None and status not in TRANSACTION_STATUSES:
+            raise ValueError(f"status must be one of {TRANSACTION_STATUSES}")
+
+        params = {}
+        if account_id is not None:
+            params["accountId"] = account_id
+        if client_id is not None:
+            params["clientId"] = client_id
+        if registration_id is not None:
+            params["registrationId"] = registration_id
+        if start_date is not None:
+            params["startDate"] = start_date
+        if end_date is not None:
+            params["endDate"] = end_date
+        if status is not None:
+            params["status"] = status
+        if trans_type_ids is not None:
+            params["transTypeIds"] = trans_type_ids
+        if has_errors is not None:
+            params["hasErrors"] = str(has_errors).lower()
+
+        url = f"{self.base_url}/Portfolio/Transactions"
+        if params:
+            url += "?" + urlencode(params, doseq=True)
+        res = self.api_request(url)
         return res.json()
 
     # -------------------------------------------------------------------------
@@ -1073,6 +1497,168 @@ class OrionAPI(BaseAPI):
         return res.json()
 
     # -------------------------------------------------------------------------
+    # Cash Funding
+    # -------------------------------------------------------------------------
+
+    def get_cash_funding(self, start_date, end_date, is_forecast=False, take=10000, skip=0):
+        """Get cash funding data showing after-fee cash balances.
+
+        Args:
+            start_date: Start date (YYYY-MM-DD format)
+            end_date: End date (YYYY-MM-DD format)
+            is_forecast: If True, returns forecast data (default False)
+            take: Number of records to return (default 10000)
+            skip: Number of records to skip (default 0)
+
+        Returns:
+            list: CashFundingGridDto records with registrationName,
+                moneyMarketBalance, balanceDue, difference, accountNumber, etc.
+        """
+        if not isinstance(start_date, str) or not start_date.strip():
+            raise ValueError("start_date must be a non-empty string")
+        if not isinstance(end_date, str) or not end_date.strip():
+            raise ValueError("end_date must be a non-empty string")
+        if not isinstance(take, int) or take < 1:
+            raise ValueError("take must be a positive integer")
+
+        params = {
+            "startDate": start_date,
+            "endDate": end_date,
+            "forecast": 1 if is_forecast else 0,
+            "take": take,
+        }
+        if skip > 0:
+            params["skip"] = skip
+
+        url = f"{self.base_url}/Billing/CashFunding?" + urlencode(params)
+        res = self.api_request(url)
+        return res.json()
+
+    def generate_cash_funding(
+        self, instance_ids, start_date=None, end_date=None, is_forecast=False
+    ):
+        """Generate cash funding data for billing instance(s).
+
+        Args:
+            instance_ids: List of billing instance IDs
+            start_date: Optional start date (YYYY-MM-DD format)
+            end_date: Optional end date (YYYY-MM-DD format)
+            is_forecast: If True, generates forecast data (default False)
+
+        Returns:
+            dict: Generation result
+        """
+        if not isinstance(instance_ids, list) or not instance_ids:
+            raise ValueError("instance_ids must be a non-empty list")
+
+        params = {"billInstanceIds": instance_ids}
+        if start_date is not None:
+            params["startDate"] = start_date
+        if end_date is not None:
+            params["endDate"] = end_date
+        if is_forecast:
+            params["isForecast"] = "true"
+
+        url = f"{self.base_url}/Billing/Instances/GenerateCashFunding?" + urlencode(
+            params, doseq=True
+        )
+        res = self.api_request(url, requests.post)
+        return res.json()
+
+    # -------------------------------------------------------------------------
+    # Bill Management
+    # -------------------------------------------------------------------------
+
+    def delete_bills(self, bill_ids, delete_related_households=False):
+        """Delete bills by ID list.
+
+        To recalculate a bill, delete it with this method then call
+        generate_billing(instance_id) to regenerate.
+
+        Args:
+            bill_ids: List of bill IDs to delete
+            delete_related_households: If True, also deletes related household
+                bills (default False)
+
+        Returns:
+            list: Deleted bill IDs
+        """
+        if not isinstance(bill_ids, list) or not bill_ids:
+            raise ValueError("bill_ids must be a non-empty list")
+
+        url = f"{self.base_url}/Billing/Bills/Action/Delete"
+        if delete_related_households:
+            url += "?" + urlencode({"deleteRelatedHouseholds": "true"})
+
+        res = self.api_request(url, requests.put, json={"ids": bill_ids})
+        return res.json()
+
+    # -------------------------------------------------------------------------
+    # Receivables / Post Payment
+    # -------------------------------------------------------------------------
+
+    def get_receivables(self, instance_id):
+        """Get outstanding fees (receivables) for a billing instance.
+
+        Args:
+            instance_id: Billing instance ID
+
+        Returns:
+            dict: Outstanding fee details for the instance
+        """
+        if not isinstance(instance_id, int) or instance_id < 1:
+            raise ValueError("instance_id must be a positive integer")
+
+        res = self.api_request(f"{self.base_url}/Billing/PostPayments/BillInstance/{instance_id}")
+        return res.json()
+
+    def post_payments(self, batch_number, payments):
+        """Post payments to mark fees as collected.
+
+        Args:
+            batch_number: Batch number string for this payment run
+            payments: List of PostPaymentsDto dicts with fields like
+                accountId, billId, amountToPost, paymentDate, payMethod, etc.
+
+        Returns:
+            dict: Payment posting result
+        """
+        if not isinstance(batch_number, str) or not batch_number.strip():
+            raise ValueError("batch_number must be a non-empty string")
+        if not isinstance(payments, list) or not payments:
+            raise ValueError("payments must be a non-empty list")
+
+        url = f"{self.base_url}/Billing/PostPayments?" + urlencode({"batchNumber": batch_number})
+        res = self.api_request(url, requests.post, json=payments)
+        return res.json()
+
+    def write_off_bills(self, payments, payment_from="Household", batch_number=None):
+        """Write off remaining balances on bills.
+
+        Args:
+            payments: List of PostPaymentsDto dicts
+            payment_from: Source of payment - "Household" or "Account"
+                (default "Household")
+            batch_number: Optional batch number string
+
+        Returns:
+            dict: Write-off result
+        """
+        valid_payment_from = ("Household", "Account")
+        if payment_from not in valid_payment_from:
+            raise ValueError(f"payment_from must be one of {valid_payment_from}")
+        if not isinstance(payments, list) or not payments:
+            raise ValueError("payments must be a non-empty list")
+
+        params = {"paymentFrom": payment_from}
+        if batch_number is not None:
+            params["batchNumber"] = batch_number
+
+        url = f"{self.base_url}/Billing/PostPayments/WriteOffBills?" + urlencode(params)
+        res = self.api_request(url, requests.post, json=payments)
+        return res.json()
+
+    # -------------------------------------------------------------------------
     # Reporting
     # -------------------------------------------------------------------------
 
@@ -1114,6 +1700,112 @@ class OrionAPI(BaseAPI):
 
         params = urlencode({"startDate": start_date, "endDate": end_date})
         res = self.api_request(f"{endpoint_map[entity_type]}?{params}")
+        return res.json()
+
+    # -------------------------------------------------------------------------
+    # Report Batches
+    # -------------------------------------------------------------------------
+
+    def get_report_batches(self, qpe_item_id=None):
+        """List all report batches.
+
+        Args:
+            qpe_item_id: Optional QPE item ID to filter by
+
+        Returns:
+            list: ReportBatchDto records
+        """
+        params = {}
+        if qpe_item_id is not None:
+            params["qpeItemId"] = qpe_item_id
+
+        url = f"{self.base_url}/Reporting/Batch"
+        if params:
+            url += "?" + urlencode(params)
+        res = self.api_request(url)
+        return res.json()
+
+    def get_report_batch(self, batch_id):
+        """Get a single report batch.
+
+        Args:
+            batch_id: Report batch ID
+
+        Returns:
+            dict: Report batch details including status, dates, entity type, lock status
+        """
+        if not isinstance(batch_id, int) or batch_id < 1:
+            raise ValueError("batch_id must be a positive integer")
+
+        res = self.api_request(f"{self.base_url}/Reporting/Batch/{batch_id}")
+        return res.json()
+
+    def get_report_batch_entities(self, batch_id, generation_status=None):
+        """Get entities in a report batch.
+
+        Args:
+            batch_id: Report batch ID
+            generation_status: Optional filter - "NotGenerated", "ErroredReport",
+                "OnHold", "Generated", "PendingGeneration", or "WillNotBeGenerated"
+
+        Returns:
+            list: Batch entity records
+        """
+        if not isinstance(batch_id, int) or batch_id < 1:
+            raise ValueError("batch_id must be a positive integer")
+        if generation_status is not None and generation_status not in REPORT_GENERATION_STATUSES:
+            raise ValueError(f"generation_status must be one of {REPORT_GENERATION_STATUSES}")
+
+        params = {}
+        if generation_status is not None:
+            params["generationStatus"] = generation_status
+
+        url = f"{self.base_url}/Reporting/Batch/{batch_id}/Entities"
+        if params:
+            url += "?" + urlencode(params)
+        res = self.api_request(url)
+        return res.json()
+
+    def generate_statements(self, batch_id, entity_ids=None):
+        """Generate PDF statements for a report batch.
+
+        Args:
+            batch_id: Report batch ID
+            entity_ids: Optional list of entity IDs. If omitted, generates all.
+
+        Returns:
+            list: Updated entity IDs
+        """
+        if not isinstance(batch_id, int) or batch_id < 1:
+            raise ValueError("batch_id must be a positive integer")
+
+        url = f"{self.base_url}/Reporting/Batch/{batch_id}/Entities/Action/Generate"
+        kwargs = {}
+        if entity_ids is not None:
+            kwargs["json"] = entity_ids
+
+        res = self.api_request(url, requests.post, **kwargs)
+        return res.json()
+
+    def send_electronic_statements(self, batch_id, entity_ids=None):
+        """Send electronic statements (email) for a report batch.
+
+        Args:
+            batch_id: Report batch ID
+            entity_ids: Optional list of entity IDs. If omitted, sends all.
+
+        Returns:
+            list: Updated entity IDs
+        """
+        if not isinstance(batch_id, int) or batch_id < 1:
+            raise ValueError("batch_id must be a positive integer")
+
+        url = f"{self.base_url}/Reporting/Batch/{batch_id}/Entities/Action/SendElectronicStatement"
+        kwargs = {}
+        if entity_ids is not None:
+            kwargs["json"] = entity_ids
+
+        res = self.api_request(url, requests.post, **kwargs)
         return res.json()
 
 
