@@ -958,6 +958,120 @@ class OrionAPI(BaseAPI):
         res = self.api_request(url)
         return res.json()
 
+    def get_adjustment_types(self, is_payable=None, is_debit=None):
+        """Get available billing adjustment types.
+
+        Args:
+            is_payable: Optional filter for payable adjustment types
+            is_debit: Optional filter for debit adjustment types
+
+        Returns:
+            list: Adjustment type records with id, name, isDebit, isPayable, etc.
+        """
+        params = {}
+        if is_payable is not None:
+            params["isPayable"] = str(is_payable).lower()
+        if is_debit is not None:
+            params["isDebit"] = str(is_debit).lower()
+
+        url = f"{self.base_url}/Billing/AdjustmentTypes"
+        if params:
+            url += "?" + urlencode(params)
+        res = self.api_request(url)
+        return res.json()
+
+    def get_recurring_adjustments(self, account_id=None):
+        """Get recurring billing adjustments, optionally filtered by account.
+
+        Args:
+            account_id: Optional account ID to filter by
+
+        Returns:
+            list: Recurring adjustment records with amounts, types, schedules, etc.
+        """
+        if account_id is not None:
+            if not isinstance(account_id, int) or account_id < 1:
+                raise ValueError("account_id must be a positive integer")
+
+        url = f"{self.base_url}/Billing/Accounts/RecurringAdjustments"
+        if account_id is not None:
+            url += "?" + urlencode({"accountId": account_id})
+        res = self.api_request(url)
+        return res.json()
+
+    def get_household_recurring_adjustments(self, household_id=None):
+        """Get recurring billing adjustments at the household level.
+
+        Args:
+            household_id: Optional household/client ID to filter by
+
+        Returns:
+            list: Household recurring adjustment records
+        """
+        if household_id is not None:
+            if not isinstance(household_id, int) or household_id < 1:
+                raise ValueError("household_id must be a positive integer")
+
+        url = f"{self.base_url}/Billing/Accounts/HouseholdRecurringAdjustments"
+        if household_id is not None:
+            url += "?" + urlencode({"householdId": household_id})
+        res = self.api_request(url)
+        return res.json()
+
+    def get_bill_item_adjustments(self, bill_account_item_id):
+        """Get adjustments for a specific bill account item.
+
+        Args:
+            bill_account_item_id: Bill account item ID
+
+        Returns:
+            list: Adjustment records with changeAmount, adjustmentType, status, etc.
+        """
+        if not isinstance(bill_account_item_id, int) or bill_account_item_id < 1:
+            raise ValueError("bill_account_item_id must be a positive integer")
+
+        res = self.api_request(
+            f"{self.base_url}/Billing/BillGenerator/BillAccountItems/BillAccountAdj/{bill_account_item_id}"
+        )
+        return res.json()
+
+    def update_bill_item_adjustments(
+        self, bill_account_item_id, adjustments, create_payable_adj=None
+    ):
+        """Add, update, or delete adjustments on a bill account item.
+
+        Each adjustment dict should include:
+            - adjustmentTypeId (int): ID of the adjustment type
+            - changeAmount (float): Dollar amount of the adjustment
+            - dateOccured (str): Date of the adjustment (YYYY-MM-DD)
+            - status (str): "Add", "Update", or "Delete"
+
+        For updates/deletes, also include:
+            - id (int): Existing adjustment ID
+
+        Args:
+            bill_account_item_id: Bill account item ID
+            adjustments: List of adjustment dicts
+            create_payable_adj: Optional bool to also create payable adjustments
+
+        Returns:
+            list: Updated adjustment records
+        """
+        if not isinstance(bill_account_item_id, int) or bill_account_item_id < 1:
+            raise ValueError("bill_account_item_id must be a positive integer")
+        if not isinstance(adjustments, list) or not adjustments:
+            raise ValueError("adjustments must be a non-empty list")
+
+        url = (
+            f"{self.base_url}/Billing/BillGenerator/BillAccountItems"
+            f"/BillAccountAdj/edit/{bill_account_item_id}"
+        )
+        if create_payable_adj is not None:
+            url += "?" + urlencode({"createPayableAdj": str(create_payable_adj).lower()})
+
+        res = self.api_request(url, requests.put, json=adjustments)
+        return res.json()
+
     # -------------------------------------------------------------------------
     # Reporting
     # -------------------------------------------------------------------------
