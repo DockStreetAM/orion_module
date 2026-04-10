@@ -803,3 +803,145 @@ class TestOrionBillingWorkflow:
         api = self._make_api()
         with pytest.raises(ValueError, match="instance_id must be a positive integer"):
             api.get_bills(instance_id=-1)
+
+
+class TestOrionBillingAdjustments:
+    """Test OrionAPI billing adjustment methods."""
+
+    def _make_api(self):
+        with patch.object(OrionAPI, "login"), patch.object(
+            OrionAPI, "_get_auth_header", return_value={}
+        ):
+            return OrionAPI(usr="test", pwd="pass")
+
+    def test_get_adjustment_types(self):
+        """Test getting adjustment types."""
+        api = self._make_api()
+        with patch.object(api, "api_request") as mock:
+            mock.return_value = Mock(
+                json=Mock(return_value=[{"id": 1, "name": "Credit", "isDebit": False}])
+            )
+            result = api.get_adjustment_types()
+            assert len(result) == 1
+            assert result[0]["name"] == "Credit"
+
+    def test_get_adjustment_types_with_filters(self):
+        """Test getting adjustment types with filters."""
+        api = self._make_api()
+        with patch.object(api, "api_request") as mock:
+            mock.return_value = Mock(json=Mock(return_value=[]))
+            api.get_adjustment_types(is_payable=True, is_debit=False)
+            call_url = mock.call_args[0][0]
+            assert "isPayable=true" in call_url
+            assert "isDebit=false" in call_url
+
+    def test_get_recurring_adjustments(self):
+        """Test getting recurring adjustments."""
+        api = self._make_api()
+        with patch.object(api, "api_request") as mock:
+            mock.return_value = Mock(
+                json=Mock(
+                    return_value=[{"id": 1, "additionalAnnualAmount": 1000.0, "type": "Dollar"}]
+                )
+            )
+            result = api.get_recurring_adjustments()
+            assert len(result) == 1
+            assert result[0]["additionalAnnualAmount"] == 1000.0
+
+    def test_get_recurring_adjustments_by_account(self):
+        """Test getting recurring adjustments filtered by account."""
+        api = self._make_api()
+        with patch.object(api, "api_request") as mock:
+            mock.return_value = Mock(json=Mock(return_value=[]))
+            api.get_recurring_adjustments(account_id=123)
+            assert "accountId=123" in mock.call_args[0][0]
+
+    def test_get_recurring_adjustments_invalid_account(self):
+        """Test get_recurring_adjustments with invalid account ID."""
+        api = self._make_api()
+        with pytest.raises(ValueError, match="account_id must be a positive integer"):
+            api.get_recurring_adjustments(account_id=0)
+
+    def test_get_household_recurring_adjustments(self):
+        """Test getting household recurring adjustments."""
+        api = self._make_api()
+        with patch.object(api, "api_request") as mock:
+            mock.return_value = Mock(
+                json=Mock(
+                    return_value=[{"id": 1, "adjustmentId": 47, "additionalAnnualAmount": 500.0}]
+                )
+            )
+            result = api.get_household_recurring_adjustments(household_id=456)
+            assert len(result) == 1
+            assert "householdId=456" in mock.call_args[0][0]
+
+    def test_get_household_recurring_adjustments_invalid_id(self):
+        """Test get_household_recurring_adjustments with invalid ID."""
+        api = self._make_api()
+        with pytest.raises(ValueError, match="household_id must be a positive integer"):
+            api.get_household_recurring_adjustments(household_id=-1)
+
+    def test_get_bill_item_adjustments(self):
+        """Test getting bill item adjustments."""
+        api = self._make_api()
+        with patch.object(api, "api_request") as mock:
+            mock.return_value = Mock(
+                json=Mock(return_value=[{"id": 1, "changeAmount": -50.0, "status": "Add"}])
+            )
+            result = api.get_bill_item_adjustments(bill_account_item_id=99)
+            assert len(result) == 1
+            assert result[0]["changeAmount"] == -50.0
+            assert "/BillAccountAdj/99" in mock.call_args[0][0]
+
+    def test_get_bill_item_adjustments_invalid_id(self):
+        """Test get_bill_item_adjustments with invalid ID."""
+        api = self._make_api()
+        with pytest.raises(ValueError, match="bill_account_item_id must be a positive integer"):
+            api.get_bill_item_adjustments(bill_account_item_id=0)
+
+    def test_update_bill_item_adjustments(self):
+        """Test updating bill item adjustments."""
+        api = self._make_api()
+        with patch.object(api, "api_request") as mock:
+            mock.return_value = Mock(
+                json=Mock(return_value=[{"id": 10, "changeAmount": -100.0, "status": "Add"}])
+            )
+            adjustments = [{"adjustmentTypeId": 1, "changeAmount": -100.0, "status": "Add"}]
+            result = api.update_bill_item_adjustments(
+                bill_account_item_id=99, adjustments=adjustments
+            )
+            assert len(result) == 1
+            call_url = mock.call_args[0][0]
+            assert "/BillAccountAdj/edit/99" in call_url
+            payload = mock.call_args[1]["json"]
+            assert payload == adjustments
+
+    def test_update_bill_item_adjustments_with_payable(self):
+        """Test updating adjustments with createPayableAdj flag."""
+        api = self._make_api()
+        with patch.object(api, "api_request") as mock:
+            mock.return_value = Mock(json=Mock(return_value=[]))
+            api.update_bill_item_adjustments(
+                bill_account_item_id=99,
+                adjustments=[{"adjustmentTypeId": 1, "changeAmount": 50.0, "status": "Add"}],
+                create_payable_adj=True,
+            )
+            assert "createPayableAdj=true" in mock.call_args[0][0]
+
+    def test_update_bill_item_adjustments_invalid_id(self):
+        """Test update_bill_item_adjustments with invalid ID."""
+        api = self._make_api()
+        with pytest.raises(ValueError, match="bill_account_item_id must be a positive integer"):
+            api.update_bill_item_adjustments(bill_account_item_id=0, adjustments=[{}])
+
+    def test_update_bill_item_adjustments_empty_list(self):
+        """Test update_bill_item_adjustments with empty adjustments list."""
+        api = self._make_api()
+        with pytest.raises(ValueError, match="adjustments must be a non-empty list"):
+            api.update_bill_item_adjustments(bill_account_item_id=1, adjustments=[])
+
+    def test_update_bill_item_adjustments_not_list(self):
+        """Test update_bill_item_adjustments with non-list adjustments."""
+        api = self._make_api()
+        with pytest.raises(ValueError, match="adjustments must be a non-empty list"):
+            api.update_bill_item_adjustments(bill_account_item_id=1, adjustments="bad")
