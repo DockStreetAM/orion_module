@@ -1,4 +1,4 @@
-__version__ = "1.6.0"
+__version__ = "1.7.0"
 
 import logging
 import re
@@ -1806,6 +1806,107 @@ class OrionAPI(BaseAPI):
             kwargs["json"] = entity_ids
 
         res = self.api_request(url, requests.post, **kwargs)
+        return res.json()
+
+    def get_report_batch_verbose(self, batch_id, expand="All"):
+        """Get verbose details of a report batch.
+
+        Args:
+            batch_id: Report batch ID
+            expand: Level of detail - "None", "Batch", "Inserts", or "All" (default)
+
+        Returns:
+            dict: Full batch configuration including report template, entity
+                selection, email settings, and inserts
+        """
+        if not isinstance(batch_id, int) or batch_id < 1:
+            raise ValueError("batch_id must be a positive integer")
+
+        params = urlencode({"expand": expand})
+        res = self.api_request(f"{self.base_url}/Reporting/Batch/Verbose/{batch_id}?{params}")
+        return res.json()
+
+    def create_report_batch(self, batch_data):
+        """Create a new report batch.
+
+        Args:
+            batch_data: ReportBatchVerboseDto dict. At minimum, batch_data["batch"]
+                must contain "name", "entity", and "reportId".
+
+        Returns:
+            dict: The created batch with server-assigned ID
+        """
+        res = self.api_request(
+            f"{self.base_url}/Reporting/Batch/Verbose",
+            requests.post,
+            json=batch_data,
+        )
+        return res.json()
+
+    def copy_report_batch(self, batch_id, name, start_date=None, end_date=None):
+        """Copy an existing report batch with a new name and optional date range.
+
+        Fetches the full configuration of the source batch, strips server-assigned
+        fields (id, audit info, generation state), applies the new name and dates,
+        and creates a new batch.
+
+        Args:
+            batch_id: Source batch ID to copy
+            name: Name for the new batch
+            start_date: Optional new start date (ISO format, e.g., "2026-04-01")
+            end_date: Optional new end date (ISO format, e.g., "2026-06-30")
+
+        Returns:
+            dict: The newly created batch with server-assigned ID
+        """
+        if not isinstance(batch_id, int) or batch_id < 1:
+            raise ValueError("batch_id must be a positive integer")
+        if not name or not isinstance(name, str):
+            raise ValueError("name must be a non-empty string")
+
+        # 1. Fetch full source batch configuration
+        source = self.get_report_batch_verbose(batch_id)
+
+        # 2. Strip server-assigned / read-only fields
+        source.pop("id", None)
+        if "batch" in source and source["batch"]:
+            source["batch"].pop("id", None)
+            source["batch"].pop("auditedBy", None)
+            source["batch"].pop("auditedDate", None)
+
+            # 3. Apply new name and dates
+            source["batch"]["name"] = name
+            if start_date is not None:
+                source["batch"]["startDate"] = start_date
+            if end_date is not None:
+                source["batch"]["endDate"] = end_date
+
+        # Strip IDs from inserts so they're created fresh
+        if "inserts" in source and source["inserts"]:
+            for insert in source["inserts"]:
+                insert.pop("id", None)
+
+        # 4. Create the new batch
+        return self.create_report_batch(source)
+
+    def update_report_batch(self, batch_id, batch_data):
+        """Update an existing report batch.
+
+        Args:
+            batch_id: Report batch ID to update
+            batch_data: Full ReportBatchVerboseDto dict
+
+        Returns:
+            dict: The updated batch
+        """
+        if not isinstance(batch_id, int) or batch_id < 1:
+            raise ValueError("batch_id must be a positive integer")
+
+        res = self.api_request(
+            f"{self.base_url}/Reporting/Batch/Verbose/{batch_id}",
+            requests.put,
+            json=batch_data,
+        )
         return res.json()
 
 
