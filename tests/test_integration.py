@@ -220,8 +220,11 @@ class TestEclipseAPI:
         if not accounts:
             pytest.skip("No accounts available")
 
-        account_id = accounts[0]["id"]
-        set_asides = eclipse_client.get_set_asides(account_id)
+        # Use accountNumber (not id) since get_set_asides resolves via search
+        account_number = accounts[0].get("accountNumber")
+        if not account_number:
+            pytest.skip("First account has no accountNumber")
+        set_asides = eclipse_client.get_set_asides(account_number)
         assert isinstance(set_asides, (dict, list))
 
     def test_get_all_security_sets(self, eclipse_client):
