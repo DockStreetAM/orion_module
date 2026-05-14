@@ -7,7 +7,7 @@ from unittest.mock import Mock, patch
 
 import pytest
 
-from orionapi import EclipseAPI, OrionAPI
+from orionapi import EclipseAPI, OrionAPI, OrionAPIError
 
 
 class TestOrionAssets:
@@ -1718,3 +1718,153 @@ class TestOrionReportBatches:
         api = self._make_api()
         with pytest.raises(ValueError, match="batch_id must be a positive integer"):
             api.send_electronic_statements(batch_id=0)
+
+
+class TestDownloadReportPdf:
+    """Test OrionAPI.download_report_pdf."""
+
+    def _make_api(self):
+        with patch.object(OrionAPI, "login"):
+            return OrionAPI(usr="test", pwd="pass")
+
+    def _make_api_with_mock(self):
+        with patch.object(OrionAPI, "login"), patch.object(
+            OrionAPI, "_get_auth_header", return_value={}
+        ):
+            api = OrionAPI(usr="test", pwd="pass")
+        return api
+
+    def _pdf_response(self, content=b"%PDF-1.4\n%fake body bytes", content_type="application/pdf"):
+        resp = Mock()
+        resp.content = content
+        resp.headers = {"Content-Type": content_type}
+        return resp
+
+    def test_download_returns_bytes(self):
+        api = self._make_api_with_mock()
+        with patch.object(api, "api_request") as mock_req:
+            mock_req.return_value = self._pdf_response()
+
+            result = api.download_report_pdf(batch_id=5, entity_key=42)
+
+            call_args = mock_req.call_args
+            assert "Reporting/Batch/5/Entities/42/Action/Download" in call_args[0][0]
+            assert call_args[1]["headers"] == {"Accept": "application/pdf"}
+            assert result.startswith(b"%PDF-")
+
+    def test_download_accepts_octet_stream(self):
+        api = self._make_api_with_mock()
+        with patch.object(api, "api_request") as mock_req:
+            mock_req.return_value = self._pdf_response(content_type="application/octet-stream")
+
+            result = api.download_report_pdf(batch_id=5, entity_key=42)
+            assert result.startswith(b"%PDF-")
+
+    def test_download_rejects_html(self):
+        api = self._make_api_with_mock()
+        with patch.object(api, "api_request") as mock_req:
+            mock_req.return_value = self._pdf_response(
+                content=b"<html><body>error page</body></html>",
+                content_type="text/html",
+            )
+
+            with pytest.raises(OrionAPIError, match="Expected PDF response"):
+                api.download_report_pdf(batch_id=5, entity_key=42)
+
+    def test_download_rejects_wrong_magic_bytes(self):
+        api = self._make_api_with_mock()
+        with patch.object(api, "api_request") as mock_req:
+            mock_req.return_value = self._pdf_response(
+                content=b"NOT A PDF AT ALL",
+                content_type="application/pdf",
+            )
+
+            with pytest.raises(OrionAPIError, match="Expected PDF response"):
+                api.download_report_pdf(batch_id=5, entity_key=42)
+
+    def test_download_invalid_args(self):
+        api = self._make_api()
+        with pytest.raises(ValueError, match="batch_id must be a positive integer"):
+            api.download_report_pdf(batch_id=0, entity_key=1)
+        with pytest.raises(ValueError, match="batch_id must be a positive integer"):
+            api.download_report_pdf(batch_id="5", entity_key=1)
+        with pytest.raises(ValueError, match="entity_key must be a positive integer"):
+            api.download_report_pdf(batch_id=5, entity_key=0)
+        with pytest.raises(ValueError, match="entity_key must be a positive integer"):
+            api.download_report_pdf(batch_id=5, entity_key=-1)
+
+
+class TestPollUntilGenerated:
+    """Test OrionAPI.poll_until_generated."""
+
+    def _make_api(self):
+        with patch.object(OrionAPI, "login"):
+            return OrionAPI(usr="test", pwd="pass")
+
+    def test_returns_when_all_terminal(self):
+        api = self._make_api()
+        entities = [
+            {"id": 1, "generationStatus": "Generated"},
+            {"id": 2, "generationStatus": "ErroredReport"},
+        ]
+        with patch.object(api, "get_report_batch_entities", return_value=entities), patch(
+            "orionapi.time.sleep"
+        ) as mock_sleep:
+            result = api.poll_until_generated(batch_id=5)
+
+            assert result == entities
+            mock_sleep.assert_not_called()
+
+    def test_polls_until_done(self):
+        api = self._make_api()
+        progress = [
+            [{"id": 1, "generationStatus": "PendingGeneration"}],
+            [{"id": 1, "generationStatus": "PendingGeneration"}],
+            [{"id": 1, "generationStatus": "Generated"}],
+        ]
+        with patch.object(
+            api, "get_report_batch_entities", side_effect=progress
+        ) as mock_get, patch("orionapi.time.sleep"):
+            result = api.poll_until_generated(batch_id=5, poll_interval=1)
+
+            assert result == progress[-1]
+            assert mock_get.call_count == 3
+
+    def test_progress_callback_invoked(self):
+        api = self._make_api()
+        entities = [
+            {"id": 1, "generationStatus": "Generated"},
+            {"id": 2, "generationStatus": "PendingGeneration"},
+            {"id": 3, "generationStatus": "ErroredReport"},
+        ]
+        calls = []
+        # First poll: 2 terminal of 3; second poll: all terminal.
+        second = [dict(e, generationStatus="Generated") for e in entities]
+        with patch.object(api, "get_report_batch_entities", side_effect=[entities, second]), patch(
+            "orionapi.time.sleep"
+        ):
+            api.poll_until_generated(
+                batch_id=5,
+                progress_callback=lambda done, total: calls.append((done, total)),
+            )
+
+        assert calls == [(2, 3), (3, 3)]
+
+    def test_timeout_raises(self):
+        api = self._make_api()
+        pending = [{"id": 1, "generationStatus": "PendingGeneration"}]
+        # monotonic returns: deadline calc (0), loop check (1000) → past deadline.
+        with patch.object(api, "get_report_batch_entities", return_value=pending), patch(
+            "orionapi.time.monotonic", side_effect=[0, 1000]
+        ), patch("orionapi.time.sleep"):
+            with pytest.raises(TimeoutError, match="did not finish generating"):
+                api.poll_until_generated(batch_id=5, timeout=10)
+
+    def test_invalid_args(self):
+        api = self._make_api()
+        with pytest.raises(ValueError, match="batch_id must be a positive integer"):
+            api.poll_until_generated(batch_id=0)
+        with pytest.raises(ValueError, match="timeout must be a positive number"):
+            api.poll_until_generated(batch_id=5, timeout=0)
+        with pytest.raises(ValueError, match="poll_interval must be a positive number"):
+            api.poll_until_generated(batch_id=5, poll_interval=-1)
