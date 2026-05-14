@@ -1,4 +1,4 @@
-__version__ = "1.8.0"
+__version__ = "1.8.1"
 
 import logging
 import re
@@ -100,6 +100,8 @@ REPORT_GENERATION_STATUSES = {
     "PendingGeneration",
     "WillNotBeGenerated",
 }
+
+TERMINAL_GENERATION_STATUSES = {"Generated", "ErroredReport"}
 
 PORTFOLIO_TREE_FILTER_TYPES = {
     "PortfolioTree",
@@ -1829,9 +1831,7 @@ class OrionAPI(BaseAPI):
         if not isinstance(entity_key, int) or entity_key < 1:
             raise ValueError("entity_key must be a positive integer")
 
-        url = (
-            f"{self.base_url}/Reporting/Batch/{batch_id}" f"/Entities/{entity_key}/Action/Download"
-        )
+        url = f"{self.base_url}/Reporting/Batch/{batch_id}/Entities/{entity_key}/Action/Download"
         res = self.api_request(url, headers={"Accept": "application/pdf"})
 
         content_type = (res.headers.get("Content-Type") or "").lower()
@@ -1881,14 +1881,17 @@ class OrionAPI(BaseAPI):
         if not isinstance(poll_interval, (int, float)) or poll_interval <= 0:
             raise ValueError("poll_interval must be a positive number")
 
-        terminal = {"Generated", "ErroredReport"}
         deadline = time.monotonic() + timeout
+        last_reported = None
         while True:
             entities = self.get_report_batch_entities(batch_id)
             total = len(entities)
-            terminal_count = sum(1 for e in entities if e.get("generationStatus") in terminal)
-            if progress_callback is not None:
+            terminal_count = sum(
+                1 for e in entities if e.get("generationStatus") in TERMINAL_GENERATION_STATUSES
+            )
+            if progress_callback is not None and (terminal_count, total) != last_reported:
                 progress_callback(terminal_count, total)
+                last_reported = (terminal_count, total)
             if total > 0 and terminal_count == total:
                 return entities
             if time.monotonic() >= deadline:

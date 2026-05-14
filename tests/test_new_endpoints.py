@@ -1838,7 +1838,6 @@ class TestPollUntilGenerated:
             {"id": 3, "generationStatus": "ErroredReport"},
         ]
         calls = []
-        # First poll: 2 terminal of 3; second poll: all terminal.
         second = [dict(e, generationStatus="Generated") for e in entities]
         with patch.object(api, "get_report_batch_entities", side_effect=[entities, second]), patch(
             "orionapi.time.sleep"
@@ -1850,10 +1849,23 @@ class TestPollUntilGenerated:
 
         assert calls == [(2, 3), (3, 3)]
 
+    def test_progress_callback_skipped_when_unchanged(self):
+        api = self._make_api()
+        pending = [{"id": 1, "generationStatus": "PendingGeneration"}]
+        done = [{"id": 1, "generationStatus": "Generated"}]
+        calls = []
+        with patch.object(
+            api, "get_report_batch_entities", side_effect=[pending, pending, pending, done]
+        ), patch("orionapi.time.sleep"):
+            api.poll_until_generated(
+                batch_id=5,
+                progress_callback=lambda done, total: calls.append((done, total)),
+            )
+        assert calls == [(0, 1), (1, 1)]
+
     def test_timeout_raises(self):
         api = self._make_api()
         pending = [{"id": 1, "generationStatus": "PendingGeneration"}]
-        # monotonic returns: deadline calc (0), loop check (1000) → past deadline.
         with patch.object(api, "get_report_batch_entities", return_value=pending), patch(
             "orionapi.time.monotonic", side_effect=[0, 1000]
         ), patch("orionapi.time.sleep"):
