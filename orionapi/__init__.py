@@ -1,4 +1,4 @@
-__version__ = "1.7.0"
+__version__ = "1.8.0"
 
 import logging
 import re
@@ -1807,6 +1807,96 @@ class OrionAPI(BaseAPI):
 
         res = self.api_request(url, requests.post, **kwargs)
         return res.json()
+
+    def download_report_pdf(self, batch_id, entity_key):
+        """Download the rendered PDF for one entity in a generated report batch.
+
+        Args:
+            batch_id: Report batch ID (positive int).
+            entity_key: Entity key within the batch — the `id` field from each
+                entry returned by `get_report_batch_entities`. (The endpoint
+                path names this parameter `{key}`.)
+
+        Returns:
+            bytes: Raw PDF bytes; will start with b"%PDF-".
+
+        Raises:
+            ValueError: if batch_id/entity_key are not positive ints.
+            OrionAPIError: if the response body is not a PDF.
+        """
+        if not isinstance(batch_id, int) or batch_id < 1:
+            raise ValueError("batch_id must be a positive integer")
+        if not isinstance(entity_key, int) or entity_key < 1:
+            raise ValueError("entity_key must be a positive integer")
+
+        url = (
+            f"{self.base_url}/Reporting/Batch/{batch_id}" f"/Entities/{entity_key}/Action/Download"
+        )
+        res = self.api_request(url, headers={"Accept": "application/pdf"})
+
+        content_type = (res.headers.get("Content-Type") or "").lower()
+        body = res.content
+        is_pdf = ("pdf" in content_type or "octet-stream" in content_type) and body.startswith(
+            b"%PDF-"
+        )
+        if not is_pdf:
+            raise OrionAPIError(
+                f"Expected PDF response from {url}; "
+                f"got Content-Type={content_type!r}, "
+                f"first 16 bytes={body[:16]!r}"
+            )
+        return body
+
+    def poll_until_generated(
+        self,
+        batch_id,
+        timeout=600,
+        poll_interval=5,
+        progress_callback=None,
+    ):
+        """Block until every entity in the batch reaches a terminal generation state.
+
+        Terminal states are "Generated" and "ErroredReport". Useful after
+        `generate_statements()` to wait for PDFs to be ready before
+        downloading them.
+
+        Args:
+            batch_id: Report batch ID (positive int).
+            timeout: Wall-clock timeout in seconds (default 600).
+            poll_interval: Seconds between polls (default 5).
+            progress_callback: Optional callable invoked after each poll
+                with (terminal_count, total_count) for logging.
+
+        Returns:
+            list[dict]: Final entities from `get_report_batch_entities`.
+
+        Raises:
+            ValueError: on invalid args.
+            TimeoutError: if not all entities are terminal within `timeout`.
+        """
+        if not isinstance(batch_id, int) or batch_id < 1:
+            raise ValueError("batch_id must be a positive integer")
+        if not isinstance(timeout, (int, float)) or timeout <= 0:
+            raise ValueError("timeout must be a positive number")
+        if not isinstance(poll_interval, (int, float)) or poll_interval <= 0:
+            raise ValueError("poll_interval must be a positive number")
+
+        terminal = {"Generated", "ErroredReport"}
+        deadline = time.monotonic() + timeout
+        while True:
+            entities = self.get_report_batch_entities(batch_id)
+            total = len(entities)
+            terminal_count = sum(1 for e in entities if e.get("generationStatus") in terminal)
+            if progress_callback is not None:
+                progress_callback(terminal_count, total)
+            if total > 0 and terminal_count == total:
+                return entities
+            if time.monotonic() >= deadline:
+                raise TimeoutError(
+                    f"Batch {batch_id} did not finish generating within "
+                    f"{timeout}s ({terminal_count}/{total} terminal)"
+                )
+            time.sleep(poll_interval)
 
     def get_report_batch_verbose(self, batch_id, expand="All"):
         """Get verbose details of a report batch.
