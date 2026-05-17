@@ -632,6 +632,69 @@ class TestOrionAPI:
         # Search should return subset or equal
         assert len(filtered) <= len(all_queries)
 
+    def test_search_queries_returns_rows(self, orion_client):
+        """search_queries with a non-empty term returns rows with id and name.
+
+        Note: the underlying endpoint requires a non-empty Search parameter;
+        passing "" returns 0 rows from the Orion endpoint.
+        """
+        queries = orion_client.search_queries(search_term="a", top=10)
+        assert isinstance(queries, list)
+        if not queries:
+            pytest.skip("Tenant has no saved queries matching 'a'")
+        assert "id" in queries[0]
+        assert "name" in queries[0]
+
+    def test_search_queries_with_term(self, orion_client):
+        """search_queries(term) returns rows whose name contains the term."""
+        seeds = orion_client.search_queries(search_term="a", top=10)
+        if not seeds:
+            pytest.skip("Tenant has no saved queries to seed search term")
+
+        term = seeds[0].get("name", "")[:3]
+        if not term:
+            pytest.skip("Seed query has no usable name prefix")
+
+        filtered = orion_client.search_queries(search_term=term, top=100)
+        assert isinstance(filtered, list)
+        assert len(filtered) >= 1
+        term_lower = term.lower()
+        for row in filtered:
+            assert term_lower in row.get("name", "").lower()
+
+    def test_search_queries_top_caps_results(self, orion_client):
+        """$top caps the result count."""
+        queries = orion_client.search_queries(search_term="a", top=2)
+        assert isinstance(queries, list)
+        assert len(queries) <= 2
+
+    def test_find_query_by_name_exact(self, orion_client):
+        """find_query_by_name returns the id for an exact-name match."""
+        queries = orion_client.search_queries(search_term="a", top=10)
+        if not queries:
+            pytest.skip("Tenant has no saved queries")
+
+        target = next((q for q in queries if q.get("name") and q.get("id")), None)
+        if target is None:
+            pytest.skip("No query has both name and id")
+
+        found_id = orion_client.find_query_by_name(target["name"])
+        assert found_id == target["id"]
+
+    def test_find_query_by_name_missing(self, orion_client):
+        """find_query_by_name returns None when no query matches."""
+        unlikely = "ZZZ_no_such_query_orionapi_test_marker_8290"
+        assert orion_client.find_query_by_name(unlikely) is None
+
+    def test_get_query_metadata(self, orion_client, orion_query_id):
+        """get_query_metadata returns the record plus a params list."""
+        meta = orion_client.get_query_metadata(orion_query_id)
+        assert isinstance(meta, dict)
+        assert "params" in meta
+        assert isinstance(meta["params"], list)
+        # params should mirror get_query_params for the same id
+        assert meta["params"] == orion_client.get_query_params(orion_query_id)
+
     # Custom Field Definitions
 
     def test_get_custom_field_definitions_client(self, orion_client):
