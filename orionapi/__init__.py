@@ -1,4 +1,4 @@
-__version__ = "1.8.1"
+__version__ = "1.9.0"
 
 import logging
 import re
@@ -414,24 +414,78 @@ class OrionAPI(BaseAPI):
         )
         return res.json()
 
-    def get_all_queries(self, search_term="", top=100):
-        """Get all custom queries/reports available in Orion Connect.
+    def search_queries(self, search_term="", top=100, skip=0):
+        """Search the firm's saved DataQueries by name substring.
 
         Args:
-            search_term: Optional search term to filter queries by name (default "")
-            top: Max results to return (default 100)
+            search_term: Name substring filter. **The Orion endpoint
+                requires a non-empty term**; passing ``""`` returns an
+                empty list rather than "all queries". Pass a single
+                character (e.g., ``"a"``) for a broad result set.
+            top: Max results to return. Default 100.
+            skip: Pagination offset (OData ``$skip``). Default 0.
 
         Returns:
-            list: Matching queries with id, name, and other metadata
+            list: dicts, each with ``id`` and ``name``. For richer fields
+            (description, owner, etc.), call :meth:`get_query_metadata`
+            with the id.
+
+        Raises:
+            OrionAPIError: on non-200 responses.
         """
         if not isinstance(search_term, str):
             raise ValueError("search_term must be a string")
         if not isinstance(top, int) or top < 1:
             raise ValueError("top must be a positive integer")
+        if not isinstance(skip, int) or skip < 0:
+            raise ValueError("skip must be a non-negative integer")
 
-        params = urlencode({"search": search_term, "top": top})
+        params = urlencode({"Search": search_term, "$top": top, "$skip": skip})
         res = self.api_request(f"{self.base_url}/Reporting/Custom/Simple/Search?{params}")
-        return res.json()
+        data = res.json()
+        # Tolerate OData envelope ({"value": [...]}) even though the
+        # endpoint has returned a bare list in practice.
+        return data if isinstance(data, list) else data.get("value", [])
+
+    def find_query_by_name(self, name):
+        """Return the ID of the saved query whose name exactly matches ``name``.
+
+        Args:
+            name: Exact query name to match (case-sensitive).
+
+        Returns:
+            int: The query ID, or None if no exact match is found.
+        """
+        if not isinstance(name, str) or not name:
+            raise ValueError("name must be a non-empty string")
+        for row in self.search_queries(search_term=name, top=100):
+            if row.get("name") == name:
+                return row.get("id")
+        return None
+
+    def get_query_metadata(self, id):
+        """Return the full saved-query record plus its params list.
+
+        Args:
+            id: The custom query ID.
+
+        Returns:
+            dict: The saved-query record (id, name, description, owner,
+            isPrivate, ...) passed through from the endpoint, plus a
+            ``params`` key mirroring ``prompts``.
+
+        Raises:
+            NotFoundError: if the query doesn't exist.
+        """
+        payload = self.get_query_payload(id)
+        return {**payload, "params": payload.get("prompts", [])}
+
+    def get_all_queries(self, search_term="", top=100):
+        """Deprecated alias for :meth:`search_queries`.
+
+        Kept for backwards compatibility with pre-1.9 callers.
+        """
+        return self.search_queries(search_term=search_term, top=top)
 
     # -------------------------------------------------------------------------
     # Custom Field Definitions
