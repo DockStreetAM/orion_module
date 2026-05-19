@@ -1,7 +1,8 @@
-__version__ = "1.9.0"
+__version__ = "1.10.0"
 
 import logging
 import re
+import threading
 import time
 from pathlib import Path
 from urllib.parse import urlencode
@@ -142,9 +143,11 @@ class NotFoundError(OrionAPIError):
 
 
 class RateLimiter:
-    """Simple rate limiter to prevent API abuse.
+    """Thread-safe rate limiter to prevent API abuse.
 
-    Implements a token bucket algorithm to limit requests per second.
+    Limits requests per second across all threads sharing this instance.
+    Concurrent ``wait()`` callers serialize on an internal lock so that
+    each one observes the previous caller's reservation.
 
     Args:
         calls_per_second: Maximum number of API calls per second (default 10)
@@ -153,21 +156,23 @@ class RateLimiter:
     def __init__(self, calls_per_second=10):
         self.calls_per_second = calls_per_second
         self.min_interval = 1.0 / calls_per_second if calls_per_second > 0 else 0
-        self.last_call = 0
+        self.last_call = 0.0
+        self._lock = threading.Lock()
 
     def wait(self):
         """Wait if necessary to respect rate limit."""
         if self.calls_per_second <= 0:
             return  # Rate limiting disabled
 
-        now = time.time()
-        time_since_last = now - self.last_call
+        with self._lock:
+            now = time.time()
+            sleep_for = max(0.0, self.min_interval - (now - self.last_call))
+            # Reserve the next allowed slot under the lock so concurrent
+            # callers see the updated timestamp and block correctly.
+            self.last_call = now + sleep_for
 
-        if time_since_last < self.min_interval:
-            sleep_time = self.min_interval - time_since_last
-            time.sleep(sleep_time)
-
-        self.last_call = time.time()
+        if sleep_for > 0:
+            time.sleep(sleep_for)
 
 
 class BaseAPI:
@@ -190,6 +195,9 @@ class BaseAPI:
         self._rate_limiter = RateLimiter(calls_per_second=rate_limit)
         self.verify_ssl = verify_ssl
         self.ca_bundle = ca_bundle
+        # RLock so subclasses can hold the lock across an internal call
+        # path that re-enters auth-header construction.
+        self._token_lock = threading.RLock()
 
     def _get_auth_header(self):
         """Return authorization header dict. Subclasses must implement."""
@@ -297,6 +305,11 @@ class OrionAPI(BaseAPI):
 
     Provides access to reporting and custom query functionality.
 
+    Instances are safe to share across threads after ``login()``. Token
+    reads/writes, the rate limiter, and the custom-field cache are
+    serialized internally; callers may run methods concurrently from
+    multiple threads on a single client.
+
     Args:
         usr: Username for authentication
         pwd: Password for authentication
@@ -314,6 +327,8 @@ class OrionAPI(BaseAPI):
         super().__init__(rate_limit=rate_limit, verify_ssl=verify_ssl, ca_bundle=ca_bundle)
         self.token = None
         self.base_url = "https://api.orionadvisor.com/api/v1/"
+        self._custom_field_cache = {}
+        self._custom_field_lock = threading.Lock()
 
         if usr is not None:
             self.login(usr, pwd)
@@ -329,16 +344,20 @@ class OrionAPI(BaseAPI):
         Raises:
             AuthenticationError: If credentials are invalid
         """
-        res = requests.get(f"{self.base_url}/security/token", auth=(usr, pwd))
-        if not res.ok:
-            raise AuthenticationError(f"Login failed: {res.status_code} {res.reason}")
-        try:
-            self.token = res.json()["access_token"]
-        except (KeyError, ValueError) as e:
-            raise AuthenticationError(f"Invalid response from auth endpoint: {e}") from e
+        with self._token_lock:
+            res = requests.get(f"{self.base_url}/security/token", auth=(usr, pwd))
+            if not res.ok:
+                raise AuthenticationError(f"Login failed: {res.status_code} {res.reason}")
+            try:
+                self.token = res.json()["access_token"]
+            except (KeyError, ValueError) as e:
+                raise AuthenticationError(f"Invalid response from auth endpoint: {e}") from e
 
     def _get_auth_header(self):
-        return {"Authorization": "Session " + self.token}
+        with self._token_lock:
+            if self.token is None:
+                raise AuthenticationError("Not logged in")
+            return {"Authorization": "Session " + self.token}
 
     def check_username(self):
         """Get the authenticated user's login ID.
@@ -491,8 +510,6 @@ class OrionAPI(BaseAPI):
     # Custom Field Definitions
     # -------------------------------------------------------------------------
 
-    _custom_field_cache = {}  # Cache: entity -> {display_name: code}
-
     def get_custom_field_definitions(self, entity):
         """Get custom field definitions for an entity type.
 
@@ -505,10 +522,9 @@ class OrionAPI(BaseAPI):
         res = self.api_request(f"{self.base_url}/Settings/UserDefinedFields/Definitions/{entity}")
         fields = res.json()
 
-        # Cache the display name -> code mapping
-        self._custom_field_cache[entity] = {
-            f["description"]: f["code"] for f in fields if f.get("description")
-        }
+        mapping = {f["description"]: f["code"] for f in fields if f.get("description")}
+        with self._custom_field_lock:
+            self._custom_field_cache[entity] = mapping
         return fields
 
     def _translate_custom_fields(self, entity, data):
@@ -521,16 +537,19 @@ class OrionAPI(BaseAPI):
         Returns:
             dict: Data with display names replaced by udf-prefixed codes
         """
-        # Ensure cache is populated
-        if entity not in self._custom_field_cache:
+        with self._custom_field_lock:
+            name_to_code = self._custom_field_cache.get(entity)
+        # Refresh outside the lock — the HTTP call shouldn't block other
+        # entities' translations, and get_custom_field_definitions
+        # re-acquires the lock to install the result.
+        if name_to_code is None:
             self.get_custom_field_definitions(entity)
+            with self._custom_field_lock:
+                name_to_code = self._custom_field_cache.get(entity, {})
 
-        name_to_code = self._custom_field_cache.get(entity, {})
         translated = {}
-
         for key, value in data.items():
             if key in name_to_code:
-                # It's a display name - translate to udf + code
                 translated[f"udf{name_to_code[key]}"] = value
             else:
                 translated[key] = value
@@ -2062,6 +2081,9 @@ class EclipseAPI(BaseAPI):
 
     Provides access to accounts, portfolios, models, orders, and trade tools.
 
+    Instances are safe to share across threads after ``login()``. Token
+    reads/writes and the rate limiter are serialized internally.
+
     Args:
         usr: Username for authentication
         pwd: Password for authentication
@@ -2103,29 +2125,35 @@ class EclipseAPI(BaseAPI):
         if orion_token is None and usr is None:
             raise AuthenticationError("Must provide either usr/pwd or orion_token")
 
-        if usr is not None:
-            res = requests.get(f"{self.base_url}/admin/token", auth=(usr, pwd))
-            if not res.ok:
-                raise AuthenticationError(f"Login failed: {res.status_code} {res.reason}")
-            try:
-                self.eclipse_token = res.json()["eclipse_access_token"]
-            except (KeyError, ValueError) as e:
-                raise AuthenticationError(f"Invalid response from auth endpoint: {e}") from e
+        with self._token_lock:
+            if usr is not None:
+                res = requests.get(f"{self.base_url}/admin/token", auth=(usr, pwd))
+                if not res.ok:
+                    raise AuthenticationError(f"Login failed: {res.status_code} {res.reason}")
+                try:
+                    self.eclipse_token = res.json()["eclipse_access_token"]
+                except (KeyError, ValueError) as e:
+                    raise AuthenticationError(f"Invalid response from auth endpoint: {e}") from e
 
-        elif orion_token is not None:
-            res = requests.get(
-                f"{self.base_url}/admin/token",
-                headers={"Authorization": "Session " + orion_token},
-            )
-            if not res.ok:
-                raise AuthenticationError(f"Token exchange failed: {res.status_code} {res.reason}")
-            try:
-                self.eclipse_token = res.json()["eclipse_access_token"]
-            except (KeyError, ValueError) as e:
-                raise AuthenticationError(f"Invalid response from auth endpoint: {e}") from e
+            elif orion_token is not None:
+                res = requests.get(
+                    f"{self.base_url}/admin/token",
+                    headers={"Authorization": "Session " + orion_token},
+                )
+                if not res.ok:
+                    raise AuthenticationError(
+                        f"Token exchange failed: {res.status_code} {res.reason}"
+                    )
+                try:
+                    self.eclipse_token = res.json()["eclipse_access_token"]
+                except (KeyError, ValueError) as e:
+                    raise AuthenticationError(f"Invalid response from auth endpoint: {e}") from e
 
     def _get_auth_header(self):
-        return {"Authorization": "Session " + self.eclipse_token}
+        with self._token_lock:
+            if self.eclipse_token is None:
+                raise AuthenticationError("Not logged in")
+            return {"Authorization": "Session " + self.eclipse_token}
 
     def check_username(self):
         """Get the authenticated user's login ID.
