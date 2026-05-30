@@ -1,4 +1,4 @@
-__version__ = "2.2.0"
+__version__ = "2.3.0"
 
 import logging
 import re
@@ -290,10 +290,16 @@ class BaseAPI:
         res = req_func(url, headers=headers, **kwargs)
 
         if not res.ok:
-            # Try to get error message from response body
+            # Try to get error message from response body. The body may be a JSON
+            # object ({"message": ...}), a bare JSON string, a list, or non-JSON —
+            # so guard the .get() to avoid masking the real HTTP error with an
+            # AttributeError when the body isn't a dict.
             try:
                 error_body = res.json()
-                message = error_body.get("message", str(error_body))
+                if isinstance(error_body, dict):
+                    message = error_body.get("message", str(error_body))
+                else:
+                    message = str(error_body)
             except ValueError:
                 message = res.text or res.reason
 
@@ -4817,6 +4823,396 @@ class EclipseV2(EclipseBase):
             dict: Banner-spinner status
         """
         res = self.api_request(f"{self.base_url_v2}/Analytics/BannerSpinner/Status")
+        return res.json()
+
+    # --- Trading / TradeInstance (v2-only): the richer v2 instance surface -------
+    # Named with a ``trading_`` prefix to stay distinct from the v1
+    # ``get_trade_instance(s)`` methods, which hit the separate /tradeorder surface.
+
+    def get_trading_instances(
+        self,
+        trade_instance_id=None,
+        advisor_external_id=None,
+        is_enabled=None,
+        is_deleted=None,
+    ):
+        """Get trade instance(s) from the v2 Trading surface.
+
+        Args:
+            trade_instance_id: Optional trade-instance ID (maps to ``tradeInstanceId``)
+            advisor_external_id: Optional advisor external ID (``advisorExternalId``)
+            is_enabled: Optional bool (maps to ``isEnabled``)
+            is_deleted: Optional bool (maps to ``isDeleted``)
+
+        Returns:
+            list | dict: Trade instance(s)
+        """
+        params = {}
+        if trade_instance_id is not None:
+            params["tradeInstanceId"] = trade_instance_id
+        if advisor_external_id is not None:
+            params["advisorExternalId"] = advisor_external_id
+        if is_enabled is not None:
+            params["isEnabled"] = str(is_enabled).lower()
+        if is_deleted is not None:
+            params["isDeleted"] = str(is_deleted).lower()
+        res = self.api_request(f"{self.base_url_v2}/Trading/TradeInstance", params=params)
+        return res.json()
+
+    def get_trading_instance_trades(self, trade_instance_id):
+        """Get the trades for a v2 trade instance.
+
+        Args:
+            trade_instance_id: Trade-instance ID
+
+        Returns:
+            list: Trade dicts
+        """
+        res = self.api_request(
+            f"{self.base_url_v2}/Trading/TradeInstance/{trade_instance_id}/Trades"
+        )
+        return res.json()
+
+    def get_trading_instances_for_user(self, start_date, end_date, offset=None, limit=None):
+        """Get trade instances for portfolios accessible to the user, by date range.
+
+        Args:
+            start_date: Start date (ISO YYYY-MM-DD; maps to ``startDate``)
+            end_date: End date (ISO YYYY-MM-DD; maps to ``endDate``)
+            offset: Optional paging offset
+            limit: Optional paging limit
+
+        Returns:
+            list: Trade instance dicts
+        """
+        params = {"startDate": start_date, "endDate": end_date}
+        if offset is not None:
+            params["offset"] = offset
+        if limit is not None:
+            params["limit"] = limit
+        res = self.api_request(f"{self.base_url_v2}/Trading/TradeInstance/ForUser", params=params)
+        return res.json()
+
+    def get_trading_instances_by_date_range(self, start_date, end_date):
+        """Get the trade-instance grid for a date range.
+
+        Args:
+            start_date: Start date (ISO YYYY-MM-DD)
+            end_date: End date (ISO YYYY-MM-DD)
+
+        Returns:
+            list: Trade instance dicts
+        """
+        res = self.api_request(
+            f"{self.base_url_v2}/Trading/TradeInstance/GetByDateRange",
+            params={"startDate": start_date, "endDate": end_date},
+        )
+        return res.json()
+
+    def get_trading_instances_paginated(
+        self,
+        start_date=None,
+        end_date=None,
+        portfolio_id=None,
+        external_firm_id=None,
+        external_account_id=None,
+        skip=None,
+        take=None,
+    ):
+        """Get a paginated list of trade instances (without trades) plus a total count.
+
+        Note:
+            Eclipse requires a scoping filter — pass ``portfolio_id`` (or the
+            external firm/account IDs). A date window alone returns
+            ``400 'Unable to retrieve trade instances'``.
+
+        Args:
+            start_date / end_date: Optional ISO date window
+            portfolio_id: Portfolio filter (maps to ``portfolioId``)
+            external_firm_id: Optional external firm ID (``externalFirmId``)
+            external_account_id: Optional external account ID (``externalAccountId``)
+            skip / take: Optional paging window
+
+        Returns:
+            dict: Paginated result with ``data`` (instances) and ``total`` count
+        """
+        params = {}
+        for key, val in (
+            ("startDate", start_date),
+            ("endDate", end_date),
+            ("portfolioId", portfolio_id),
+            ("externalFirmId", external_firm_id),
+            ("externalAccountId", external_account_id),
+            ("skip", skip),
+            ("take", take),
+        ):
+            if val is not None:
+                params[key] = val
+        res = self.api_request(f"{self.base_url_v2}/Trading/TradeInstance/Paginated", params=params)
+        return res.json()
+
+    def get_trading_instances_with_trades(
+        self,
+        portfolio_id=None,
+        start_date=None,
+        end_date=None,
+        order_status=None,
+        skip=None,
+        take=None,
+    ):
+        """Get a paginated list of trade instances including their trades.
+
+        Args:
+            portfolio_id: Optional portfolio filter (maps to ``portfolioId``)
+            start_date / end_date: Optional ISO date window
+            order_status: Optional order-status filter (``orderStatus``)
+            skip / take: Optional paging window
+
+        Returns:
+            dict: Paginated result with instances + trades
+        """
+        params = {}
+        for key, val in (
+            ("portfolioId", portfolio_id),
+            ("startDate", start_date),
+            ("endDate", end_date),
+            ("orderStatus", order_status),
+            ("skip", skip),
+            ("take", take),
+        ):
+            if val is not None:
+                params[key] = val
+        res = self.api_request(
+            f"{self.base_url_v2}/Trading/TradeInstance/WithTrades", params=params
+        )
+        return res.json()
+
+    def get_trading_active_batch_jobs(self, start_date=None, end_date=None):
+        """Get active batch-job entries for the user.
+
+        Args:
+            start_date / end_date: Optional ISO date window
+
+        Returns:
+            list: Active batch-job dicts
+        """
+        params = {}
+        if start_date is not None:
+            params["startDate"] = start_date
+        if end_date is not None:
+            params["endDate"] = end_date
+        res = self.api_request(f"{self.base_url_v2}/Trading/ActiveBatchJobs", params=params)
+        return res.json()
+
+    # --- Optimization (v2-only): per-batch / per-account detail reads ------------
+
+    def get_optimization_accounts(self, batch_id):
+        """Get the current state of accounts in an optimization batch.
+
+        Args:
+            batch_id: Optimization batch ID
+
+        Returns:
+            list: Account-state dicts
+        """
+        res = self.api_request(f"{self.base_url_v2}/Optimization/accounts/{batch_id}")
+        return res.json()
+
+    def get_optimization_account_summary(self, batch_id, account_id=None):
+        """Get the optimization summary (and holdings) for an account in a batch.
+
+        Args:
+            batch_id: Optimization batch ID
+            account_id: Optional account ID (maps to ``accountId``)
+
+        Returns:
+            dict: Optimization summary
+        """
+        params = {}
+        if account_id is not None:
+            params["accountId"] = account_id
+        res = self.api_request(
+            f"{self.base_url_v2}/Optimization/summaries/{batch_id}", params=params
+        )
+        return res.json()
+
+    def get_optimization_batch_account_summaries(self, batch_id):
+        """Get every optimization summary belonging to a batch (one row per account).
+
+        Args:
+            batch_id: Optimization batch ID
+
+        Returns:
+            list: Optimization summary dicts
+        """
+        res = self.api_request(f"{self.base_url_v2}/Optimization/summaries/batch/{batch_id}")
+        return res.json()
+
+    def get_optimization_account_messages(self, batch_id, account_id=None):
+        """Get optimizer-emitted messages for an account in a batch.
+
+        Args:
+            batch_id: Optimization batch ID
+            account_id: Optional account ID (maps to ``accountId``)
+
+        Returns:
+            list: Optimizer message dicts
+        """
+        params = {}
+        if account_id is not None:
+            params["accountId"] = account_id
+        res = self.api_request(
+            f"{self.base_url_v2}/Optimization/summaries/{batch_id}/messages", params=params
+        )
+        return res.json()
+
+    def get_optimization_log(self, connect_account_id=None, batch_name=None, connect_firm_id=None):
+        """Get the optimization log.
+
+        Args:
+            connect_account_id: Optional Orion Connect account ID (``connectAccountId``)
+            batch_name: Optional batch name (``batchName``)
+            connect_firm_id: Optional Orion Connect firm ID (``connectFirmId``)
+
+        Returns:
+            dict | list: Optimization log
+        """
+        params = {}
+        if connect_account_id is not None:
+            params["connectAccountId"] = connect_account_id
+        if batch_name is not None:
+            params["batchName"] = batch_name
+        if connect_firm_id is not None:
+            params["connectFirmId"] = connect_firm_id
+        res = self.api_request(f"{self.base_url_v2}/Optimization/Log", params=params)
+        return res.json()
+
+    def get_optimization_holdings_target(self, account_id, batch_name=None, al_client_id=None):
+        """Get the holdings and target strategies for an account in a batch.
+
+        Args:
+            account_id: Account ID
+            batch_name: Optional batch name (``batchName``)
+            al_client_id: Optional AL client ID (``alClientId``)
+
+        Returns:
+            dict: Holdings + target strategies
+        """
+        params = {}
+        if batch_name is not None:
+            params["batchName"] = batch_name
+        if al_client_id is not None:
+            params["alClientId"] = al_client_id
+        res = self.api_request(
+            f"{self.base_url_v2}/Optimization/HoldingsTarget/{account_id}", params=params
+        )
+        return res.json()
+
+    # --- SavedView (v2-only) -----------------------------------------------------
+
+    def get_saved_views(self, view_type_id, name=None):
+        """Get the current user's saved views for a view type.
+
+        Args:
+            view_type_id: View-type ID
+            name: Optional name filter (maps to ``name``)
+
+        Returns:
+            list: Saved-view dicts
+        """
+        params = {}
+        if name is not None:
+            params["name"] = name
+        res = self.api_request(
+            f"{self.base_url_v2}/SavedView/ViewType/{view_type_id}", params=params
+        )
+        return res.json()
+
+    def get_saved_views_ranked(self, view_type_id, simple_views=None, filter_required=None):
+        """Get the user's saved views for a view type, including rank/order.
+
+        Args:
+            view_type_id: View-type ID
+            simple_views: Optional bool (maps to ``simpleViews``)
+            filter_required: Optional bool (maps to ``filterRequired``)
+
+        Returns:
+            list: Ranked saved-view dicts
+        """
+        params = {}
+        if simple_views is not None:
+            params["simpleViews"] = str(simple_views).lower()
+        if filter_required is not None:
+            params["filterRequired"] = str(filter_required).lower()
+        res = self.api_request(
+            f"{self.base_url_v2}/SavedView/ViewType/{view_type_id}/Rank", params=params
+        )
+        return res.json()
+
+    def execute_saved_view(self, view_id):
+        """Execute a saved view and return the number of records.
+
+        Args:
+            view_id: Saved-view ID
+
+        Returns:
+            dict: Execution result (record count)
+        """
+        res = self.api_request(f"{self.base_url_v2}/SavedView/Execute/{view_id}")
+        return res.json()
+
+    # --- Notes (v2-only) ---------------------------------------------------------
+
+    def get_notes(self, related_type, related_id):
+        """Get the notes for a related entity.
+
+        Args:
+            related_type: Related entity type (maps to ``relatedType``)
+            related_id: Related entity ID (maps to ``relatedId``)
+
+        Returns:
+            list: Note dicts
+        """
+        res = self.api_request(
+            f"{self.base_url_v2}/Notes",
+            params={"relatedType": related_type, "relatedId": related_id},
+        )
+        return res.json()
+
+    def get_notes_history(self, related_type, related_id, from_date=None, to_date=None):
+        """Get notes history for a related entity.
+
+        Args:
+            related_type: Related entity type (maps to ``relatedType``)
+            related_id: Related entity ID (maps to ``relatedId``)
+            from_date: Optional start date (``fromDate``)
+            to_date: Optional end date (``toDate``)
+
+        Returns:
+            list: Note-history dicts
+        """
+        params = {"relatedType": related_type, "relatedId": related_id}
+        if from_date is not None:
+            params["fromDate"] = from_date
+        if to_date is not None:
+            params["toDate"] = to_date
+        res = self.api_request(f"{self.base_url_v2}/Notes/History", params=params)
+        return res.json()
+
+    def get_note_related_entities(self, entity_id, entity_type):
+        """Get entities related to a primary entity (for notes).
+
+        Args:
+            entity_id: Primary entity ID (maps to ``entityId``)
+            entity_type: Primary entity type (maps to ``entityType``)
+
+        Returns:
+            list: Related-entity dicts
+        """
+        res = self.api_request(
+            f"{self.base_url_v2}/Notes/RelatedEntities",
+            params={"entityId": entity_id, "entityType": entity_type},
+        )
         return res.json()
 
 
