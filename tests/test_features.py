@@ -441,3 +441,50 @@ class TestGetSetAsides:
         by_id = {r["set_aside_id"]: r for r in result}
         assert by_id[5]["end_date"] == "2026-12-31"
         assert by_id[1723]["end_date"] is None
+
+
+class TestEclipseRequest:
+    """Tests for the generic eclipse_request escape hatch."""
+
+    def test_v1_get_default(self):
+        """version='v1' targets the /v1 base with a GET by default."""
+        api = _eclipse_for_set_asides()
+        mock_get = Mock(return_value=Mock(ok=True, json=lambda: {"ok": True}))
+        with patch("requests.get", mock_get):
+            result = api.eclipse_request("account/accounts/simple")
+        assert result == {"ok": True}
+        assert mock_get.call_args.args[0] == (
+            "https://api.orioneclipse.com/v1/account/accounts/simple"
+        )
+
+    def test_v2_post_with_body(self):
+        """version='v2' targets the /api/v2 host-root base; method/body pass through."""
+        api = _eclipse_for_set_asides()
+        mock_post = _mock_post([{"id": 1}])
+        with patch("requests.post", mock_post):
+            result = api.eclipse_request(
+                "/Account/Accounts/SetAsideCashSettings", version="v2", method="post", json=[1]
+            )
+        assert result == [{"id": 1}]
+        assert mock_post.call_args.args[0] == (
+            "https://api.orioneclipse.com/api/v2/Account/Accounts/SetAsideCashSettings"
+        )
+        assert mock_post.call_args.kwargs["json"] == [1]
+
+    def test_leading_slash_optional(self):
+        """Paths with or without a leading slash resolve identically."""
+        api = _eclipse_for_set_asides()
+        mock_get = Mock(return_value=Mock(ok=True, json=lambda: {}))
+        with patch("requests.get", mock_get):
+            api.eclipse_request("Account/Accounts", version="v2")
+            api.eclipse_request("/Account/Accounts", version="v2")
+        urls = {call.args[0] for call in mock_get.call_args_list}
+        assert urls == {"https://api.orioneclipse.com/api/v2/Account/Accounts"}
+
+    def test_invalid_version_and_method_raise(self):
+        """Unknown version or HTTP method raises ValueError."""
+        api = _eclipse_for_set_asides()
+        with pytest.raises(ValueError, match="version must be"):
+            api.eclipse_request("x", version="v3")
+        with pytest.raises(ValueError, match="method must be"):
+            api.eclipse_request("x", method="patch")
