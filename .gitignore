@@ -14,3 +14,8 @@ EclipseAPIDocs.html
 htmlcov/
 
 prod_-_CLI_Quickstart-oauth-credentials.txt
+
+# Local API reference blobs / working docs (large, not source)
+API Docs/
+PRD_*.md
+RESUME.md
