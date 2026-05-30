@@ -247,12 +247,15 @@ class BaseAPI:
 
         return data
 
-    def api_request(self, url, req_func=requests.get, timeout=30, **kwargs):
+    def api_request(self, url, req_func=None, timeout=30, **kwargs):
         """Make an authenticated API request with error handling.
 
         Args:
             url: The API endpoint URL
-            req_func: The requests function to use (get, post, put, delete)
+            req_func: The requests function to use (get, post, put, delete).
+                Defaults to ``requests.get``. Resolved at call time (not bound as a
+                default argument) so that patching ``requests.get`` in tests takes
+                effect for GET methods.
             timeout: Request timeout in seconds (default 30)
             **kwargs: Additional arguments passed to the request
 
@@ -264,6 +267,9 @@ class BaseAPI:
             NotFoundError: On 404 responses
             OrionAPIError: On other 4xx/5xx responses
         """
+        if req_func is None:
+            req_func = requests.get
+
         # Apply rate limiting
         self._rate_limiter.wait()
 
