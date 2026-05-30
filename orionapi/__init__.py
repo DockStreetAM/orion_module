@@ -1,4 +1,4 @@
-__version__ = "1.11.0"
+__version__ = "1.12.0"
 
 import logging
 import re
@@ -2158,6 +2158,48 @@ class EclipseAPI(BaseAPI):
             if self.eclipse_token is None:
                 raise AuthenticationError("Not logged in")
             return {"Authorization": "Session " + self.eclipse_token}
+
+    def eclipse_request(self, path, version="v1", method="get", **kwargs):
+        """Call any Eclipse endpoint on either API surface and return parsed JSON.
+
+        An explicit escape hatch for endpoints this wrapper does not yet provide a
+        typed method for — especially the large ``/api/v2`` surface. This is NOT a
+        hidden fallback: the caller chooses the version explicitly.
+
+        Note:
+            The v1 and v2 surfaces live at different roots on the same host
+            (``/v1/...`` vs ``/api/v2/...``); ``version`` selects which.
+
+        Args:
+            path: Endpoint path, with or without a leading slash (e.g.
+                ``"account/accounts/simple"`` or ``"/Account/Accounts"``).
+            version: ``"v1"`` (default) or ``"v2"``.
+            method: HTTP method: ``"get"`` (default), ``"post"``, ``"put"``,
+                or ``"delete"``.
+            **kwargs: Passed through to the request (e.g. ``json=``, ``params=``).
+
+        Returns:
+            The parsed JSON response.
+
+        Raises:
+            ValueError: If ``version`` or ``method`` is not recognized.
+        """
+        if version not in ("v1", "v2"):
+            raise ValueError("version must be 'v1' or 'v2'")
+        method_map = {
+            "get": requests.get,
+            "post": requests.post,
+            "put": requests.put,
+            "delete": requests.delete,
+        }
+        req_func = method_map.get(method.lower())
+        if req_func is None:
+            raise ValueError(f"method must be one of {sorted(method_map)}")
+
+        base = self.base_url_v2 if version == "v2" else self.base_url
+        path = path if path.startswith("/") else f"/{path}"
+        res = self.api_request(f"{base}{path}", req_func, **kwargs)
+        return res.json()
 
     def check_username(self):
         """Get the authenticated user's login ID.
