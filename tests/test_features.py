@@ -521,3 +521,351 @@ class TestEclipseUnifierAndAlias:
         assert isinstance(api, EclipseAPI)
         assert api.eclipse_token == "tok"
         assert api.v1.eclipse_token == "tok"
+
+
+def _eclipse_v1():
+    """Construct an EclipseV1 with auth/login patched out for unit tests."""
+    with patch.object(EclipseV1, "login"):
+        api = EclipseV1(usr="test", pwd="pass")
+    api.eclipse_token = "test-token"
+    return api
+
+
+def _mock_get(records):
+    """Return a requests.get mock yielding the given JSON records.
+
+    Patching ``requests.get`` works for GET methods because ``api_request`` resolves
+    ``req_func`` at call time (it is not bound as a default argument).
+    """
+    mock_response = Mock()
+    mock_response.ok = True
+    mock_response.json.return_value = records
+    return Mock(return_value=mock_response)
+
+
+V1_BASE = "https://api.orioneclipse.com/v1"
+
+
+class TestEclipseV1NewGetEndpoints:
+    """URL/params coverage for the new EclipseV1 GET methods (PRD 2.1.0)."""
+
+    def test_get_taxlots(self):
+        api = _eclipse_v1()
+        mock_get = _mock_get([{"lot": 1}])
+        with patch("requests.get", mock_get):
+            result = api.get_taxlots(987)
+        assert result == [{"lot": 1}]
+        assert mock_get.call_args.args[0] == f"{V1_BASE}/holding/holdings/987/taxlots"
+
+    def test_get_raise_cash_methods(self):
+        api = _eclipse_v1()
+        mock_get = _mock_get([{"id": 1}])
+        with patch("requests.get", mock_get):
+            api.get_raise_cash_methods()
+        assert mock_get.call_args.args[0] == f"{V1_BASE}/tradetool/raisecash/calculation_methods"
+
+    def test_get_spend_cash_methods(self):
+        api = _eclipse_v1()
+        mock_get = _mock_get([{"id": 1}])
+        with patch("requests.get", mock_get):
+            api.get_spend_cash_methods()
+        assert mock_get.call_args.args[0] == f"{V1_BASE}/tradetool/spendcash/calculation_methods"
+
+    def test_get_model_nodes(self):
+        api = _eclipse_v1()
+        mock_get = _mock_get([])
+        with patch("requests.get", mock_get):
+            api.get_model_nodes(55)
+        assert mock_get.call_args.args[0] == f"{V1_BASE}/modeling/models/55/Model/nodes"
+
+    def test_get_model_portfolios(self):
+        api = _eclipse_v1()
+        mock_get = _mock_get([])
+        with patch("requests.get", mock_get):
+            api.get_model_portfolios(55)
+        assert mock_get.call_args.args[0] == f"{V1_BASE}/modeling/models/55/portfolios"
+
+    def test_get_model_pending(self):
+        api = _eclipse_v1()
+        mock_get = _mock_get({})
+        with patch("requests.get", mock_get):
+            api.get_model_pending(55)
+        assert mock_get.call_args.args[0] == f"{V1_BASE}/modeling/models/55/pending"
+
+    def test_get_model_analysis(self):
+        api = _eclipse_v1()
+        mock_get = _mock_get({})
+        with patch("requests.get", mock_get):
+            api.get_model_analysis(55, asset_type="class")
+        assert mock_get.call_args.args[0] == f"{V1_BASE}/modeling/models/55/modelAnalysis"
+        assert mock_get.call_args.kwargs["params"] == {
+            "assetType": "class",
+            "isIncludeTradeBlockAccount": 0,
+            "isExcludeAsset": 0,
+        }
+
+    def test_get_model_analysis_default_asset_type(self):
+        api = _eclipse_v1()
+        mock_get = _mock_get({})
+        with patch("requests.get", mock_get):
+            api.get_model_analysis(55)
+        assert mock_get.call_args.kwargs["params"]["assetType"] == "securityset"
+
+    def test_get_model_status(self):
+        api = _eclipse_v1()
+        mock_get = _mock_get([])
+        with patch("requests.get", mock_get):
+            api.get_model_status()
+        assert mock_get.call_args.args[0] == f"{V1_BASE}/modeling/models/modelStatus"
+
+    def test_get_model_types(self):
+        api = _eclipse_v1()
+        mock_get = _mock_get([])
+        with patch("requests.get", mock_get):
+            api.get_model_types()
+        assert mock_get.call_args.args[0] == f"{V1_BASE}/modeling/models/modelTypes"
+
+    def test_get_submodels_no_filters(self):
+        api = _eclipse_v1()
+        mock_get = _mock_get([])
+        with patch("requests.get", mock_get):
+            api.get_submodels()
+        assert mock_get.call_args.args[0] == f"{V1_BASE}/modeling/models/submodels"
+        assert mock_get.call_args.kwargs["params"] == {}
+
+    def test_get_submodels_with_filters(self):
+        api = _eclipse_v1()
+        mock_get = _mock_get([])
+        with patch("requests.get", mock_get):
+            api.get_submodels(model_type="A", search="growth")
+        assert mock_get.call_args.kwargs["params"] == {"modelType": "A", "name": "growth"}
+
+    def test_get_out_of_tolerance_accounts(self):
+        api = _eclipse_v1()
+        mock_get = _mock_get([])
+        with patch("requests.get", mock_get):
+            api.get_out_of_tolerance_accounts(10, 20, asset_type="category")
+        assert mock_get.call_args.args[0] == f"{V1_BASE}/account/accounts/10/outOfTolerance/20"
+        assert mock_get.call_args.kwargs["params"] == {"assetType": "category"}
+
+    def test_get_security_set_details(self):
+        api = _eclipse_v1()
+        mock_get = _mock_get([])
+        with patch("requests.get", mock_get):
+            api.get_security_set_details()
+        assert mock_get.call_args.args[0] == f"{V1_BASE}/security/securityset/detail"
+
+    def test_get_security_set_summary(self):
+        api = _eclipse_v1()
+        mock_get = _mock_get({})
+        with patch("requests.get", mock_get):
+            api.get_security_set_summary(42)
+        assert mock_get.call_args.args[0] == f"{V1_BASE}/security/securityset/42"
+
+    def test_get_account_simple(self):
+        api = _eclipse_v1()
+        mock_get = _mock_get({})
+        with patch("requests.get", mock_get):
+            api.get_account_simple(123)
+        assert mock_get.call_args.args[0] == f"{V1_BASE}/account/accounts/simple/123"
+
+    def test_get_account_holdings_detail(self):
+        api = _eclipse_v1()
+        mock_get = _mock_get([])
+        with patch("requests.get", mock_get):
+            api.get_account_holdings_detail(123)
+        assert mock_get.call_args.args[0] == f"{V1_BASE}/account/accounts/123/holdings"
+
+    def test_get_portfolio_holdings_detail(self):
+        api = _eclipse_v1()
+        mock_get = _mock_get([])
+        with patch("requests.get", mock_get):
+            api.get_portfolio_holdings_detail(77)
+        assert mock_get.call_args.args[0] == f"{V1_BASE}/portfolio/portfolios/77/holdings"
+
+    def test_get_trades_no_filters(self):
+        api = _eclipse_v1()
+        mock_get = _mock_get([])
+        with patch("requests.get", mock_get):
+            api.get_trades()
+        assert mock_get.call_args.args[0] == f"{V1_BASE}/tradeorder/trades"
+        assert mock_get.call_args.kwargs["params"] == {}
+
+    def test_get_trades_with_filters(self):
+        api = _eclipse_v1()
+        mock_get = _mock_get([])
+        with patch("requests.get", mock_get):
+            api.get_trades(portfolio_id=5, top=10, is_pending=True)
+        assert mock_get.call_args.kwargs["params"] == {
+            "portfolioId": 5,
+            "$top": 10,
+            "isPending": "true",
+        }
+
+
+class TestEclipseV1ParamAdditions:
+    """Coverage for params added in-place to existing EclipseV1 methods."""
+
+    def test_get_portfolio_accounts_full(self):
+        api = _eclipse_v1()
+        mock_get = _mock_get([])
+        with patch("requests.get", mock_get):
+            api.get_portfolio_accounts(9)
+        assert mock_get.call_args.args[0] == f"{V1_BASE}/portfolio/portfolios/9/accounts"
+
+    def test_get_portfolio_accounts_simple(self):
+        api = _eclipse_v1()
+        mock_get = _mock_get([])
+        with patch("requests.get", mock_get):
+            api.get_portfolio_accounts(9, simple=True)
+        assert mock_get.call_args.args[0] == f"{V1_BASE}/portfolio/portfolios/9/accounts/simple"
+
+    def test_get_all_models_no_params(self):
+        api = _eclipse_v1()
+        mock_get = _mock_get([])
+        with patch("requests.get", mock_get):
+            api.get_all_models()
+        assert mock_get.call_args.args[0] == f"{V1_BASE}/modeling/models"
+        assert mock_get.call_args.kwargs["params"] == {}
+
+    def test_get_all_models_with_params(self):
+        api = _eclipse_v1()
+        mock_get = _mock_get([])
+        with patch("requests.get", mock_get):
+            api.get_all_models(name="Core", top=5)
+        assert mock_get.call_args.kwargs["params"] == {"name": "Core", "$top": 5}
+
+    def test_get_all_portfolios_default_unchanged(self):
+        api = _eclipse_v1()
+        mock_get = _mock_get([])
+        with patch("requests.get", mock_get):
+            api.get_all_portfolios()
+        # default behavior unchanged: includevalue=true, no $top
+        assert mock_get.call_args.kwargs["params"] == {"includevalue": "true"}
+
+    def test_get_all_portfolios_with_top(self):
+        api = _eclipse_v1()
+        mock_get = _mock_get([])
+        with patch("requests.get", mock_get):
+            api.get_all_portfolios(include_value=False, top=25)
+        assert mock_get.call_args.kwargs["params"] == {"includevalue": "false", "$top": 25}
+
+    def test_get_model_allocations_default_aggregate(self):
+        api = _eclipse_v1()
+        mock_get = _mock_get([])
+        with patch("requests.get", mock_get):
+            api.get_model_allocations(3)
+        assert mock_get.call_args.args[0] == f"{V1_BASE}/modeling/models/3/allocations"
+        assert mock_get.call_args.kwargs["params"] == {"aggregateAllocations": "true"}
+
+    def test_get_model_allocations_no_aggregate(self):
+        api = _eclipse_v1()
+        mock_get = _mock_get([])
+        with patch("requests.get", mock_get):
+            api.get_model_allocations(3, aggregate=False)
+        assert mock_get.call_args.kwargs["params"] == {"aggregateAllocations": "false"}
+
+    def test_get_trade_instances_normalize_false_returns_raw(self):
+        api = _eclipse_v1()
+        raw = [{"tradeInstanceType": 1, "tradeInstanceSubType": 2}]
+        mock_get = _mock_get(raw)
+        with patch("requests.get", mock_get):
+            result = api.get_trade_instances("2026-01-01", "2026-01-31", normalize=False)
+        # Raw IDs preserved, not mapped to friendly names
+        assert result == raw
+        assert result[0]["tradeInstanceType"] == 1
+
+    def test_get_trade_instances_normalize_true_maps_names(self):
+        api = _eclipse_v1()
+        raw = [{"tradeInstanceType": 1, "tradeInstanceSubType": 2}]
+        mock_get = _mock_get(raw)
+        with patch("requests.get", mock_get):
+            result = api.get_trade_instances("2026-01-01", "2026-01-31")
+        # Default normalize=True maps IDs to strings (or None if unmapped)
+        assert result[0]["tradeInstanceType"] != 1
+
+
+class TestEclipseV1TradeGenPreview:
+    """Trade-gen POSTs default to preview (isViewOnly=True, sync=False)."""
+
+    def test_get_tlh_securities_omits_none_ids(self):
+        api = _eclipse_v1()
+        mock_post = _mock_post([])
+        with patch("requests.post", mock_post):
+            api.get_tlh_securities(portfolio_ids=[1, 2])
+        assert mock_post.call_args.args[0] == (f"{V1_BASE}/tradetool/taxLossHarvesting/securities")
+        assert mock_post.call_args.kwargs["json"] == {"portfolioIds": [1, 2]}
+
+    def test_check_tlh_gain_loss(self):
+        api = _eclipse_v1()
+        mock_post = _mock_post({})
+        with patch("requests.post", mock_post):
+            api.check_tlh_gain_loss(account_ids=[7])
+        assert mock_post.call_args.args[0] == (
+            f"{V1_BASE}/tradetool/taxLossHarvesting/action/checkGainLoss"
+        )
+        assert mock_post.call_args.kwargs["json"] == {"accountIds": [7]}
+
+    def test_tlh_trade_preview_defaults(self):
+        api = _eclipse_v1()
+        mock_post = _mock_post({"instanceId": 1})
+        with (
+            patch("requests.post", mock_post),
+            patch.object(EclipseV1, "_maybe_wait_for_analytics") as mock_wait,
+        ):
+            api.tlh_trade(portfolio_ids=[1])
+        assert mock_post.call_args.args[0] == (
+            f"{V1_BASE}/tradetool/taxLossHarvesting/action/generateTrade"
+        )
+        body = mock_post.call_args.kwargs["json"]
+        assert body["isViewOnly"] is True
+        assert body["portfolioIds"] == [1]
+        # sync defaults False -> wait called with False (no-op)
+        mock_wait.assert_called_once_with(False)
+
+    def test_rebalance_trade_preview_defaults(self):
+        api = _eclipse_v1()
+        mock_post = _mock_post({"instanceId": 1})
+        with (
+            patch("requests.post", mock_post),
+            patch.object(EclipseV1, "_maybe_wait_for_analytics") as mock_wait,
+        ):
+            api.rebalance_trade(portfolio_ids=[1, 2])
+        assert mock_post.call_args.args[0] == (
+            f"{V1_BASE}/tradetool/rebalancer/action/generatetrade"
+        )
+        body = mock_post.call_args.kwargs["json"]
+        assert body["isViewOnly"] is True
+        assert body["isExcelImport"] is False
+        assert body["minimumTradeAmount"] == {"amount": 0, "type": "$"}
+        assert body["allowShortTermGain"] is None
+        assert body["priorityRanking"] == []
+        assert body["portfolioIds"] == [1, 2]
+        assert "accountIds" not in body
+        mock_wait.assert_called_once_with(False)
+
+    def test_spend_cash_trade_extra_params_only_when_set(self):
+        api = _eclipse_v1()
+        mock_post = _mock_post({"instanceId": 1})
+        with (
+            patch("requests.post", mock_post),
+            patch.object(EclipseV1, "_maybe_wait_for_analytics"),
+        ):
+            api.spend_cash_trade([1])
+        body = mock_post.call_args.kwargs["json"]
+        assert "selectedMethodId" not in body
+        assert "spendFullAmount" not in body
+        assert "filterType" not in body
+
+    def test_spend_cash_trade_extra_params_present(self):
+        api = _eclipse_v1()
+        mock_post = _mock_post({"instanceId": 1})
+        with (
+            patch("requests.post", mock_post),
+            patch.object(EclipseV1, "_maybe_wait_for_analytics"),
+        ):
+            api.spend_cash_trade([1], selected_method_id=3, spend_full_amount=True, filter_type="X")
+        body = mock_post.call_args.kwargs["json"]
+        assert body["selectedMethodId"] == 3
+        assert body["spendFullAmount"] is True
+        assert body["filterType"] == "X"

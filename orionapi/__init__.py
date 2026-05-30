@@ -1,4 +1,4 @@
-__version__ = "2.0.0"
+__version__ = "2.1.0"
 
 import logging
 import re
@@ -247,12 +247,15 @@ class BaseAPI:
 
         return data
 
-    def api_request(self, url, req_func=requests.get, timeout=30, **kwargs):
+    def api_request(self, url, req_func=None, timeout=30, **kwargs):
         """Make an authenticated API request with error handling.
 
         Args:
             url: The API endpoint URL
-            req_func: The requests function to use (get, post, put, delete)
+            req_func: The requests function to use (get, post, put, delete).
+                Defaults to ``requests.get``. Resolved at call time (not bound as a
+                default argument) so that patching ``requests.get`` in tests takes
+                effect for GET methods.
             timeout: Request timeout in seconds (default 30)
             **kwargs: Additional arguments passed to the request
 
@@ -264,6 +267,9 @@ class BaseAPI:
             NotFoundError: On 404 responses
             OrionAPIError: On other 4xx/5xx responses
         """
+        if req_func is None:
+            req_func = requests.get
+
         # Apply rate limiting
         self._rate_limiter.wait()
 
@@ -2479,6 +2485,54 @@ class EclipseV1(EclipseBase):
         res = self.api_request(f"{self.base_url}/account/accounts/{internal_id}")
         return res.json()
 
+    def get_account_simple(self, account_id):
+        """Get a lightweight account record by internal ID.
+
+        Hits ``/account/accounts/simple/{id}`` — a lighter payload than the full
+        record returned by :meth:`get_account_details`.
+
+        Args:
+            account_id: Internal Eclipse account ID
+
+        Returns:
+            dict: Lightweight account record
+        """
+        res = self.api_request(f"{self.base_url}/account/accounts/simple/{account_id}")
+        return res.json()
+
+    def get_account_holdings_detail(self, account_id):
+        """Get holdings for an account via the account-path holdings endpoint.
+
+        Hits ``/account/accounts/{id}/holdings`` — a different path and shape than
+        :meth:`get_account_holdings` (which uses ``/holding/holdings/simple``).
+
+        Args:
+            account_id: Internal Eclipse account ID
+
+        Returns:
+            list: Holding dicts as returned by the account-path endpoint
+        """
+        res = self.api_request(f"{self.base_url}/account/accounts/{account_id}/holdings")
+        return res.json()
+
+    def get_out_of_tolerance_accounts(self, model_id, asset_id, asset_type="class"):
+        """Get accounts out of tolerance for a model asset.
+
+        Args:
+            model_id: Model ID (note: the API uses this value in the account path
+                segment — kept as-is per the documented endpoint quirk)
+            asset_id: Asset ID
+            asset_type: Asset type (default "class")
+
+        Returns:
+            list: Out-of-tolerance account dicts
+        """
+        res = self.api_request(
+            f"{self.base_url}/account/accounts/{model_id}/outOfTolerance/{asset_id}",
+            params={"assetType": asset_type},
+        )
+        return res.json()
+
     def get_all_account_details(self):
         """Get detailed information for all accounts.
 
@@ -2508,12 +2562,20 @@ class EclipseV1(EclipseBase):
         res = self.api_request(f"{self.base_url}/portfolio/portfolios/{portfolio_id}")
         return res.json()
 
-    def get_portfolio_accounts(self, portfolio_id):
+    def get_portfolio_accounts(self, portfolio_id, simple=False):
         """Get list of accounts for a portfolio.
+
+        Args:
+            portfolio_id: Portfolio ID
+            simple: When True, hit the lightweight ``/accounts/simple`` path
+                (default False returns the full account records)
 
         Returns list of accounts with cash targets, sleeve settings, and values.
         """
-        res = self.api_request(f"{self.base_url}/portfolio/portfolios/{portfolio_id}/accounts")
+        path = f"/portfolio/portfolios/{portfolio_id}/accounts"
+        if simple:
+            path += "/simple"
+        res = self.api_request(f"{self.base_url}{path}")
         return res.json()
 
     def get_model_tolerance(self, portfolio_id, account_id, account_type="Normal"):
@@ -2532,18 +2594,21 @@ class EclipseV1(EclipseBase):
         )
         return res.json()
 
-    def get_all_portfolios(self, include_value=True, search=None):
+    def get_all_portfolios(self, include_value=True, search=None, top=None):
         """Get list of all portfolios.
 
         Args:
             include_value: Include holding values (default True)
             search: Optional search string
+            top: Optional max number of results (maps to ``$top``)
 
         Returns list of portfolios with basic info and optionally values.
         """
         params = {"includevalue": str(include_value).lower()}
         if search:
             params["search"] = search
+        if top is not None:
+            params["$top"] = top
         res = self.api_request(f"{self.base_url}/portfolio/portfolios/simple", params=params)
         return res.json()
 
@@ -2575,6 +2640,33 @@ class EclipseV1(EclipseBase):
         if search:
             params["search"] = search
         res = self.api_request(f"{self.base_url}/holding/holdings/simple", params=params)
+        return res.json()
+
+    def get_portfolio_holdings_detail(self, portfolio_id):
+        """Get holdings for a portfolio via the portfolio-path holdings endpoint.
+
+        Hits ``/portfolio/portfolios/{id}/holdings`` — a different path and shape
+        than :meth:`get_portfolio_holdings` (which uses ``/holding/holdings/simple``).
+
+        Args:
+            portfolio_id: Portfolio ID
+
+        Returns:
+            list: Holding dicts as returned by the portfolio-path endpoint
+        """
+        res = self.api_request(f"{self.base_url}/portfolio/portfolios/{portfolio_id}/holdings")
+        return res.json()
+
+    def get_taxlots(self, holding_id):
+        """Get tax lots for a holding.
+
+        Args:
+            holding_id: Holding ID
+
+        Returns:
+            list: Tax-lot dicts (acquisition date, cost basis, quantity, etc.)
+        """
+        res = self.api_request(f"{self.base_url}/holding/holdings/{holding_id}/taxlots")
         return res.json()
 
     def run_analytics(self):
@@ -2644,6 +2736,32 @@ class EclipseV1(EclipseBase):
         """
         return self.api_request(f"{self.base_url}/tradeorder/trades?isPending=true").json()
 
+    def get_trades(self, portfolio_id=None, top=None, is_pending=None):
+        """Get trade orders with optional portfolio / paging / pending filters.
+
+        Hits the same ``/tradeorder/trades`` endpoint as :meth:`get_orders` /
+        :meth:`get_orders_pending`, but lets the caller filter by portfolio and cap
+        the result count.
+
+        Args:
+            portfolio_id: Optional portfolio ID filter (maps to ``portfolioId``)
+            top: Optional max number of results (maps to ``$top``)
+            is_pending: Optional bool; when set, filter by pending status
+                (maps to ``isPending``)
+
+        Returns:
+            list: Trade order dicts
+        """
+        params = {}
+        if portfolio_id is not None:
+            params["portfolioId"] = portfolio_id
+        if top is not None:
+            params["$top"] = top
+        if is_pending is not None:
+            params["isPending"] = str(is_pending).lower()
+        res = self.api_request(f"{self.base_url}/tradeorder/trades", params=params)
+        return res.json()
+
     def cash_needs_trade(
         self,
         portfolio_ids,
@@ -2692,6 +2810,9 @@ class EclipseV1(EclipseBase):
         reason="",
         is_excel_import=False,
         sync=True,
+        selected_method_id=None,
+        spend_full_amount=None,
+        filter_type=None,
     ):
         """Generate Spend Cash trade for portfolios.
 
@@ -2702,6 +2823,12 @@ class EclipseV1(EclipseBase):
             reason: Reason for the trade
             is_excel_import: Whether this is from an Excel import (default False)
             sync: Wait for analytics to complete (default True)
+
+        Args (additional):
+            selected_method_id: Optional spend-cash calculation method id
+                (see ``get_spend_cash_methods``); added to the body only when provided
+            spend_full_amount: Optional bool; added to the body only when provided
+            filter_type: Optional filter type; added to the body only when provided
 
         Returns:
             dict with 'issues', 'success', and 'instanceId' fields
@@ -2716,9 +2843,157 @@ class EclipseV1(EclipseBase):
             "reason": reason,
             "isExcelImport": is_excel_import,
         }
+        if selected_method_id is not None:
+            payload["selectedMethodId"] = selected_method_id
+        if spend_full_amount is not None:
+            payload["spendFullAmount"] = spend_full_amount
+        if filter_type is not None:
+            payload["filterType"] = filter_type
 
         res = self.api_request(
             f"{self.base_url}/tradetool/spendcash/action/generatetrade", requests.post, json=payload
+        )
+        result = res.json()
+        self._maybe_wait_for_analytics(sync)
+        return result
+
+    def get_raise_cash_methods(self):
+        """Get the available raise-cash calculation methods.
+
+        Returns:
+            list: Calculation-method dicts (id, name, etc.)
+        """
+        res = self.api_request(f"{self.base_url}/tradetool/raisecash/calculation_methods")
+        return res.json()
+
+    def get_spend_cash_methods(self):
+        """Get the available spend-cash calculation methods.
+
+        Returns:
+            list: Calculation-method dicts (id, name, etc.)
+        """
+        res = self.api_request(f"{self.base_url}/tradetool/spendcash/calculation_methods")
+        return res.json()
+
+    @staticmethod
+    def _tlh_id_body(portfolio_ids, account_ids):
+        """Build a tax-loss-harvesting request body, omitting empty id lists."""
+        body = {}
+        if portfolio_ids is not None:
+            body["portfolioIds"] = portfolio_ids
+        if account_ids is not None:
+            body["accountIds"] = account_ids
+        return body
+
+    def get_tlh_securities(self, portfolio_ids=None, account_ids=None):
+        """Get tax-loss-harvesting candidate securities (preview only).
+
+        Args:
+            portfolio_ids: Optional list of portfolio IDs
+            account_ids: Optional list of account IDs
+
+        Returns:
+            list: Candidate security dicts
+        """
+        res = self.api_request(
+            f"{self.base_url}/tradetool/taxLossHarvesting/securities",
+            requests.post,
+            json=self._tlh_id_body(portfolio_ids, account_ids),
+        )
+        return res.json()
+
+    def check_tlh_gain_loss(self, portfolio_ids=None, account_ids=None):
+        """Check projected gain/loss for tax-loss harvesting (preview only).
+
+        Args:
+            portfolio_ids: Optional list of portfolio IDs
+            account_ids: Optional list of account IDs
+
+        Returns:
+            dict: Projected gain/loss summary
+        """
+        res = self.api_request(
+            f"{self.base_url}/tradetool/taxLossHarvesting/action/checkGainLoss",
+            requests.post,
+            json=self._tlh_id_body(portfolio_ids, account_ids),
+        )
+        return res.json()
+
+    def tlh_trade(self, portfolio_ids=None, account_ids=None, is_view_only=True, sync=False):
+        """Generate a tax-loss-harvesting trade (preview/staging by default).
+
+        Args:
+            portfolio_ids: Optional list of portfolio IDs
+            account_ids: Optional list of account IDs
+            is_view_only: If True (default), preview trades without executing
+            sync: Wait for analytics to complete (default False)
+
+        Returns:
+            dict: Generated trade preview (instanceId, trades, etc.)
+        """
+        payload = self._tlh_id_body(portfolio_ids, account_ids)
+        payload["isViewOnly"] = is_view_only
+        res = self.api_request(
+            f"{self.base_url}/tradetool/taxLossHarvesting/action/generateTrade",
+            requests.post,
+            json=payload,
+        )
+        result = res.json()
+        self._maybe_wait_for_analytics(sync)
+        return result
+
+    def rebalance_trade(
+        self,
+        portfolio_ids=None,
+        account_ids=None,
+        filter_type=None,
+        is_view_only=True,
+        max_gain_amount=0,
+        minimum_trade_amount=0,
+        minimum_trade_amount_type="$",
+        allow_wash_sale=False,
+        rounding=0,
+        sync=False,
+    ):
+        """Generate a rebalance trade (preview/staging by default).
+
+        Args:
+            portfolio_ids: Optional list of portfolio IDs
+            account_ids: Optional list of account IDs
+            filter_type: Optional filter type (maps to ``filterType``)
+            is_view_only: If True (default), preview trades without executing
+            max_gain_amount: Max gain amount (default 0)
+            minimum_trade_amount: Minimum trade amount (default 0)
+            minimum_trade_amount_type: Minimum trade amount type, "$" or "%" (default "$")
+            allow_wash_sale: Whether to allow wash sales (default False)
+            rounding: Rounding setting (default 0)
+            sync: Wait for analytics to complete (default False)
+
+        Returns:
+            dict: Generated trade preview (instanceId, trades, etc.)
+        """
+        payload = {
+            "filterType": filter_type,
+            "isViewOnly": is_view_only,
+            "isExcelImport": False,
+            "maxGainAmount": max_gain_amount,
+            "minimumTradeAmount": {
+                "amount": minimum_trade_amount,
+                "type": minimum_trade_amount_type,
+            },
+            "allowWashSale": allow_wash_sale,
+            "allowShortTermGain": None,
+            "priorityRanking": [],
+            "rounding": rounding,
+        }
+        if portfolio_ids is not None:
+            payload["portfolioIds"] = portfolio_ids
+        if account_ids is not None:
+            payload["accountIds"] = account_ids
+        res = self.api_request(
+            f"{self.base_url}/tradetool/rebalancer/action/generatetrade",
+            requests.post,
+            json=payload,
         )
         result = res.json()
         self._maybe_wait_for_analytics(sync)
@@ -2732,20 +3007,26 @@ class EclipseV1(EclipseBase):
         """
         return self.api_request(f"{self.base_url}/tradeorder/closedtrades").json()
 
-    def get_trade_instances(self, start_date, end_date):
+    def get_trade_instances(self, start_date, end_date, normalize=True):
         """Get trade instances (batches of trades) within a date range.
 
         Args:
             start_date: Start date (YYYY-MM-DD format)
             end_date: End date (YYYY-MM-DD format)
+            normalize: When True (default), map the numeric tradeInstanceType /
+                tradeInstanceSubType IDs to friendly names. When False, return the
+                raw response unchanged (matching the API output).
 
         Returns:
             list: List of trade instance dicts with id, orderCount, executeStatus,
-                  tradeInstanceType (string), tradeInstanceSubType (string), etc.
+                  tradeInstanceType, tradeInstanceSubType, etc.
         """
         instances = self.api_request(
             f"{self.base_url}/tradeorder/instances?startDate={start_date}&endDate={end_date}"
         ).json()
+
+        if not normalize:
+            return instances
 
         # Convert type/subtype IDs to friendly names
         for inst in instances:
@@ -2760,13 +3041,22 @@ class EclipseV1(EclipseBase):
 
     # Model Maintenance
 
-    def get_all_models(self):
+    def get_all_models(self, name=None, top=None):
         """Get all investment models.
+
+        Args:
+            name: Optional name filter
+            top: Optional max number of results (maps to ``$top``)
 
         Returns:
             list: List of model dicts with id, name, status, etc.
         """
-        res = self.api_request(f"{self.base_url}/modeling/models")
+        params = {}
+        if name is not None:
+            params["name"] = name
+        if top is not None:
+            params["$top"] = top
+        res = self.api_request(f"{self.base_url}/modeling/models", params=params)
         return res.json()
 
     def get_model(self, id):
@@ -2781,18 +3071,114 @@ class EclipseV1(EclipseBase):
         res = self.api_request(f"{self.base_url}/modeling/models/{id}")
         return res.json()
 
-    def get_model_allocations(self, id):
-        """Get aggregated allocations for a model.
+    def get_model_allocations(self, id, aggregate=True):
+        """Get allocations for a model.
 
         Args:
             id: Model ID
+            aggregate: When True (default), aggregate allocations across the model
+                tree (``aggregateAllocations=true``); when False, return per-node
+                allocations.
 
         Returns:
             list: List of allocation dicts with target percentages
         """
         res = self.api_request(
-            f"{self.base_url}/modeling/models/{id}/allocations?aggregateAllocations=true"
+            f"{self.base_url}/modeling/models/{id}/allocations",
+            params={"aggregateAllocations": str(aggregate).lower()},
         )
+        return res.json()
+
+    def get_model_nodes(self, model_id):
+        """Get the node tree for a model.
+
+        Args:
+            model_id: Model ID
+
+        Returns:
+            dict: Node tree with ``levels``, ``modelId`` and ``preSelectedNodeId``
+        """
+        res = self.api_request(f"{self.base_url}/modeling/models/{model_id}/Model/nodes")
+        return res.json()
+
+    def get_model_portfolios(self, model_id):
+        """Get portfolios assigned to a model.
+
+        Args:
+            model_id: Model ID
+
+        Returns:
+            list: Portfolio dicts assigned to the model
+        """
+        res = self.api_request(f"{self.base_url}/modeling/models/{model_id}/portfolios")
+        return res.json()
+
+    def get_model_pending(self, model_id):
+        """Get pending changes for a model.
+
+        Args:
+            model_id: Model ID
+
+        Returns:
+            dict: Pending-change details
+        """
+        res = self.api_request(f"{self.base_url}/modeling/models/{model_id}/pending")
+        return res.json()
+
+    def get_model_analysis(self, model_id, asset_type="securityset"):
+        """Get model analysis for a model.
+
+        Args:
+            model_id: Model ID
+            asset_type: Asset type to analyze (default "securityset")
+
+        Returns:
+            dict: Model analysis results
+        """
+        res = self.api_request(
+            f"{self.base_url}/modeling/models/{model_id}/modelAnalysis",
+            params={
+                "assetType": asset_type,
+                "isIncludeTradeBlockAccount": 0,
+                "isExcludeAsset": 0,
+            },
+        )
+        return res.json()
+
+    def get_model_status(self):
+        """Get the list of model statuses.
+
+        Returns:
+            list: Model-status dicts
+        """
+        res = self.api_request(f"{self.base_url}/modeling/models/modelStatus")
+        return res.json()
+
+    def get_model_types(self):
+        """Get the list of model types.
+
+        Returns:
+            list: Model-type dicts
+        """
+        res = self.api_request(f"{self.base_url}/modeling/models/modelTypes")
+        return res.json()
+
+    def get_submodels(self, model_type=None, search=None):
+        """Get submodels, optionally filtered by type and name.
+
+        Args:
+            model_type: Optional model-type filter (maps to ``modelType``)
+            search: Optional name filter (maps to ``name``)
+
+        Returns:
+            list: Submodel dicts
+        """
+        params = {}
+        if model_type is not None:
+            params["modelType"] = model_type
+        if search is not None:
+            params["name"] = search
+        res = self.api_request(f"{self.base_url}/modeling/models/submodels", params=params)
         return res.json()
 
     def get_all_security_sets(self):
@@ -2814,6 +3200,41 @@ class EclipseV1(EclipseBase):
             dict: Security set details including securities and allocations
         """
         res = self.api_request(f"{self.base_url}/security/securityset/details/{id}")
+        return res.json()
+
+    def get_security_set_summary(self, id):
+        """Get a security set by ID via the summary endpoint.
+
+        Hits ``/security/securityset/{id}`` — a different path than
+        :meth:`get_security_set` (which uses ``/security/securityset/details/{id}``).
+
+        Args:
+            id: Security set ID
+
+        Returns:
+            dict: Security set summary
+        """
+        res = self.api_request(f"{self.base_url}/security/securityset/{id}")
+        return res.json()
+
+    def get_security_set_details(self):
+        """Get the full security-set detail list.
+
+        Hits ``/security/securityset/detail`` (documented as a large list across all
+        sets).
+
+        .. note::
+            As of 2026-05 this endpoint returns ``400 'id is not numeric string'`` on
+            live Eclipse — the server routes the ``detail`` segment into the
+            ``/security/securityset/{id}`` param route instead. Kept faithful to the
+            documented endpoint (and the Eclipse MCP, which calls the same path), but
+            the upstream route appears broken. Use :meth:`get_all_security_sets` plus
+            :meth:`get_security_set` per id as a working alternative.
+
+        Returns:
+            list: Security-set detail dicts
+        """
+        res = self.api_request(f"{self.base_url}/security/securityset/detail")
         return res.json()
 
     def add_model(
