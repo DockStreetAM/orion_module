@@ -205,8 +205,9 @@ class TestTimeouts:
             # Mock the request function directly
             mock_req = Mock(return_value=Mock(ok=True, json=lambda: {}))
 
-            with patch.object(api._rate_limiter, "wait"), patch.object(
-                api, "_get_auth_header", return_value={}
+            with (
+                patch.object(api._rate_limiter, "wait"),
+                patch.object(api, "_get_auth_header", return_value={}),
             ):
                 api.api_request("http://test.com", req_func=mock_req, timeout=60)
 
@@ -220,8 +221,9 @@ class TestSSLVerification:
 
     def test_default_ssl_verification_enabled(self):
         """Test SSL verification is enabled by default."""
-        with patch.object(OrionAPI, "login"), patch.object(
-            OrionAPI, "_get_auth_header", return_value={}
+        with (
+            patch.object(OrionAPI, "login"),
+            patch.object(OrionAPI, "_get_auth_header", return_value={}),
         ):
             api = OrionAPI(usr="test", pwd="pass")
 
@@ -250,8 +252,9 @@ class TestSSLVerification:
             # Mock the request function directly
             mock_req = Mock(return_value=Mock(ok=True, json=lambda: {}))
 
-            with patch.object(api._rate_limiter, "wait"), patch.object(
-                api, "_get_auth_header", return_value={}
+            with (
+                patch.object(api._rate_limiter, "wait"),
+                patch.object(api, "_get_auth_header", return_value={}),
             ):
                 api.api_request("http://test.com", req_func=mock_req)
 
@@ -317,8 +320,9 @@ class TestAPIErrors:
             mock_response.json.return_value = {"message": "Resource not found"}
             mock_req = Mock(return_value=mock_response)
 
-            with patch.object(api._rate_limiter, "wait"), patch.object(
-                api, "_get_auth_header", return_value={}
+            with (
+                patch.object(api._rate_limiter, "wait"),
+                patch.object(api, "_get_auth_header", return_value={}),
             ):
                 with pytest.raises(NotFoundError, match="Resource not found"):
                     api.api_request("http://test.com/missing", req_func=mock_req)
@@ -336,8 +340,9 @@ class TestAPIErrors:
             mock_response.json.return_value = {"message": "Server error"}
             mock_req = Mock(return_value=mock_response)
 
-            with patch.object(api._rate_limiter, "wait"), patch.object(
-                api, "_get_auth_header", return_value={}
+            with (
+                patch.object(api._rate_limiter, "wait"),
+                patch.object(api, "_get_auth_header", return_value={}),
             ):
                 with pytest.raises(OrionAPIError, match="500.*Server error"):
                     api.api_request("http://test.com", req_func=mock_req)
@@ -356,8 +361,9 @@ class TestAPIErrors:
             mock_response.json.side_effect = ValueError("No JSON")
             mock_req = Mock(return_value=mock_response)
 
-            with patch.object(api._rate_limiter, "wait"), patch.object(
-                api, "_get_auth_header", return_value={}
+            with (
+                patch.object(api._rate_limiter, "wait"),
+                patch.object(api, "_get_auth_header", return_value={}),
             ):
                 with pytest.raises(OrionAPIError, match="HTML error page"):
                     api.api_request("http://test.com", req_func=mock_req)
@@ -428,8 +434,11 @@ class TestFilePathValidation:
 
     def test_export_security_set_invalid_parent_directory(self):
         """Test export rejects path with non-existent parent directory."""
-        with patch.object(EclipseAPI, "login"), patch.object(
-            EclipseAPI, "get_security_set", return_value={"name": "Test", "securities": []}
+        with (
+            patch.object(EclipseAPI, "login"),
+            patch.object(
+                EclipseAPI, "get_security_set", return_value={"name": "Test", "securities": []}
+            ),
         ):
             api = EclipseAPI(usr="test", pwd="pass")
 
@@ -446,10 +455,11 @@ class TestBugFixes:
         Bug: float(None) caused TypeError when min_amount/max_amount not provided.
         Fix: Changed defaults from None to 0.0
         """
-        with patch.object(EclipseAPI, "login"), patch.object(
-            EclipseAPI, "get_internal_account_id", return_value=123
-        ), patch.object(EclipseAPI, "_get_auth_header", return_value={}), patch.object(
-            EclipseAPI, "_maybe_wait_for_analytics"
+        with (
+            patch.object(EclipseAPI, "login"),
+            patch.object(EclipseAPI, "get_internal_account_id", return_value=123),
+            patch.object(EclipseAPI, "_get_auth_header", return_value={}),
+            patch.object(EclipseAPI, "_maybe_wait_for_analytics"),
         ):
             api = EclipseAPI(usr="test", pwd="pass")
 
@@ -477,10 +487,11 @@ class TestBugFixes:
         expire_trans_type (the type ID) instead of expire_trans_tol (the tolerance value).
         Fix: Changed to use expire_trans_tol
         """
-        with patch.object(EclipseAPI, "login"), patch.object(
-            EclipseAPI, "get_internal_account_id", return_value=123
-        ), patch.object(EclipseAPI, "_get_auth_header", return_value={}), patch.object(
-            EclipseAPI, "_maybe_wait_for_analytics"
+        with (
+            patch.object(EclipseAPI, "login"),
+            patch.object(EclipseAPI, "get_internal_account_id", return_value=123),
+            patch.object(EclipseAPI, "_get_auth_header", return_value={}),
+            patch.object(EclipseAPI, "_maybe_wait_for_analytics"),
         ):
             api = EclipseAPI(usr="test", pwd="pass")
 

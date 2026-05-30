@@ -16,10 +16,12 @@ class TestOrionUpdateOperations:
 
     def test_update_client(self):
         """Test updating a client/household."""
-        with patch.object(OrionAPI, "login"), patch.object(
-            OrionAPI, "_get_auth_header", return_value={}
-        ), patch.object(
-            OrionAPI, "_translate_custom_fields", return_value={"name": "Updated Name"}
+        with (
+            patch.object(OrionAPI, "login"),
+            patch.object(OrionAPI, "_get_auth_header", return_value={}),
+            patch.object(
+                OrionAPI, "_translate_custom_fields", return_value={"name": "Updated Name"}
+            ),
         ):
             api = OrionAPI(usr="test", pwd="pass")
 
@@ -37,10 +39,12 @@ class TestOrionUpdateOperations:
 
     def test_update_registration(self):
         """Test updating a registration."""
-        with patch.object(OrionAPI, "login"), patch.object(
-            OrionAPI, "_get_auth_header", return_value={}
-        ), patch.object(
-            OrionAPI, "_translate_custom_fields", return_value={"name": "Updated Registration"}
+        with (
+            patch.object(OrionAPI, "login"),
+            patch.object(OrionAPI, "_get_auth_header", return_value={}),
+            patch.object(
+                OrionAPI, "_translate_custom_fields", return_value={"name": "Updated Registration"}
+            ),
         ):
             api = OrionAPI(usr="test", pwd="pass")
 
@@ -58,9 +62,11 @@ class TestOrionUpdateOperations:
 
     def test_update_orion_account(self):
         """Test updating an Orion account."""
-        with patch.object(OrionAPI, "login"), patch.object(
-            OrionAPI, "_get_auth_header", return_value={}
-        ), patch.object(OrionAPI, "_translate_custom_fields", return_value={"accountType": "IRA"}):
+        with (
+            patch.object(OrionAPI, "login"),
+            patch.object(OrionAPI, "_get_auth_header", return_value={}),
+            patch.object(OrionAPI, "_translate_custom_fields", return_value={"accountType": "IRA"}),
+        ):
             api = OrionAPI(usr="test", pwd="pass")
 
             with patch("requests.put") as mock_put:
@@ -133,8 +139,9 @@ class TestEclipseAnalytics:
 
     def test_wait_for_analytics_immediate_completion(self):
         """Test wait_for_analytics when already complete."""
-        with patch.object(EclipseAPI, "login"), patch.object(
-            EclipseAPI, "_get_auth_header", return_value={}
+        with (
+            patch.object(EclipseAPI, "login"),
+            patch.object(EclipseAPI, "_get_auth_header", return_value={}),
         ):
             api = EclipseAPI(usr="test", pwd="pass")
 
@@ -150,8 +157,9 @@ class TestEclipseAnalytics:
 
     def test_wait_for_analytics_polls_until_complete(self):
         """Test wait_for_analytics polls until complete."""
-        with patch.object(EclipseAPI, "login"), patch.object(
-            EclipseAPI, "_get_auth_header", return_value={}
+        with (
+            patch.object(EclipseAPI, "login"),
+            patch.object(EclipseAPI, "_get_auth_header", return_value={}),
         ):
             api = EclipseAPI(usr="test", pwd="pass")
 
@@ -173,8 +181,9 @@ class TestEclipseAnalytics:
 
     def test_wait_for_analytics_timeout(self):
         """Test wait_for_analytics raises TimeoutError."""
-        with patch.object(EclipseAPI, "login"), patch.object(
-            EclipseAPI, "_get_auth_header", return_value={}
+        with (
+            patch.object(EclipseAPI, "login"),
+            patch.object(EclipseAPI, "_get_auth_header", return_value={}),
         ):
             api = EclipseAPI(usr="test", pwd="pass")
 
@@ -186,8 +195,9 @@ class TestEclipseAnalytics:
 
     def test_maybe_wait_for_analytics_when_sync_true(self):
         """Test _maybe_wait_for_analytics waits when sync=True."""
-        with patch.object(EclipseAPI, "login"), patch.object(
-            EclipseAPI, "_get_auth_header", return_value={}
+        with (
+            patch.object(EclipseAPI, "login"),
+            patch.object(EclipseAPI, "_get_auth_header", return_value={}),
         ):
             api = EclipseAPI(usr="test", pwd="pass")
 
@@ -198,8 +208,9 @@ class TestEclipseAnalytics:
 
     def test_maybe_wait_for_analytics_when_sync_false(self):
         """Test _maybe_wait_for_analytics skips when sync=False."""
-        with patch.object(EclipseAPI, "login"), patch.object(
-            EclipseAPI, "_get_auth_header", return_value={}
+        with (
+            patch.object(EclipseAPI, "login"),
+            patch.object(EclipseAPI, "_get_auth_header", return_value={}),
         ):
             api = EclipseAPI(usr="test", pwd="pass")
 
@@ -214,10 +225,11 @@ class TestCreateSetAsideExtended:
 
     def test_create_set_aside_with_description(self):
         """Test create_set_aside with description."""
-        with patch.object(EclipseAPI, "login"), patch.object(
-            EclipseAPI, "get_internal_account_id", return_value=123
-        ), patch.object(EclipseAPI, "_get_auth_header", return_value={}), patch.object(
-            EclipseAPI, "_maybe_wait_for_analytics"
+        with (
+            patch.object(EclipseAPI, "login"),
+            patch.object(EclipseAPI, "get_internal_account_id", return_value=123),
+            patch.object(EclipseAPI, "_get_auth_header", return_value={}),
+            patch.object(EclipseAPI, "_maybe_wait_for_analytics"),
         ):
             api = EclipseAPI(usr="test", pwd="pass")
 
@@ -245,10 +257,11 @@ class TestCreateSetAsideExtended:
 
     def test_create_set_aside_percentage_type(self):
         """Test create_set_aside with percentage cash type."""
-        with patch.object(EclipseAPI, "login"), patch.object(
-            EclipseAPI, "get_internal_account_id", return_value=123
-        ), patch.object(EclipseAPI, "_get_auth_header", return_value={}), patch.object(
-            EclipseAPI, "_maybe_wait_for_analytics"
+        with (
+            patch.object(EclipseAPI, "login"),
+            patch.object(EclipseAPI, "get_internal_account_id", return_value=123),
+            patch.object(EclipseAPI, "_get_auth_header", return_value={}),
+            patch.object(EclipseAPI, "_maybe_wait_for_analytics"),
         ):
             api = EclipseAPI(usr="test", pwd="pass")
 
@@ -271,10 +284,11 @@ class TestCreateSetAsideExtended:
 
     def test_create_set_aside_date_expiration(self):
         """Test create_set_aside with date-based expiration."""
-        with patch.object(EclipseAPI, "login"), patch.object(
-            EclipseAPI, "get_internal_account_id", return_value=123
-        ), patch.object(EclipseAPI, "_get_auth_header", return_value={}), patch.object(
-            EclipseAPI, "_maybe_wait_for_analytics"
+        with (
+            patch.object(EclipseAPI, "login"),
+            patch.object(EclipseAPI, "get_internal_account_id", return_value=123),
+            patch.object(EclipseAPI, "_get_auth_header", return_value={}),
+            patch.object(EclipseAPI, "_maybe_wait_for_analytics"),
         ):
             api = EclipseAPI(usr="test", pwd="pass")
 
@@ -299,14 +313,17 @@ class TestCreateSetAsideExtended:
 
     def test_create_set_aside_no_sync(self):
         """Test create_set_aside with sync=False."""
-        with patch.object(EclipseAPI, "login"), patch.object(
-            EclipseAPI, "get_internal_account_id", return_value=123
-        ), patch.object(EclipseAPI, "_get_auth_header", return_value={}):
+        with (
+            patch.object(EclipseAPI, "login"),
+            patch.object(EclipseAPI, "get_internal_account_id", return_value=123),
+            patch.object(EclipseAPI, "_get_auth_header", return_value={}),
+        ):
             api = EclipseAPI(usr="test", pwd="pass")
 
-            with patch("requests.post") as mock_post, patch.object(
-                api, "_maybe_wait_for_analytics"
-            ) as mock_wait:
+            with (
+                patch("requests.post") as mock_post,
+                patch.object(api, "_maybe_wait_for_analytics") as mock_wait,
+            ):
                 mock_response = Mock()
                 mock_response.ok = True
                 mock_response.json.return_value = {"id": 1}

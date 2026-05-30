@@ -15,8 +15,9 @@ class TestOrionAssets:
 
     def test_get_assets(self):
         """Test getting assets for an account."""
-        with patch.object(OrionAPI, "login"), patch.object(
-            OrionAPI, "_get_auth_header", return_value={}
+        with (
+            patch.object(OrionAPI, "login"),
+            patch.object(OrionAPI, "_get_auth_header", return_value={}),
         ):
             api = OrionAPI(usr="test", pwd="pass")
 
@@ -47,8 +48,9 @@ class TestOrionAssets:
 
     def test_search_assets(self):
         """Test searching for assets."""
-        with patch.object(OrionAPI, "login"), patch.object(
-            OrionAPI, "_get_auth_header", return_value={}
+        with (
+            patch.object(OrionAPI, "login"),
+            patch.object(OrionAPI, "_get_auth_header", return_value={}),
         ):
             api = OrionAPI(usr="test", pwd="pass")
 
@@ -82,8 +84,9 @@ class TestOrionBilling:
 
     def test_get_fee_schedules(self):
         """Test getting fee schedules."""
-        with patch.object(OrionAPI, "login"), patch.object(
-            OrionAPI, "_get_auth_header", return_value={}
+        with (
+            patch.object(OrionAPI, "login"),
+            patch.object(OrionAPI, "_get_auth_header", return_value={}),
         ):
             api = OrionAPI(usr="test", pwd="pass")
 
@@ -102,8 +105,9 @@ class TestOrionBilling:
 
     def test_get_account_billing(self):
         """Test getting billing for an account."""
-        with patch.object(OrionAPI, "login"), patch.object(
-            OrionAPI, "_get_auth_header", return_value={}
+        with (
+            patch.object(OrionAPI, "login"),
+            patch.object(OrionAPI, "_get_auth_header", return_value={}),
         ):
             api = OrionAPI(usr="test", pwd="pass")
 
@@ -132,8 +136,9 @@ class TestOrionBilling:
 
     def test_get_billing_household_summary(self):
         """Test getting billing summary for a household."""
-        with patch.object(OrionAPI, "login"), patch.object(
-            OrionAPI, "_get_auth_header", return_value={}
+        with (
+            patch.object(OrionAPI, "login"),
+            patch.object(OrionAPI, "_get_auth_header", return_value={}),
         ):
             api = OrionAPI(usr="test", pwd="pass")
 
@@ -158,8 +163,9 @@ class TestOrionReporting:
 
     def test_get_performance_data_account(self):
         """Test getting performance data for an account."""
-        with patch.object(OrionAPI, "login"), patch.object(
-            OrionAPI, "_get_auth_header", return_value={}
+        with (
+            patch.object(OrionAPI, "login"),
+            patch.object(OrionAPI, "_get_auth_header", return_value={}),
         ):
             api = OrionAPI(usr="test", pwd="pass")
 
@@ -184,8 +190,9 @@ class TestOrionReporting:
 
     def test_get_performance_data_client(self):
         """Test getting performance data for a client."""
-        with patch.object(OrionAPI, "login"), patch.object(
-            OrionAPI, "_get_auth_header", return_value={}
+        with (
+            patch.object(OrionAPI, "login"),
+            patch.object(OrionAPI, "_get_auth_header", return_value={}),
         ):
             api = OrionAPI(usr="test", pwd="pass")
 
@@ -467,9 +474,11 @@ class TestEclipseTradeRestrictions:
             api = EclipseAPI(usr="test", pwd="pass")
 
             # Mock get_portfolio to return current portfolio state
-            with patch.object(api, "get_portfolio") as mock_get, patch.object(
-                api, "api_request"
-            ) as mock_api_request, patch.object(api, "_maybe_wait_for_analytics"):
+            with (
+                patch.object(api, "get_portfolio") as mock_get,
+                patch.object(api, "api_request") as mock_api_request,
+                patch.object(api, "_maybe_wait_for_analytics"),
+            ):
                 mock_get.return_value = {
                     "general": {
                         "portfolioName": "Test Portfolio",
@@ -495,9 +504,11 @@ class TestEclipseTradeRestrictions:
         with patch.object(EclipseAPI, "login"):
             api = EclipseAPI(usr="test", pwd="pass")
 
-            with patch.object(api, "get_account_details") as mock_get, patch.object(
-                api, "api_request"
-            ) as mock_api_request, patch.object(api, "_maybe_wait_for_analytics"):
+            with (
+                patch.object(api, "get_account_details") as mock_get,
+                patch.object(api, "api_request") as mock_api_request,
+                patch.object(api, "_maybe_wait_for_analytics"),
+            ):
                 mock_get.return_value = {
                     "generalSection": {
                         "accountName": "Test Account",
@@ -538,8 +549,9 @@ class TestEclipseTradeTools:
         with patch.object(EclipseAPI, "login"):
             api = EclipseAPI(usr="test", pwd="pass")
 
-            with patch.object(api, "api_request") as mock_api_request, patch.object(
-                api, "_maybe_wait_for_analytics"
+            with (
+                patch.object(api, "api_request") as mock_api_request,
+                patch.object(api, "_maybe_wait_for_analytics"),
             ):
                 mock_response = Mock()
                 mock_response.json.return_value = {
@@ -575,8 +587,9 @@ class TestOrionBillingWorkflow:
     """Test OrionAPI billing workflow methods."""
 
     def _make_api(self):
-        with patch.object(OrionAPI, "login"), patch.object(
-            OrionAPI, "_get_auth_header", return_value={}
+        with (
+            patch.object(OrionAPI, "login"),
+            patch.object(OrionAPI, "_get_auth_header", return_value={}),
         ):
             return OrionAPI(usr="test", pwd="pass")
 
@@ -809,8 +822,9 @@ class TestOrionBillingAdjustments:
     """Test OrionAPI billing adjustment methods."""
 
     def _make_api(self):
-        with patch.object(OrionAPI, "login"), patch.object(
-            OrionAPI, "_get_auth_header", return_value={}
+        with (
+            patch.object(OrionAPI, "login"),
+            patch.object(OrionAPI, "_get_auth_header", return_value={}),
         ):
             return OrionAPI(usr="test", pwd="pass")
 
@@ -951,8 +965,9 @@ class TestOrionBillingOperations:
     """Test OrionAPI billing workflow gap methods."""
 
     def _make_api(self):
-        with patch.object(OrionAPI, "login"), patch.object(
-            OrionAPI, "_get_auth_header", return_value={}
+        with (
+            patch.object(OrionAPI, "login"),
+            patch.object(OrionAPI, "_get_auth_header", return_value={}),
         ):
             return OrionAPI(usr="test", pwd="pass")
 
@@ -1174,8 +1189,9 @@ class TestOrionHierarchyManagement:
             return OrionAPI(usr="test", pwd="pass")
 
     def _make_api_with_mock(self):
-        with patch.object(OrionAPI, "login"), patch.object(
-            OrionAPI, "_get_auth_header", return_value={}
+        with (
+            patch.object(OrionAPI, "login"),
+            patch.object(OrionAPI, "_get_auth_header", return_value={}),
         ):
             api = OrionAPI(usr="test", pwd="pass")
         return api
@@ -1494,8 +1510,9 @@ class TestOrionTransactions:
             return OrionAPI(usr="test", pwd="pass")
 
     def _make_api_with_mock(self):
-        with patch.object(OrionAPI, "login"), patch.object(
-            OrionAPI, "_get_auth_header", return_value={}
+        with (
+            patch.object(OrionAPI, "login"),
+            patch.object(OrionAPI, "_get_auth_header", return_value={}),
         ):
             api = OrionAPI(usr="test", pwd="pass")
         return api
@@ -1576,8 +1593,9 @@ class TestOrionReportBatches:
             return OrionAPI(usr="test", pwd="pass")
 
     def _make_api_with_mock(self):
-        with patch.object(OrionAPI, "login"), patch.object(
-            OrionAPI, "_get_auth_header", return_value={}
+        with (
+            patch.object(OrionAPI, "login"),
+            patch.object(OrionAPI, "_get_auth_header", return_value={}),
         ):
             api = OrionAPI(usr="test", pwd="pass")
         return api
@@ -1728,8 +1746,9 @@ class TestDownloadReportPdf:
             return OrionAPI(usr="test", pwd="pass")
 
     def _make_api_with_mock(self):
-        with patch.object(OrionAPI, "login"), patch.object(
-            OrionAPI, "_get_auth_header", return_value={}
+        with (
+            patch.object(OrionAPI, "login"),
+            patch.object(OrionAPI, "_get_auth_header", return_value={}),
         ):
             api = OrionAPI(usr="test", pwd="pass")
         return api
@@ -1807,9 +1826,10 @@ class TestPollUntilGenerated:
             {"id": 1, "generationStatus": "Generated"},
             {"id": 2, "generationStatus": "ErroredReport"},
         ]
-        with patch.object(api, "get_report_batch_entities", return_value=entities), patch(
-            "orionapi.time.sleep"
-        ) as mock_sleep:
+        with (
+            patch.object(api, "get_report_batch_entities", return_value=entities),
+            patch("orionapi.time.sleep") as mock_sleep,
+        ):
             result = api.poll_until_generated(batch_id=5)
 
             assert result == entities
@@ -1822,9 +1842,10 @@ class TestPollUntilGenerated:
             [{"id": 1, "generationStatus": "PendingGeneration"}],
             [{"id": 1, "generationStatus": "Generated"}],
         ]
-        with patch.object(
-            api, "get_report_batch_entities", side_effect=progress
-        ) as mock_get, patch("orionapi.time.sleep"):
+        with (
+            patch.object(api, "get_report_batch_entities", side_effect=progress) as mock_get,
+            patch("orionapi.time.sleep"),
+        ):
             result = api.poll_until_generated(batch_id=5, poll_interval=1)
 
             assert result == progress[-1]
@@ -1839,8 +1860,9 @@ class TestPollUntilGenerated:
         ]
         calls = []
         second = [dict(e, generationStatus="Generated") for e in entities]
-        with patch.object(api, "get_report_batch_entities", side_effect=[entities, second]), patch(
-            "orionapi.time.sleep"
+        with (
+            patch.object(api, "get_report_batch_entities", side_effect=[entities, second]),
+            patch("orionapi.time.sleep"),
         ):
             api.poll_until_generated(
                 batch_id=5,
@@ -1854,9 +1876,12 @@ class TestPollUntilGenerated:
         pending = [{"id": 1, "generationStatus": "PendingGeneration"}]
         done = [{"id": 1, "generationStatus": "Generated"}]
         calls = []
-        with patch.object(
-            api, "get_report_batch_entities", side_effect=[pending, pending, pending, done]
-        ), patch("orionapi.time.sleep"):
+        with (
+            patch.object(
+                api, "get_report_batch_entities", side_effect=[pending, pending, pending, done]
+            ),
+            patch("orionapi.time.sleep"),
+        ):
             api.poll_until_generated(
                 batch_id=5,
                 progress_callback=lambda done, total: calls.append((done, total)),
@@ -1866,9 +1891,11 @@ class TestPollUntilGenerated:
     def test_timeout_raises(self):
         api = self._make_api()
         pending = [{"id": 1, "generationStatus": "PendingGeneration"}]
-        with patch.object(api, "get_report_batch_entities", return_value=pending), patch(
-            "orionapi.time.monotonic", side_effect=[0, 1000]
-        ), patch("orionapi.time.sleep"):
+        with (
+            patch.object(api, "get_report_batch_entities", return_value=pending),
+            patch("orionapi.time.monotonic", side_effect=[0, 1000]),
+            patch("orionapi.time.sleep"),
+        ):
             with pytest.raises(TimeoutError, match="did not finish generating"):
                 api.poll_until_generated(batch_id=5, timeout=10)
 
