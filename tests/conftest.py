@@ -26,10 +26,10 @@ def eclipse_credentials():
 
 @pytest.fixture
 def eclipse_client(eclipse_credentials):
-    """Return authenticated EclipseAPI client."""
-    from orionapi import EclipseAPI
+    """Return authenticated Eclipse client (best-of-both v1/v2 unifier)."""
+    from orionapi import Eclipse
 
-    return EclipseAPI(**eclipse_credentials)
+    return Eclipse(**eclipse_credentials)
 
 
 @pytest.fixture

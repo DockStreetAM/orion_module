@@ -1,9 +1,10 @@
-__version__ = "1.12.0"
+__version__ = "2.0.0"
 
 import logging
 import re
 import threading
 import time
+import warnings
 from pathlib import Path
 from urllib.parse import urlencode
 
@@ -2076,10 +2077,14 @@ class OrionAPI(BaseAPI):
         return res.json()
 
 
-class EclipseAPI(BaseAPI):
-    """Client for the Eclipse Trading Platform API.
+class EclipseBase(BaseAPI):
+    """Shared base for the Eclipse Trading Platform API clients.
 
-    Provides access to accounts, portfolios, models, orders, and trade tools.
+    Holds authentication, the v1/v2 base URLs, account-id resolution helpers
+    (which some v2 operations rely on), and the generic ``eclipse_request``
+    escape hatch. Concrete surfaces are provided by :class:`EclipseV1` and
+    :class:`EclipseV2`; :class:`Eclipse` composes both. Not normally constructed
+    directly.
 
     Instances are safe to share across threads after ``login()``. Token
     reads/writes and the rate limiter are serialized internally.
@@ -2088,18 +2093,23 @@ class EclipseAPI(BaseAPI):
         usr: Username for authentication
         pwd: Password for authentication
         orion_token: Orion session token (alternative to usr/pwd)
+        eclipse_token: An already-minted Eclipse session token to use directly,
+            skipping the login round-trip (used by :class:`Eclipse` to share one
+            token across its v1/v2 sub-clients). Takes precedence over usr/pwd.
         rate_limit: Maximum API calls per second (default 10, set to 0 to disable)
         verify_ssl: Verify SSL certificates (default True)
         ca_bundle: Path to custom CA bundle file (optional)
-
-    Example:
-        >>> api = EclipseAPI(usr="user@example.com", pwd="password")
-        >>> api.check_username()
-        'user@example.com'
     """
 
     def __init__(
-        self, usr=None, pwd=None, orion_token=None, rate_limit=10, verify_ssl=True, ca_bundle=None
+        self,
+        usr=None,
+        pwd=None,
+        orion_token=None,
+        eclipse_token=None,
+        rate_limit=10,
+        verify_ssl=True,
+        ca_bundle=None,
     ):
         super().__init__(rate_limit=rate_limit, verify_ssl=verify_ssl, ca_bundle=ca_bundle)
         self.eclipse_token = None
@@ -2109,7 +2119,10 @@ class EclipseAPI(BaseAPI):
         # Eclipse answers with a misleading 403 "missing privileges" error.
         self.base_url_v2 = "https://api.orioneclipse.com/api/v2"
 
-        if usr is not None:
+        if eclipse_token is not None:
+            # Use a pre-minted token directly (no network round-trip).
+            self.eclipse_token = eclipse_token
+        elif usr is not None:
             self.login(usr, pwd)
             # Credentials are not stored to prevent memory exposure
         elif orion_token is not None:
@@ -2201,15 +2214,6 @@ class EclipseAPI(BaseAPI):
         res = self.api_request(f"{base}{path}", req_func, **kwargs)
         return res.json()
 
-    def check_username(self):
-        """Get the authenticated user's login ID.
-
-        Returns:
-            str: The user's login ID
-        """
-        res = self.api_request(f"{self.base_url}/admin/authorization/user")
-        return res.json()["userLoginId"]
-
     def get_all_accounts(self):
         """Get a simplified list of all accounts.
 
@@ -2218,68 +2222,6 @@ class EclipseAPI(BaseAPI):
         """
         res = self.api_request(f"{self.base_url}/account/accounts/simple")
         return res.json()
-
-    def _normalize_set_aside(self, record):
-        """Augment a raw v2 set-aside record with normalized snake_case fields.
-
-        The original Eclipse keys are preserved; the normalized keys provide a
-        stable contract (e.g. ``set_aside_id``, ``amount``) regardless of the
-        upstream field spellings.
-
-        Args:
-            record: A raw AccountSetAsideCashResponseDto dict
-
-        Returns:
-            dict: The record with normalized keys added
-        """
-        expiration_type_id = record.get("expirationTypeId")
-        end_date = record.get("expirationValue") if expiration_type_id == EXPIRE_TYPE_DATE else None
-        return {
-            **record,
-            "set_aside_id": record.get("id"),
-            "account_id": record.get("accountId"),
-            "account_number": record.get("accountNumber"),
-            "amount": record.get("setAsideCashAmount"),
-            "active": record.get("isActive"),
-            "description": record.get("description"),
-            "start_date": record.get("startDate"),
-            "end_date": end_date,
-        }
-
-    def get_set_asides(self, account_id=None, active_only=False):
-        """Get set-aside cash reservations, including the Eclipse set-aside id.
-
-        Uses the v2 batch endpoint, which accepts a list of internal account IDs
-        and returns one record per set-aside (each carrying its own ``id``,
-        ``accountId``, and ``accountNumber``). Records are augmented with
-        normalized snake_case fields (``set_aside_id``, ``amount``, ``active``,
-        ``account_number``, ``description``, ``start_date``, ``end_date``); the
-        original Eclipse keys are preserved.
-
-        Args:
-            account_id: Account ID, number, or name to restrict to a single
-                account. When None (default), returns set-asides firm-wide by
-                issuing one batch POST over all accounts.
-            active_only: When True, return only currently-active set-asides.
-                Defaults to False (includes expired/inactive).
-
-        Returns:
-            list: Augmented set-aside records
-        """
-        if account_id is not None:
-            account_ids = [self.get_internal_account_id(account_id)]
-        else:
-            account_ids = [a["id"] for a in self.get_all_accounts()]
-
-        res = self.api_request(
-            f"{self.base_url_v2}/Account/Accounts/SetAsideCashSettings",
-            requests.post,
-            json=account_ids,
-        )
-        records = [self._normalize_set_aside(r) for r in res.json()]
-        if active_only:
-            records = [r for r in records if r.get("active")]
-        return records
 
     def get_internal_account_id(self, search_param):
         """Get internal Eclipse account ID from a search parameter.
@@ -2368,6 +2310,60 @@ class EclipseAPI(BaseAPI):
             ),
         )
         return best_acct["id"], best_acct["accountNumber"]
+
+
+class EclipseV1(EclipseBase):
+    """Eclipse client targeting the v1 API surface (``/v1/...``) only.
+
+    Every method here calls a ``/v1`` endpoint, so callers always know which
+    surface they are hitting. For the newer ``/api/v2`` surface use
+    :class:`EclipseV2`, or :class:`Eclipse` for a best-of-both client.
+
+    Args:
+        usr: Username for authentication
+        pwd: Password for authentication
+        orion_token: Orion session token (alternative to usr/pwd)
+        rate_limit: Maximum API calls per second (default 10, set to 0 to disable)
+        verify_ssl: Verify SSL certificates (default True)
+        ca_bundle: Path to custom CA bundle file (optional)
+
+    Example:
+        >>> api = EclipseV1(usr="user@example.com", pwd="password")
+        >>> api.check_username()
+        'user@example.com'
+    """
+
+    def check_username(self):
+        """Get the authenticated user's login ID.
+
+        Returns:
+            str: The user's login ID
+        """
+        res = self.api_request(f"{self.base_url}/admin/authorization/user")
+        return res.json()["userLoginId"]
+
+    def get_set_asides(self, account_id, active_only=False):
+        """Get set-aside cash settings for a specific account (v1 surface).
+
+        Returns the raw v1 records from ``GET /account/accounts/{id}/asidecash``.
+        For firm-wide set-asides or normalized fields (including the authoritative
+        Eclipse set-aside id), use :meth:`EclipseV2.get_set_asides` or the
+        :class:`Eclipse` unifier.
+
+        Args:
+            account_id: Account ID, number, or name (resolved via search).
+            active_only: When True, keep only records where ``isActive`` is truthy.
+                Defaults to False (includes expired/inactive).
+
+        Returns:
+            list: Raw v1 set-aside records for the account.
+        """
+        internal_id = self.get_internal_account_id(account_id)
+        res = self.api_request(f"{self.base_url}/account/accounts/{internal_id}/asidecash")
+        records = res.json()
+        if active_only:
+            records = [r for r in records if r.get("isActive")]
+        return records
 
     def create_set_aside(
         self,
@@ -3963,3 +3959,169 @@ class EclipseAPI(BaseAPI):
         result = res.json()
         self._maybe_wait_for_analytics(sync)
         return result
+
+
+class EclipseV2(EclipseBase):
+    """Eclipse client targeting the v2 API surface (``/api/v2/...``) only.
+
+    The v2 surface is newer and broader but does not cover everything v1 does
+    (e.g. holdings and authorization/user have no v2 equivalent). Methods here
+    call ``/api/v2`` endpoints explicitly. For the full v1 surface use
+    :class:`EclipseV1`, or :class:`Eclipse` for a best-of-both client. The
+    generic :meth:`eclipse_request` (inherited) reaches any un-wrapped v2 path.
+
+    Account-id resolution helpers are inherited from :class:`EclipseBase`
+    because some v2 calls (e.g. the set-aside batch) need internal account ids,
+    which are sourced from the v1 account search.
+    """
+
+    def _normalize_set_aside(self, record):
+        """Augment a raw v2 set-aside record with normalized snake_case fields.
+
+        The original Eclipse keys are preserved; the normalized keys provide a
+        stable contract (e.g. ``set_aside_id``, ``amount``) regardless of the
+        upstream field spellings.
+
+        Args:
+            record: A raw AccountSetAsideCashResponseDto dict
+
+        Returns:
+            dict: The record with normalized keys added
+        """
+        expiration_type_id = record.get("expirationTypeId")
+        end_date = record.get("expirationValue") if expiration_type_id == EXPIRE_TYPE_DATE else None
+        return {
+            **record,
+            "set_aside_id": record.get("id"),
+            "account_id": record.get("accountId"),
+            "account_number": record.get("accountNumber"),
+            "amount": record.get("setAsideCashAmount"),
+            "active": record.get("isActive"),
+            "description": record.get("description"),
+            "start_date": record.get("startDate"),
+            "end_date": end_date,
+        }
+
+    def get_set_asides(self, account_id=None, active_only=False):
+        """Get set-aside cash reservations, including the Eclipse set-aside id.
+
+        Uses the v2 batch endpoint, which accepts a list of internal account IDs
+        and returns one record per set-aside (each carrying its own ``id``,
+        ``accountId``, and ``accountNumber``). Records are augmented with
+        normalized snake_case fields (``set_aside_id``, ``amount``, ``active``,
+        ``account_number``, ``description``, ``start_date``, ``end_date``); the
+        original Eclipse keys are preserved.
+
+        Args:
+            account_id: Account ID, number, or name to restrict to a single
+                account. When None (default), returns set-asides firm-wide by
+                issuing one batch POST over all accounts.
+            active_only: When True, return only currently-active set-asides.
+                Defaults to False (includes expired/inactive).
+
+        Returns:
+            list: Augmented set-aside records
+        """
+        if account_id is not None:
+            account_ids = [self.get_internal_account_id(account_id)]
+        else:
+            account_ids = [a["id"] for a in self.get_all_accounts()]
+
+        res = self.api_request(
+            f"{self.base_url_v2}/Account/Accounts/SetAsideCashSettings",
+            requests.post,
+            json=account_ids,
+        )
+        records = [self._normalize_set_aside(r) for r in res.json()]
+        if active_only:
+            records = [r for r in records if r.get("active")]
+        return records
+
+
+class Eclipse(EclipseBase):
+    """Best-of-both Eclipse client composing :class:`EclipseV1` and :class:`EclipseV2`.
+
+    Authenticates once and shares the single Eclipse token with both sub-clients,
+    exposed as ``.v1`` and ``.v2`` so the version you are hitting is always
+    explicit. Unknown attributes delegate to the complete v1 surface; methods
+    that v2 serves better are overridden here to use ``.v2``. Each overridden
+    method's docstring names the surface it uses.
+
+    Example:
+        >>> api = Eclipse(usr="user@example.com", pwd="password")
+        >>> api.get_set_asides()        # firm-wide, via v2 (best)
+        >>> api.get_account_holdings(1)  # via v1 (no v2 equivalent)
+        >>> api.v2.get_set_asides(1114)  # explicit v2
+        >>> api.v1.get_set_asides(1114)  # explicit v1 (raw per-account)
+    """
+
+    def __init__(
+        self,
+        usr=None,
+        pwd=None,
+        orion_token=None,
+        eclipse_token=None,
+        rate_limit=10,
+        verify_ssl=True,
+        ca_bundle=None,
+    ):
+        super().__init__(
+            usr=usr,
+            pwd=pwd,
+            orion_token=orion_token,
+            eclipse_token=eclipse_token,
+            rate_limit=rate_limit,
+            verify_ssl=verify_ssl,
+            ca_bundle=ca_bundle,
+        )
+        # Share the single authenticated token with both sub-clients (no re-login).
+        sub_kwargs = {
+            "eclipse_token": self.eclipse_token,
+            "rate_limit": rate_limit,
+            "verify_ssl": verify_ssl,
+            "ca_bundle": ca_bundle,
+        }
+        self.v1 = EclipseV1(**sub_kwargs)
+        self.v2 = EclipseV2(**sub_kwargs)
+
+    def __getattr__(self, name):
+        """Delegate unknown attributes to the complete v1 surface.
+
+        Only invoked for attributes not found normally (i.e. not defined on
+        Eclipse/EclipseBase). Guarded so attribute access during __init__ — before
+        ``self.v1`` exists — raises AttributeError instead of recursing.
+        """
+        try:
+            v1 = self.__dict__["v1"]
+        except KeyError as e:
+            raise AttributeError(name) from e
+        return getattr(v1, name)
+
+    # --- v2-preferred overrides (documented best-of-both choices) ---------------
+
+    def get_set_asides(self, account_id=None, active_only=False):
+        """Set-asides via the v2 batch endpoint (best: firm-wide + set-aside id).
+
+        Delegates to :meth:`EclipseV2.get_set_asides`. Use ``self.v1.get_set_asides``
+        for the raw per-account v1 form.
+        """
+        return self.v2.get_set_asides(account_id=account_id, active_only=active_only)
+
+
+class EclipseAPI(Eclipse):
+    """Deprecated alias of :class:`Eclipse` (best-of-both client).
+
+    Retained for backwards compatibility with pre-2.0 callers. Prefer
+    :class:`Eclipse`, or :class:`EclipseV1` / :class:`EclipseV2` to target a
+    specific API surface explicitly. Emits a ``DeprecationWarning`` on
+    construction and will be removed in a future major release.
+    """
+
+    def __init__(self, *args, **kwargs):
+        warnings.warn(
+            "EclipseAPI is deprecated; use Eclipse (best of v1+v2), or "
+            "EclipseV1 / EclipseV2 to target a surface explicitly.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        super().__init__(*args, **kwargs)
