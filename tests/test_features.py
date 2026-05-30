@@ -869,3 +869,255 @@ class TestEclipseV1TradeGenPreview:
         assert body["selectedMethodId"] == 3
         assert body["spendFullAmount"] is True
         assert body["filterType"] == "X"
+
+
+V2_BASE = "https://api.orioneclipse.com/api/v2"
+
+
+class TestEclipseV2ReadEndpoints:
+    """URL/params coverage for the v2-only read methods (coverage batch 1).
+
+    Patching requests.get works because api_request resolves req_func at call time.
+    """
+
+    # --- Tactical ---
+
+    def test_tactical_portfolio_summary(self):
+        api = _eclipse_for_set_asides()
+        mock_get = _mock_get({})
+        with patch("requests.get", mock_get):
+            api.get_tactical_portfolio_summary(7)
+        assert mock_get.call_args.args[0] == f"{V2_BASE}/Tactical/PortfolioSummary/7"
+
+    def test_tactical_account_cash_detail(self):
+        api = _eclipse_for_set_asides()
+        mock_get = _mock_get([])
+        with patch("requests.get", mock_get):
+            api.get_tactical_account_cash_detail(7)
+        assert mock_get.call_args.args[0] == f"{V2_BASE}/Tactical/AccountAndCashDetail/7"
+
+    def test_tactical_model_analyzer_params(self):
+        api = _eclipse_for_set_asides()
+        mock_get = _mock_get({})
+        with patch("requests.get", mock_get):
+            api.get_tactical_model_analyzer(7, account_id=3, aggregate_alternates=True)
+        assert mock_get.call_args.args[0] == f"{V2_BASE}/Tactical/ModelAnalyzer/7"
+        assert mock_get.call_args.kwargs["params"] == {
+            "accountId": 3,
+            "aggregateAlternates": "true",
+        }
+
+    def test_tactical_model_analyzer_no_params(self):
+        api = _eclipse_for_set_asides()
+        mock_get = _mock_get({})
+        with patch("requests.get", mock_get):
+            api.get_tactical_model_analyzer(7)
+        assert mock_get.call_args.kwargs["params"] == {}
+
+    def test_tactical_tax_lots(self):
+        api = _eclipse_for_set_asides()
+        mock_get = _mock_get([])
+        with patch("requests.get", mock_get):
+            api.get_tactical_tax_lots(7, account_id=9)
+        assert mock_get.call_args.args[0] == f"{V2_BASE}/Tactical/TaxLots/7"
+        assert mock_get.call_args.kwargs["params"] == {"accountId": 9}
+
+    def test_tactical_trades(self):
+        api = _eclipse_for_set_asides()
+        mock_get = _mock_get([])
+        with patch("requests.get", mock_get):
+            api.get_tactical_trades(7)
+        assert mock_get.call_args.args[0] == f"{V2_BASE}/Tactical/Trades/7"
+
+    def test_tactical_restricted_securities(self):
+        api = _eclipse_for_set_asides()
+        mock_get = _mock_get([])
+        with patch("requests.get", mock_get):
+            api.get_tactical_restricted_securities(7)
+        assert mock_get.call_args.args[0] == f"{V2_BASE}/Tactical/RestrictedSecurities/7"
+
+    # --- ESG ---
+
+    def test_esg_themes(self):
+        api = _eclipse_for_set_asides()
+        mock_get = _mock_get([])
+        with patch("requests.get", mock_get):
+            api.get_esg_themes()
+        assert mock_get.call_args.args[0] == f"{V2_BASE}/ESG/Themes"
+
+    def test_esg_assignments(self):
+        api = _eclipse_for_set_asides()
+        mock_get = _mock_get([])
+        with patch("requests.get", mock_get):
+            api.get_esg_assignments()
+        assert mock_get.call_args.args[0] == f"{V2_BASE}/ESG/Assignments"
+
+    def test_esg_restrictions_for_portfolio(self):
+        api = _eclipse_for_set_asides()
+        mock_get = _mock_get([])
+        with patch("requests.get", mock_get):
+            api.get_esg_restrictions_for_portfolio(7)
+        assert mock_get.call_args.args[0] == f"{V2_BASE}/ESG/ESGRestrictionsForPortfolio"
+        assert mock_get.call_args.kwargs["params"] == {"portfolioId": 7}
+
+    # --- Trading blocks ---
+
+    def test_get_trade_blocks_filters(self):
+        api = _eclipse_for_set_asides()
+        mock_get = _mock_get([])
+        with patch("requests.get", mock_get):
+            api.get_trade_blocks(has_quodd=True, registration_status="REGISTERED", get_adv=False)
+        assert mock_get.call_args.args[0] == f"{V2_BASE}/Trading/Blocks"
+        assert mock_get.call_args.kwargs["params"] == {
+            "hasQuodd": "true",
+            "registrationStatus": "REGISTERED",
+            "getAdv": "false",
+        }
+
+    def test_get_trade_blocks_grid(self):
+        api = _eclipse_for_set_asides()
+        mock_get = _mock_get([])
+        with patch("requests.get", mock_get):
+            api.get_trade_blocks_grid([1, 2, 3])
+        assert mock_get.call_args.args[0] == f"{V2_BASE}/Trading/Blocks/BlocksGrid"
+        assert mock_get.call_args.kwargs["params"] == {"blockIds": [1, 2, 3]}
+
+    def test_get_trade_block_fix_messages(self):
+        api = _eclipse_for_set_asides()
+        mock_get = _mock_get([])
+        with patch("requests.get", mock_get):
+            api.get_trade_block_fix_messages(55)
+        assert mock_get.call_args.args[0] == f"{V2_BASE}/Trading/Blocks/55/FixMessages"
+
+    # --- Dashboard ---
+
+    def test_get_dashboards(self):
+        api = _eclipse_for_set_asides()
+        mock_get = _mock_get([])
+        with patch("requests.get", mock_get):
+            api.get_dashboards(user_id=4, team_id=2)
+        assert mock_get.call_args.args[0] == f"{V2_BASE}/Dashboard"
+        assert mock_get.call_args.kwargs["params"] == {"userId": 4, "teamId": 2}
+
+    def test_get_dashboard(self):
+        api = _eclipse_for_set_asides()
+        mock_get = _mock_get({})
+        with patch("requests.get", mock_get):
+            api.get_dashboard(12)
+        assert mock_get.call_args.args[0] == f"{V2_BASE}/Dashboard/12"
+
+    def test_get_account_dashboard(self):
+        api = _eclipse_for_set_asides()
+        mock_get = _mock_get({})
+        with patch("requests.get", mock_get):
+            api.get_account_dashboard()
+        assert mock_get.call_args.args[0] == f"{V2_BASE}/Dashboard/AccountDashboard"
+
+    def test_get_dashboard_fields(self):
+        api = _eclipse_for_set_asides()
+        mock_get = _mock_get([])
+        with patch("requests.get", mock_get):
+            api.get_dashboard_fields()
+        assert mock_get.call_args.args[0] == f"{V2_BASE}/Dashboard/Fields"
+
+    def test_get_analytics_run_history(self):
+        api = _eclipse_for_set_asides()
+        mock_get = _mock_get([])
+        with patch("requests.get", mock_get):
+            api.get_analytics_run_history()
+        assert mock_get.call_args.args[0] == f"{V2_BASE}/Dashboard/AnalyticsRunHistory"
+
+    # --- Astro ---
+
+    def test_get_astro_templates(self):
+        api = _eclipse_for_set_asides()
+        mock_get = _mock_get([])
+        with patch("requests.get", mock_get):
+            api.get_astro_templates(al_client_id=99)
+        assert mock_get.call_args.args[0] == f"{V2_BASE}/Astro/Templates"
+        assert mock_get.call_args.kwargs["params"] == {"alClientId": 99}
+
+    def test_get_astro_all_templates(self):
+        api = _eclipse_for_set_asides()
+        mock_get = _mock_get([])
+        with patch("requests.get", mock_get):
+            api.get_astro_all_templates()
+        assert mock_get.call_args.args[0] == f"{V2_BASE}/Astro/AllTemplates"
+
+    # --- Optimization ---
+
+    def test_get_optimization_summaries(self):
+        api = _eclipse_for_set_asides()
+        mock_get = _mock_get([])
+        with patch("requests.get", mock_get):
+            api.get_optimization_summaries(start_date="2026-01-01", end_date="2026-01-31")
+        assert mock_get.call_args.args[0] == f"{V2_BASE}/Optimization/summaries"
+        assert mock_get.call_args.kwargs["params"] == {
+            "startDate": "2026-01-01",
+            "endDate": "2026-01-31",
+        }
+
+    def test_get_optimization_batch_summary_defaults(self):
+        api = _eclipse_for_set_asides()
+        mock_get = _mock_get([])
+        with patch("requests.get", mock_get):
+            api.get_optimization_batch_summary()
+        assert mock_get.call_args.args[0] == f"{V2_BASE}/Optimization/Summary/Batch"
+        assert mock_get.call_args.kwargs["params"] == {}
+
+    def test_get_optimization_batch_status(self):
+        api = _eclipse_for_set_asides()
+        mock_get = _mock_get({})
+        with patch("requests.get", mock_get):
+            api.get_optimization_batch_status("nightly-2026-01-15")
+        assert mock_get.call_args.args[0] == (
+            f"{V2_BASE}/Optimization/Status/Batch/nightly-2026-01-15"
+        )
+
+    # --- Asset classification + analytics config ---
+
+    def test_get_asset_classification_groups(self):
+        api = _eclipse_for_set_asides()
+        mock_get = _mock_get([])
+        with patch("requests.get", mock_get):
+            api.get_asset_classification_groups()
+        assert mock_get.call_args.args[0] == f"{V2_BASE}/AssetClassification/ClassificationGroups"
+
+    def test_get_asset_classification_methods(self):
+        api = _eclipse_for_set_asides()
+        mock_get = _mock_get([])
+        with patch("requests.get", mock_get):
+            api.get_asset_classification_methods()
+        assert mock_get.call_args.args[0] == f"{V2_BASE}/AssetClassification/ClassificationMethods"
+
+    def test_get_analytics_run_config(self):
+        api = _eclipse_for_set_asides()
+        mock_get = _mock_get({})
+        with patch("requests.get", mock_get):
+            api.get_analytics_run_config()
+        assert mock_get.call_args.args[0] == f"{V2_BASE}/Analytics/RunAnalyticsConfig"
+
+    def test_get_analytics_banner_status(self):
+        api = _eclipse_for_set_asides()
+        mock_get = _mock_get({})
+        with patch("requests.get", mock_get):
+            api.get_analytics_banner_status()
+        assert mock_get.call_args.args[0] == f"{V2_BASE}/Analytics/BannerSpinner/Status"
+
+
+class TestEclipseUnifierV2Fallback:
+    """The unifier delegates v2-only method names to .v2 (v1 still wins collisions)."""
+
+    def test_v2_only_method_reachable_on_unifier(self):
+        from orionapi import Eclipse
+
+        api = Eclipse(eclipse_token="tok")
+        # get_tactical_* exists only on v2 -> unifier falls through to v2
+        assert api.get_tactical_tax_lots.__self__ is api.v2
+
+    def test_v1_method_still_wins(self):
+        from orionapi import Eclipse
+
+        api = Eclipse(eclipse_token="tok")
+        # get_account_holdings exists on v1 -> delegated to v1, not v2
+        assert api.get_account_holdings.__self__ is api.v1
