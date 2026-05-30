@@ -316,3 +316,111 @@ class TestCreateSetAsideExtended:
 
                 # Verify _maybe_wait_for_analytics was called with False
                 mock_wait.assert_called_once_with(False)
+
+
+# A realistic v2 AccountSetAsideCashResponseDto record (from live response).
+SAMPLE_SET_ASIDE = {
+    "id": 1723,
+    "accountId": 1114,
+    "accountNumber": "08197200",
+    "setAsideCashAmount": 15500.0,
+    "setAsideCashAmountType": "Dollar",
+    "cashAmountTypeId": 1,
+    "cashAmountType": "$",
+    "isActive": True,
+    "expirationValue": None,
+    "expirationTypeId": 3,
+    "expirationType": "None",
+    "startDate": "2026-03-05T00:00:00",
+    "description": "1 month of beneficiary distributions, paid monthly",
+}
+
+
+def _eclipse_for_set_asides():
+    """Construct an EclipseAPI with auth/login patched out for unit tests."""
+    with patch.object(EclipseAPI, "login"):
+        api = EclipseAPI(usr="test", pwd="pass")
+    # Provide a token so the real _get_auth_header succeeds during requests.
+    api.eclipse_token = "test-token"
+    return api
+
+
+def _mock_post(records):
+    """Return a requests.post mock yielding the given JSON records."""
+    mock_response = Mock()
+    mock_response.ok = True
+    mock_response.json.return_value = records
+    mock_post = Mock(return_value=mock_response)
+    return mock_post
+
+
+class TestGetSetAsides:
+    """Tests for the unified get_set_asides method (v2 batch endpoint)."""
+
+    def test_per_account_normalizes_and_posts_account_id(self):
+        """Per-account call posts [internal_id] to the v2 endpoint and normalizes."""
+        api = _eclipse_for_set_asides()
+        with patch.object(api, "get_internal_account_id", return_value=123):
+            mock_post = _mock_post([dict(SAMPLE_SET_ASIDE)])
+            with patch("requests.post", mock_post):
+                result = api.get_set_asides("08197200")
+
+        # POST body is the resolved internal account id list
+        assert mock_post.call_args.kwargs["json"] == [123]
+        # URL targets the v2 host-root surface, not /v1
+        assert mock_post.call_args.args[0] == (
+            "https://api.orioneclipse.com/api/v2/Account/Accounts/SetAsideCashSettings"
+        )
+
+        rec = result[0]
+        # Normalized keys
+        assert rec["set_aside_id"] == 1723
+        assert rec["amount"] == 15500.0
+        assert rec["active"] is True
+        assert rec["account_number"] == "08197200"
+        assert rec["start_date"] == "2026-03-05T00:00:00"
+        # Original raw keys preserved (augmentation, not replacement)
+        assert rec["id"] == 1723
+        assert rec["setAsideCashAmount"] == 15500.0
+
+    def test_firmwide_posts_all_account_ids(self):
+        """Firm-wide call (no account_id) posts all account ids from get_all_accounts."""
+        api = _eclipse_for_set_asides()
+        with patch.object(api, "get_all_accounts", return_value=[{"id": 1}, {"id": 2}]):
+            mock_post = _mock_post([dict(SAMPLE_SET_ASIDE)])
+            with patch("requests.post", mock_post):
+                result = api.get_set_asides()
+
+        assert mock_post.call_args.kwargs["json"] == [1, 2]
+        assert result[0]["set_aside_id"] == 1723
+
+    def test_active_only_filters_inactive(self):
+        """active_only=True drops records whose isActive is False."""
+        api = _eclipse_for_set_asides()
+        inactive = {**SAMPLE_SET_ASIDE, "id": 9, "isActive": False}
+        with patch.object(api, "get_internal_account_id", return_value=123):
+            mock_post = _mock_post([dict(SAMPLE_SET_ASIDE), inactive])
+            with patch("requests.post", mock_post):
+                active = api.get_set_asides("08197200", active_only=True)
+                all_records = api.get_set_asides("08197200")
+
+        assert [r["set_aside_id"] for r in active] == [1723]
+        assert len(all_records) == 2
+
+    def test_end_date_mapping(self):
+        """end_date is the expirationValue for date-based expirations, else None."""
+        api = _eclipse_for_set_asides()
+        date_based = {
+            **SAMPLE_SET_ASIDE,
+            "id": 5,
+            "expirationTypeId": 1,
+            "expirationValue": "2026-12-31",
+        }
+        with patch.object(api, "get_internal_account_id", return_value=123):
+            mock_post = _mock_post([date_based, dict(SAMPLE_SET_ASIDE)])
+            with patch("requests.post", mock_post):
+                result = api.get_set_asides("08197200")
+
+        by_id = {r["set_aside_id"]: r for r in result}
+        assert by_id[5]["end_date"] == "2026-12-31"
+        assert by_id[1723]["end_date"] is None
