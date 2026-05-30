@@ -1,9 +1,16 @@
 # ADR 0001 — Split EclipseAPI into explicit v1 / v2 classes with a unifying "best of both" class
 
-- **Status:** Accepted
+- **Status:** Accepted — implemented in 2.0.0
 - **Date:** 2026-05-30
 - **Deciders:** Spencer Ogden
 - **Supersedes:** the single mixed `EclipseAPI` class (v1 methods + one v2 method)
+
+> **Implementation note (2.0.0):** Shipped as `EclipseBase` → `EclipseV1` / `EclipseV2`,
+> plus `Eclipse` (composition unifier: shared token, `.v1`/`.v2`, `__getattr__`-delegates
+> the v1 long tail to `self.v1`, overrides `get_set_asides` to `self.v2`). `EclipseAPI` is
+> a `DeprecationWarning` subclass of `Eclipse`. The unifier uses `__getattr__` forwarding
+> rather than hand-listing ~60 delegations — a deliberate, lower-maintenance realization of
+> the "pure composition" decision (still composition; `.v1`/`.v2` remain explicit).
 
 ## Context
 

@@ -8,7 +8,7 @@ from unittest.mock import Mock, patch
 
 import pytest
 
-from orionapi import EclipseAPI, OrionAPI
+from orionapi import EclipseAPI, EclipseV1, EclipseV2, OrionAPI
 
 
 class TestOrionUpdateOperations:
@@ -82,7 +82,7 @@ class TestOrionUpdateOperations:
                 assert result["accountType"] == "IRA"
 
 
-# EclipseAPI doesn't have update operations yet, removed invalid test
+# EclipseV1 doesn't have update operations yet, removed invalid test
 
 
 class TestEclipseAnalytics:
@@ -90,8 +90,8 @@ class TestEclipseAnalytics:
 
     def test_get_analytics_status_running(self):
         """Test getting analytics status when running."""
-        with patch.object(EclipseAPI, "login"):
-            api = EclipseAPI(usr="test", pwd="pass")
+        with patch.object(EclipseV1, "login"):
+            api = EclipseV1(usr="test", pwd="pass")
 
             # Mock api_request to return status
             with patch.object(api, "api_request") as mock_api_request:
@@ -107,8 +107,8 @@ class TestEclipseAnalytics:
 
     def test_get_analytics_status_complete(self):
         """Test getting analytics status when complete."""
-        with patch.object(EclipseAPI, "login"):
-            api = EclipseAPI(usr="test", pwd="pass")
+        with patch.object(EclipseV1, "login"):
+            api = EclipseV1(usr="test", pwd="pass")
 
             # Mock api_request to return status
             with patch.object(api, "api_request") as mock_api_request:
@@ -123,8 +123,8 @@ class TestEclipseAnalytics:
 
     def test_run_analytics(self):
         """Test triggering analytics run."""
-        with patch.object(EclipseAPI, "login"):
-            api = EclipseAPI(usr="test", pwd="pass")
+        with patch.object(EclipseV1, "login"):
+            api = EclipseV1(usr="test", pwd="pass")
 
             # Mock api_request to return status
             with patch.object(api, "api_request") as mock_api_request:
@@ -140,10 +140,10 @@ class TestEclipseAnalytics:
     def test_wait_for_analytics_immediate_completion(self):
         """Test wait_for_analytics when already complete."""
         with (
-            patch.object(EclipseAPI, "login"),
-            patch.object(EclipseAPI, "_get_auth_header", return_value={}),
+            patch.object(EclipseV1, "login"),
+            patch.object(EclipseV1, "_get_auth_header", return_value={}),
         ):
-            api = EclipseAPI(usr="test", pwd="pass")
+            api = EclipseV1(usr="test", pwd="pass")
 
             with patch.object(
                 api, "get_analytics_status", return_value={"isAnalysisRunning": False}
@@ -158,10 +158,10 @@ class TestEclipseAnalytics:
     def test_wait_for_analytics_polls_until_complete(self):
         """Test wait_for_analytics polls until complete."""
         with (
-            patch.object(EclipseAPI, "login"),
-            patch.object(EclipseAPI, "_get_auth_header", return_value={}),
+            patch.object(EclipseV1, "login"),
+            patch.object(EclipseV1, "_get_auth_header", return_value={}),
         ):
-            api = EclipseAPI(usr="test", pwd="pass")
+            api = EclipseV1(usr="test", pwd="pass")
 
             # Simulate analytics completing after 2 polls
             call_count = [0]
@@ -182,10 +182,10 @@ class TestEclipseAnalytics:
     def test_wait_for_analytics_timeout(self):
         """Test wait_for_analytics raises TimeoutError."""
         with (
-            patch.object(EclipseAPI, "login"),
-            patch.object(EclipseAPI, "_get_auth_header", return_value={}),
+            patch.object(EclipseV1, "login"),
+            patch.object(EclipseV1, "_get_auth_header", return_value={}),
         ):
-            api = EclipseAPI(usr="test", pwd="pass")
+            api = EclipseV1(usr="test", pwd="pass")
 
             with patch.object(
                 api, "get_analytics_status", return_value={"isAnalysisRunning": True}
@@ -196,10 +196,10 @@ class TestEclipseAnalytics:
     def test_maybe_wait_for_analytics_when_sync_true(self):
         """Test _maybe_wait_for_analytics waits when sync=True."""
         with (
-            patch.object(EclipseAPI, "login"),
-            patch.object(EclipseAPI, "_get_auth_header", return_value={}),
+            patch.object(EclipseV1, "login"),
+            patch.object(EclipseV1, "_get_auth_header", return_value={}),
         ):
-            api = EclipseAPI(usr="test", pwd="pass")
+            api = EclipseV1(usr="test", pwd="pass")
 
             with patch.object(api, "wait_for_analytics", return_value=True) as mock_wait:
                 api._maybe_wait_for_analytics(sync=True)
@@ -209,10 +209,10 @@ class TestEclipseAnalytics:
     def test_maybe_wait_for_analytics_when_sync_false(self):
         """Test _maybe_wait_for_analytics skips when sync=False."""
         with (
-            patch.object(EclipseAPI, "login"),
-            patch.object(EclipseAPI, "_get_auth_header", return_value={}),
+            patch.object(EclipseV1, "login"),
+            patch.object(EclipseV1, "_get_auth_header", return_value={}),
         ):
-            api = EclipseAPI(usr="test", pwd="pass")
+            api = EclipseV1(usr="test", pwd="pass")
 
             with patch.object(api, "wait_for_analytics", return_value=True) as mock_wait:
                 api._maybe_wait_for_analytics(sync=False)
@@ -226,12 +226,12 @@ class TestCreateSetAsideExtended:
     def test_create_set_aside_with_description(self):
         """Test create_set_aside with description."""
         with (
-            patch.object(EclipseAPI, "login"),
-            patch.object(EclipseAPI, "get_internal_account_id", return_value=123),
-            patch.object(EclipseAPI, "_get_auth_header", return_value={}),
-            patch.object(EclipseAPI, "_maybe_wait_for_analytics"),
+            patch.object(EclipseV1, "login"),
+            patch.object(EclipseV1, "get_internal_account_id", return_value=123),
+            patch.object(EclipseV1, "_get_auth_header", return_value={}),
+            patch.object(EclipseV1, "_maybe_wait_for_analytics"),
         ):
-            api = EclipseAPI(usr="test", pwd="pass")
+            api = EclipseV1(usr="test", pwd="pass")
 
             with patch("requests.post") as mock_post:
                 mock_response = Mock()
@@ -258,12 +258,12 @@ class TestCreateSetAsideExtended:
     def test_create_set_aside_percentage_type(self):
         """Test create_set_aside with percentage cash type."""
         with (
-            patch.object(EclipseAPI, "login"),
-            patch.object(EclipseAPI, "get_internal_account_id", return_value=123),
-            patch.object(EclipseAPI, "_get_auth_header", return_value={}),
-            patch.object(EclipseAPI, "_maybe_wait_for_analytics"),
+            patch.object(EclipseV1, "login"),
+            patch.object(EclipseV1, "get_internal_account_id", return_value=123),
+            patch.object(EclipseV1, "_get_auth_header", return_value={}),
+            patch.object(EclipseV1, "_maybe_wait_for_analytics"),
         ):
-            api = EclipseAPI(usr="test", pwd="pass")
+            api = EclipseV1(usr="test", pwd="pass")
 
             with patch("requests.post") as mock_post:
                 mock_response = Mock()
@@ -285,12 +285,12 @@ class TestCreateSetAsideExtended:
     def test_create_set_aside_date_expiration(self):
         """Test create_set_aside with date-based expiration."""
         with (
-            patch.object(EclipseAPI, "login"),
-            patch.object(EclipseAPI, "get_internal_account_id", return_value=123),
-            patch.object(EclipseAPI, "_get_auth_header", return_value={}),
-            patch.object(EclipseAPI, "_maybe_wait_for_analytics"),
+            patch.object(EclipseV1, "login"),
+            patch.object(EclipseV1, "get_internal_account_id", return_value=123),
+            patch.object(EclipseV1, "_get_auth_header", return_value={}),
+            patch.object(EclipseV1, "_maybe_wait_for_analytics"),
         ):
-            api = EclipseAPI(usr="test", pwd="pass")
+            api = EclipseV1(usr="test", pwd="pass")
 
             with patch("requests.post") as mock_post:
                 mock_response = Mock()
@@ -314,11 +314,11 @@ class TestCreateSetAsideExtended:
     def test_create_set_aside_no_sync(self):
         """Test create_set_aside with sync=False."""
         with (
-            patch.object(EclipseAPI, "login"),
-            patch.object(EclipseAPI, "get_internal_account_id", return_value=123),
-            patch.object(EclipseAPI, "_get_auth_header", return_value={}),
+            patch.object(EclipseV1, "login"),
+            patch.object(EclipseV1, "get_internal_account_id", return_value=123),
+            patch.object(EclipseV1, "_get_auth_header", return_value={}),
         ):
-            api = EclipseAPI(usr="test", pwd="pass")
+            api = EclipseV1(usr="test", pwd="pass")
 
             with (
                 patch("requests.post") as mock_post,
@@ -354,9 +354,9 @@ SAMPLE_SET_ASIDE = {
 
 
 def _eclipse_for_set_asides():
-    """Construct an EclipseAPI with auth/login patched out for unit tests."""
-    with patch.object(EclipseAPI, "login"):
-        api = EclipseAPI(usr="test", pwd="pass")
+    """Construct an EclipseV2 with auth/login patched out for unit tests."""
+    with patch.object(EclipseV2, "login"):
+        api = EclipseV2(usr="test", pwd="pass")
     # Provide a token so the real _get_auth_header succeeds during requests.
     api.eclipse_token = "test-token"
     return api
@@ -488,3 +488,36 @@ class TestEclipseRequest:
             api.eclipse_request("x", version="v3")
         with pytest.raises(ValueError, match="method must be"):
             api.eclipse_request("x", method="patch")
+
+
+class TestEclipseUnifierAndAlias:
+    """The Eclipse unifier composes v1/v2; EclipseAPI is a deprecated alias."""
+
+    def test_unifier_shares_token_and_exposes_subclients(self):
+        """Eclipse injects its token into .v1 / .v2 without re-logging in."""
+        from orionapi import Eclipse
+
+        api = Eclipse(eclipse_token="tok")
+        assert api.eclipse_token == "tok"
+        assert api.v1.eclipse_token == "tok"
+        assert api.v2.eclipse_token == "tok"
+        assert isinstance(api.v1, EclipseV1)
+        assert isinstance(api.v2, EclipseV2)
+
+    def test_unifier_delegates_v1_and_prefers_v2_for_set_asides(self):
+        """Unknown attrs delegate to v1; get_set_asides is overridden to use v2."""
+        from orionapi import Eclipse
+
+        api = Eclipse(eclipse_token="tok")
+        # delegated v1 method is bound to the v1 sub-client
+        assert api.create_set_aside.__self__ is api.v1
+        # get_set_asides is the unifier's own override (routes to v2)
+        assert api.get_set_asides.__self__ is api
+
+    def test_eclipse_api_alias_warns_and_constructs(self):
+        """EclipseAPI emits DeprecationWarning and still builds the unifier."""
+        with pytest.warns(DeprecationWarning, match="EclipseAPI is deprecated"):
+            api = EclipseAPI(eclipse_token="tok")
+        assert isinstance(api, EclipseAPI)
+        assert api.eclipse_token == "tok"
+        assert api.v1.eclipse_token == "tok"
