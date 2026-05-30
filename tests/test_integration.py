@@ -888,3 +888,133 @@ class TestOrionAPI:
             accounts[0]["id"], start_date, end_date, entity_type="account"
         )
         assert isinstance(performance, dict)
+
+
+class TestEclipse21Endpoints:
+    """Live smoke tests for the read/preview methods added in orionapi 2.1.0.
+
+    These fetch real data to confirm the documented endpoints still respond with
+    the expected shape — catching upstream route breakage that mocked unit tests
+    cannot. Skipped without ECLIPSE_USER/ECLIPSE_PWD.
+    """
+
+    def _first_model_id(self, client):
+        models = client.get_all_models(top=5)
+        if not models:
+            pytest.skip("No models available")
+        return models[0]["id"]
+
+    def _first_portfolio_id(self, client):
+        portfolios = client.get_all_portfolios(top=5)
+        if not portfolios:
+            pytest.skip("No portfolios available")
+        return portfolios[0]["id"]
+
+    # --- no-arg trade-tool / model reference endpoints ---
+
+    def test_get_raise_cash_methods(self, eclipse_client):
+        assert isinstance(eclipse_client.get_raise_cash_methods(), list)
+
+    def test_get_spend_cash_methods(self, eclipse_client):
+        assert isinstance(eclipse_client.get_spend_cash_methods(), list)
+
+    def test_get_model_status(self, eclipse_client):
+        assert isinstance(eclipse_client.get_model_status(), list)
+
+    def test_get_model_types(self, eclipse_client):
+        assert isinstance(eclipse_client.get_model_types(), list)
+
+    def test_get_submodels(self, eclipse_client):
+        assert isinstance(eclipse_client.get_submodels(), list)
+
+    # --- paged / filtered variants of existing list endpoints ---
+
+    def test_get_all_models_top(self, eclipse_client):
+        assert isinstance(eclipse_client.get_all_models(top=3), list)
+
+    def test_get_all_portfolios_top(self, eclipse_client):
+        assert isinstance(eclipse_client.get_all_portfolios(top=3), list)
+
+    def test_get_trades_top(self, eclipse_client):
+        assert isinstance(eclipse_client.get_trades(top=3), list)
+
+    def test_get_trade_instances_raw(self, eclipse_client):
+        from datetime import datetime, timedelta
+
+        end_date = datetime.now().strftime("%Y-%m-%d")
+        start_date = (datetime.now() - timedelta(days=30)).strftime("%Y-%m-%d")
+        assert isinstance(
+            eclipse_client.get_trade_instances(start_date, end_date, normalize=False), list
+        )
+
+    # --- model-scoped endpoints ---
+
+    def test_get_model_nodes(self, eclipse_client):
+        assert isinstance(
+            eclipse_client.get_model_nodes(self._first_model_id(eclipse_client)), dict
+        )
+
+    def test_get_model_portfolios(self, eclipse_client):
+        assert isinstance(
+            eclipse_client.get_model_portfolios(self._first_model_id(eclipse_client)), list
+        )
+
+    def test_get_model_pending(self, eclipse_client):
+        assert isinstance(
+            eclipse_client.get_model_pending(self._first_model_id(eclipse_client)), dict
+        )
+
+    def test_get_model_analysis(self, eclipse_client):
+        assert isinstance(
+            eclipse_client.get_model_analysis(self._first_model_id(eclipse_client)), dict
+        )
+
+    def test_get_model_allocations_no_aggregate(self, eclipse_client):
+        assert isinstance(
+            eclipse_client.get_model_allocations(
+                self._first_model_id(eclipse_client), aggregate=False
+            ),
+            list,
+        )
+
+    # --- account / portfolio path variants ---
+
+    def test_get_portfolio_accounts_simple(self, eclipse_client):
+        pid = self._first_portfolio_id(eclipse_client)
+        assert isinstance(eclipse_client.get_portfolio_accounts(pid, simple=True), list)
+
+    def test_get_portfolio_holdings_detail(self, eclipse_client):
+        pid = self._first_portfolio_id(eclipse_client)
+        assert isinstance(eclipse_client.get_portfolio_holdings_detail(pid), list)
+
+    def test_account_simple_holdings_and_taxlots(self, eclipse_client):
+        pid = self._first_portfolio_id(eclipse_client)
+        accts = eclipse_client.get_portfolio_accounts(pid, simple=True)
+        if not accts:
+            pytest.skip("No accounts in portfolio")
+        account_id = accts[0]["accountId"]
+
+        assert isinstance(eclipse_client.get_account_simple(account_id), dict)
+
+        holdings = eclipse_client.get_account_holdings_detail(account_id)
+        assert isinstance(holdings, list)
+        if not holdings:
+            pytest.skip("No holdings to source a tax-lot from")
+        assert isinstance(eclipse_client.get_taxlots(holdings[0]["id"]), list)
+
+    # --- security sets ---
+
+    def test_get_security_set_summary(self, eclipse_client):
+        sets = eclipse_client.get_all_security_sets()
+        if not sets:
+            pytest.skip("No security sets available")
+        assert isinstance(eclipse_client.get_security_set_summary(sets[0]["id"]), dict)
+
+    @pytest.mark.xfail(
+        reason="Upstream Eclipse routes /security/securityset/detail into the /{id} "
+        "param route, returning 400 'id is not numeric string'. Use get_all_security_sets "
+        "+ get_security_set(id). Flips to XPASS if Eclipse fixes the route.",
+        strict=False,
+    )
+    def test_get_security_set_details(self, eclipse_client):
+        assert isinstance(eclipse_client.get_security_set_details(), list)
