@@ -277,15 +277,13 @@ class TestEclipseAPI:
         security_set = eclipse_client.get_security_set(set_id)
         assert isinstance(security_set, dict)
 
-    def test_get_set_asides_v2(self, eclipse_client):
-        """Test that we can fetch all set asides via v2 API."""
-        from orionapi import AuthenticationError
-
-        try:
-            set_asides = eclipse_client.get_set_asides_v2()
-            assert isinstance(set_asides, (dict, list))
-        except AuthenticationError:
-            pytest.skip("Insufficient privileges for v2 set asides endpoint")
+    def test_get_set_asides_firmwide(self, eclipse_client):
+        """Test that we can fetch set asides firm-wide via the v2 batch endpoint."""
+        set_asides = eclipse_client.get_set_asides()
+        assert isinstance(set_asides, list)
+        if set_asides:
+            assert "set_aside_id" in set_asides[0]
+            assert "account_number" in set_asides[0]
 
     def test_search_securities(self, eclipse_client):
         """Test that we can search for securities."""

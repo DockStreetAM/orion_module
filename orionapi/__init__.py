@@ -1,4 +1,4 @@
-__version__ = "1.10.0"
+__version__ = "1.11.0"
 
 import logging
 import re
@@ -2104,6 +2104,10 @@ class EclipseAPI(BaseAPI):
         super().__init__(rate_limit=rate_limit, verify_ssl=verify_ssl, ca_bundle=ca_bundle)
         self.eclipse_token = None
         self.base_url = "https://api.orioneclipse.com/v1"
+        # The v2 surface lives at the host root (/api/v2/...), NOT under /v1.
+        # Building it off base_url yields an unroutable /v1/api/v2/... path that
+        # Eclipse answers with a misleading 403 "missing privileges" error.
+        self.base_url_v2 = "https://api.orioneclipse.com/api/v2"
 
         if usr is not None:
             self.login(usr, pwd)
@@ -2173,27 +2177,67 @@ class EclipseAPI(BaseAPI):
         res = self.api_request(f"{self.base_url}/account/accounts/simple")
         return res.json()
 
-    def get_set_asides_v2(self):
-        """Get all set-aside cash settings via v2 API.
+    def _normalize_set_aside(self, record):
+        """Augment a raw v2 set-aside record with normalized snake_case fields.
 
-        Returns:
-            list: List of set-aside settings across all accounts
-        """
-        res = self.api_request(f"{self.base_url}/api/v2/Account/Accounts/SetAsideCashSettings")
-        return res.json()
-
-    def get_set_asides(self, account_id):
-        """Get set-aside cash settings for a specific account.
+        The original Eclipse keys are preserved; the normalized keys provide a
+        stable contract (e.g. ``set_aside_id``, ``amount``) regardless of the
+        upstream field spellings.
 
         Args:
-            account_id: Account ID or account number
+            record: A raw AccountSetAsideCashResponseDto dict
 
         Returns:
-            list: List of set-aside settings for the account
+            dict: The record with normalized keys added
         """
-        account_id = self.get_internal_account_id(account_id)
-        res = self.api_request(f"{self.base_url}/account/accounts/{account_id}/asidecash")
-        return res.json()
+        expiration_type_id = record.get("expirationTypeId")
+        end_date = record.get("expirationValue") if expiration_type_id == EXPIRE_TYPE_DATE else None
+        return {
+            **record,
+            "set_aside_id": record.get("id"),
+            "account_id": record.get("accountId"),
+            "account_number": record.get("accountNumber"),
+            "amount": record.get("setAsideCashAmount"),
+            "active": record.get("isActive"),
+            "description": record.get("description"),
+            "start_date": record.get("startDate"),
+            "end_date": end_date,
+        }
+
+    def get_set_asides(self, account_id=None, active_only=False):
+        """Get set-aside cash reservations, including the Eclipse set-aside id.
+
+        Uses the v2 batch endpoint, which accepts a list of internal account IDs
+        and returns one record per set-aside (each carrying its own ``id``,
+        ``accountId``, and ``accountNumber``). Records are augmented with
+        normalized snake_case fields (``set_aside_id``, ``amount``, ``active``,
+        ``account_number``, ``description``, ``start_date``, ``end_date``); the
+        original Eclipse keys are preserved.
+
+        Args:
+            account_id: Account ID, number, or name to restrict to a single
+                account. When None (default), returns set-asides firm-wide by
+                issuing one batch POST over all accounts.
+            active_only: When True, return only currently-active set-asides.
+                Defaults to False (includes expired/inactive).
+
+        Returns:
+            list: Augmented set-aside records
+        """
+        if account_id is not None:
+            account_ids = [self.get_internal_account_id(account_id)]
+        else:
+            account_ids = [a["id"] for a in self.get_all_accounts()]
+
+        res = self.api_request(
+            f"{self.base_url_v2}/Account/Accounts/SetAsideCashSettings",
+            requests.post,
+            json=account_ids,
+        )
+        records = [self._normalize_set_aside(r) for r in res.json()]
+        if active_only:
+            records = [r for r in records if r.get("active")]
+        return records
 
     def get_internal_account_id(self, search_param):
         """Get internal Eclipse account ID from a search parameter.
