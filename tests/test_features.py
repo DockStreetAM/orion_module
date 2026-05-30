@@ -450,7 +450,7 @@ class TestEclipseRequest:
         """version='v1' targets the /v1 base with a GET by default."""
         api = _eclipse_for_set_asides()
         mock_get = Mock(return_value=Mock(ok=True, json=lambda: {"ok": True}))
-        with patch.object(api, "api_request", mock_get):
+        with patch("requests.get", mock_get):
             result = api.eclipse_request("account/accounts/simple")
         assert result == {"ok": True}
         assert mock_get.call_args.args[0] == (
@@ -475,7 +475,7 @@ class TestEclipseRequest:
         """Paths with or without a leading slash resolve identically."""
         api = _eclipse_for_set_asides()
         mock_get = Mock(return_value=Mock(ok=True, json=lambda: {}))
-        with patch.object(api, "api_request", mock_get):
+        with patch("requests.get", mock_get):
             api.eclipse_request("Account/Accounts", version="v2")
             api.eclipse_request("/Account/Accounts", version="v2")
         urls = {call.args[0] for call in mock_get.call_args_list}
@@ -532,11 +532,10 @@ def _eclipse_v1():
 
 
 def _mock_get(records):
-    """Return an api_request mock whose response .json() yields the given records.
+    """Return a requests.get mock yielding the given JSON records.
 
-    Patched onto the instance ``api_request`` (not ``requests.get``) because
-    ``api_request``'s ``req_func=requests.get`` default is bound at definition time,
-    so patching ``requests.get`` would not take effect for GET methods.
+    Patching ``requests.get`` works for GET methods because ``api_request`` resolves
+    ``req_func`` at call time (it is not bound as a default argument).
     """
     mock_response = Mock()
     mock_response.ok = True
@@ -553,7 +552,7 @@ class TestEclipseV1NewGetEndpoints:
     def test_get_taxlots(self):
         api = _eclipse_v1()
         mock_get = _mock_get([{"lot": 1}])
-        with patch.object(api, "api_request", mock_get):
+        with patch("requests.get", mock_get):
             result = api.get_taxlots(987)
         assert result == [{"lot": 1}]
         assert mock_get.call_args.args[0] == f"{V1_BASE}/holding/holdings/987/taxlots"
@@ -561,42 +560,42 @@ class TestEclipseV1NewGetEndpoints:
     def test_get_raise_cash_methods(self):
         api = _eclipse_v1()
         mock_get = _mock_get([{"id": 1}])
-        with patch.object(api, "api_request", mock_get):
+        with patch("requests.get", mock_get):
             api.get_raise_cash_methods()
         assert mock_get.call_args.args[0] == f"{V1_BASE}/tradetool/raisecash/calculation_methods"
 
     def test_get_spend_cash_methods(self):
         api = _eclipse_v1()
         mock_get = _mock_get([{"id": 1}])
-        with patch.object(api, "api_request", mock_get):
+        with patch("requests.get", mock_get):
             api.get_spend_cash_methods()
         assert mock_get.call_args.args[0] == f"{V1_BASE}/tradetool/spendcash/calculation_methods"
 
     def test_get_model_nodes(self):
         api = _eclipse_v1()
         mock_get = _mock_get([])
-        with patch.object(api, "api_request", mock_get):
+        with patch("requests.get", mock_get):
             api.get_model_nodes(55)
         assert mock_get.call_args.args[0] == f"{V1_BASE}/modeling/models/55/Model/nodes"
 
     def test_get_model_portfolios(self):
         api = _eclipse_v1()
         mock_get = _mock_get([])
-        with patch.object(api, "api_request", mock_get):
+        with patch("requests.get", mock_get):
             api.get_model_portfolios(55)
         assert mock_get.call_args.args[0] == f"{V1_BASE}/modeling/models/55/portfolios"
 
     def test_get_model_pending(self):
         api = _eclipse_v1()
         mock_get = _mock_get({})
-        with patch.object(api, "api_request", mock_get):
+        with patch("requests.get", mock_get):
             api.get_model_pending(55)
         assert mock_get.call_args.args[0] == f"{V1_BASE}/modeling/models/55/pending"
 
     def test_get_model_analysis(self):
         api = _eclipse_v1()
         mock_get = _mock_get({})
-        with patch.object(api, "api_request", mock_get):
+        with patch("requests.get", mock_get):
             api.get_model_analysis(55, asset_type="class")
         assert mock_get.call_args.args[0] == f"{V1_BASE}/modeling/models/55/modelAnalysis"
         assert mock_get.call_args.kwargs["params"] == {
@@ -608,28 +607,28 @@ class TestEclipseV1NewGetEndpoints:
     def test_get_model_analysis_default_asset_type(self):
         api = _eclipse_v1()
         mock_get = _mock_get({})
-        with patch.object(api, "api_request", mock_get):
+        with patch("requests.get", mock_get):
             api.get_model_analysis(55)
         assert mock_get.call_args.kwargs["params"]["assetType"] == "securityset"
 
     def test_get_model_status(self):
         api = _eclipse_v1()
         mock_get = _mock_get([])
-        with patch.object(api, "api_request", mock_get):
+        with patch("requests.get", mock_get):
             api.get_model_status()
         assert mock_get.call_args.args[0] == f"{V1_BASE}/modeling/models/modelStatus"
 
     def test_get_model_types(self):
         api = _eclipse_v1()
         mock_get = _mock_get([])
-        with patch.object(api, "api_request", mock_get):
+        with patch("requests.get", mock_get):
             api.get_model_types()
         assert mock_get.call_args.args[0] == f"{V1_BASE}/modeling/models/modelTypes"
 
     def test_get_submodels_no_filters(self):
         api = _eclipse_v1()
         mock_get = _mock_get([])
-        with patch.object(api, "api_request", mock_get):
+        with patch("requests.get", mock_get):
             api.get_submodels()
         assert mock_get.call_args.args[0] == f"{V1_BASE}/modeling/models/submodels"
         assert mock_get.call_args.kwargs["params"] == {}
@@ -637,14 +636,14 @@ class TestEclipseV1NewGetEndpoints:
     def test_get_submodels_with_filters(self):
         api = _eclipse_v1()
         mock_get = _mock_get([])
-        with patch.object(api, "api_request", mock_get):
+        with patch("requests.get", mock_get):
             api.get_submodels(model_type="A", search="growth")
         assert mock_get.call_args.kwargs["params"] == {"modelType": "A", "name": "growth"}
 
     def test_get_out_of_tolerance_accounts(self):
         api = _eclipse_v1()
         mock_get = _mock_get([])
-        with patch.object(api, "api_request", mock_get):
+        with patch("requests.get", mock_get):
             api.get_out_of_tolerance_accounts(10, 20, asset_type="category")
         assert mock_get.call_args.args[0] == f"{V1_BASE}/account/accounts/10/outOfTolerance/20"
         assert mock_get.call_args.kwargs["params"] == {"assetType": "category"}
@@ -652,42 +651,42 @@ class TestEclipseV1NewGetEndpoints:
     def test_get_security_set_details(self):
         api = _eclipse_v1()
         mock_get = _mock_get([])
-        with patch.object(api, "api_request", mock_get):
+        with patch("requests.get", mock_get):
             api.get_security_set_details()
         assert mock_get.call_args.args[0] == f"{V1_BASE}/security/securityset/detail"
 
     def test_get_security_set_summary(self):
         api = _eclipse_v1()
         mock_get = _mock_get({})
-        with patch.object(api, "api_request", mock_get):
+        with patch("requests.get", mock_get):
             api.get_security_set_summary(42)
         assert mock_get.call_args.args[0] == f"{V1_BASE}/security/securityset/42"
 
     def test_get_account_simple(self):
         api = _eclipse_v1()
         mock_get = _mock_get({})
-        with patch.object(api, "api_request", mock_get):
+        with patch("requests.get", mock_get):
             api.get_account_simple(123)
         assert mock_get.call_args.args[0] == f"{V1_BASE}/account/accounts/simple/123"
 
     def test_get_account_holdings_detail(self):
         api = _eclipse_v1()
         mock_get = _mock_get([])
-        with patch.object(api, "api_request", mock_get):
+        with patch("requests.get", mock_get):
             api.get_account_holdings_detail(123)
         assert mock_get.call_args.args[0] == f"{V1_BASE}/account/accounts/123/holdings"
 
     def test_get_portfolio_holdings_detail(self):
         api = _eclipse_v1()
         mock_get = _mock_get([])
-        with patch.object(api, "api_request", mock_get):
+        with patch("requests.get", mock_get):
             api.get_portfolio_holdings_detail(77)
         assert mock_get.call_args.args[0] == f"{V1_BASE}/portfolio/portfolios/77/holdings"
 
     def test_get_trades_no_filters(self):
         api = _eclipse_v1()
         mock_get = _mock_get([])
-        with patch.object(api, "api_request", mock_get):
+        with patch("requests.get", mock_get):
             api.get_trades()
         assert mock_get.call_args.args[0] == f"{V1_BASE}/tradeorder/trades"
         assert mock_get.call_args.kwargs["params"] == {}
@@ -695,7 +694,7 @@ class TestEclipseV1NewGetEndpoints:
     def test_get_trades_with_filters(self):
         api = _eclipse_v1()
         mock_get = _mock_get([])
-        with patch.object(api, "api_request", mock_get):
+        with patch("requests.get", mock_get):
             api.get_trades(portfolio_id=5, top=10, is_pending=True)
         assert mock_get.call_args.kwargs["params"] == {
             "portfolioId": 5,
@@ -710,21 +709,21 @@ class TestEclipseV1ParamAdditions:
     def test_get_portfolio_accounts_full(self):
         api = _eclipse_v1()
         mock_get = _mock_get([])
-        with patch.object(api, "api_request", mock_get):
+        with patch("requests.get", mock_get):
             api.get_portfolio_accounts(9)
         assert mock_get.call_args.args[0] == f"{V1_BASE}/portfolio/portfolios/9/accounts"
 
     def test_get_portfolio_accounts_simple(self):
         api = _eclipse_v1()
         mock_get = _mock_get([])
-        with patch.object(api, "api_request", mock_get):
+        with patch("requests.get", mock_get):
             api.get_portfolio_accounts(9, simple=True)
         assert mock_get.call_args.args[0] == f"{V1_BASE}/portfolio/portfolios/9/accounts/simple"
 
     def test_get_all_models_no_params(self):
         api = _eclipse_v1()
         mock_get = _mock_get([])
-        with patch.object(api, "api_request", mock_get):
+        with patch("requests.get", mock_get):
             api.get_all_models()
         assert mock_get.call_args.args[0] == f"{V1_BASE}/modeling/models"
         assert mock_get.call_args.kwargs["params"] == {}
@@ -732,14 +731,14 @@ class TestEclipseV1ParamAdditions:
     def test_get_all_models_with_params(self):
         api = _eclipse_v1()
         mock_get = _mock_get([])
-        with patch.object(api, "api_request", mock_get):
+        with patch("requests.get", mock_get):
             api.get_all_models(name="Core", top=5)
         assert mock_get.call_args.kwargs["params"] == {"name": "Core", "$top": 5}
 
     def test_get_all_portfolios_default_unchanged(self):
         api = _eclipse_v1()
         mock_get = _mock_get([])
-        with patch.object(api, "api_request", mock_get):
+        with patch("requests.get", mock_get):
             api.get_all_portfolios()
         # default behavior unchanged: includevalue=true, no $top
         assert mock_get.call_args.kwargs["params"] == {"includevalue": "true"}
@@ -747,14 +746,14 @@ class TestEclipseV1ParamAdditions:
     def test_get_all_portfolios_with_top(self):
         api = _eclipse_v1()
         mock_get = _mock_get([])
-        with patch.object(api, "api_request", mock_get):
+        with patch("requests.get", mock_get):
             api.get_all_portfolios(include_value=False, top=25)
         assert mock_get.call_args.kwargs["params"] == {"includevalue": "false", "$top": 25}
 
     def test_get_model_allocations_default_aggregate(self):
         api = _eclipse_v1()
         mock_get = _mock_get([])
-        with patch.object(api, "api_request", mock_get):
+        with patch("requests.get", mock_get):
             api.get_model_allocations(3)
         assert mock_get.call_args.args[0] == f"{V1_BASE}/modeling/models/3/allocations"
         assert mock_get.call_args.kwargs["params"] == {"aggregateAllocations": "true"}
@@ -762,7 +761,7 @@ class TestEclipseV1ParamAdditions:
     def test_get_model_allocations_no_aggregate(self):
         api = _eclipse_v1()
         mock_get = _mock_get([])
-        with patch.object(api, "api_request", mock_get):
+        with patch("requests.get", mock_get):
             api.get_model_allocations(3, aggregate=False)
         assert mock_get.call_args.kwargs["params"] == {"aggregateAllocations": "false"}
 
@@ -770,7 +769,7 @@ class TestEclipseV1ParamAdditions:
         api = _eclipse_v1()
         raw = [{"tradeInstanceType": 1, "tradeInstanceSubType": 2}]
         mock_get = _mock_get(raw)
-        with patch.object(api, "api_request", mock_get):
+        with patch("requests.get", mock_get):
             result = api.get_trade_instances("2026-01-01", "2026-01-31", normalize=False)
         # Raw IDs preserved, not mapped to friendly names
         assert result == raw
@@ -780,7 +779,7 @@ class TestEclipseV1ParamAdditions:
         api = _eclipse_v1()
         raw = [{"tradeInstanceType": 1, "tradeInstanceSubType": 2}]
         mock_get = _mock_get(raw)
-        with patch.object(api, "api_request", mock_get):
+        with patch("requests.get", mock_get):
             result = api.get_trade_instances("2026-01-01", "2026-01-31")
         # Default normalize=True maps IDs to strings (or None if unmapped)
         assert result[0]["tradeInstanceType"] != 1
