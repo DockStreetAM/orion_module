@@ -1,4 +1,4 @@
-__version__ = "2.1.0"
+__version__ = "2.2.0"
 
 import logging
 import re
@@ -4458,6 +4458,367 @@ class EclipseV2(EclipseBase):
             records = [r for r in records if r.get("active")]
         return records
 
+    # --- Tactical (v2-only): per-portfolio tactical analysis reads ---------------
+
+    def get_tactical_portfolio_summary(self, portfolio_id):
+        """Get the tactical portfolio summary for a portfolio.
+
+        Args:
+            portfolio_id: Portfolio ID
+
+        Returns:
+            dict: Tactical portfolio summary
+        """
+        res = self.api_request(f"{self.base_url_v2}/Tactical/PortfolioSummary/{portfolio_id}")
+        return res.json()
+
+    def get_tactical_account_cash_detail(self, portfolio_id):
+        """Get account and cash detail for a portfolio (tactical view).
+
+        Args:
+            portfolio_id: Portfolio ID
+
+        Returns:
+            list: Per-account cash detail dicts
+        """
+        res = self.api_request(f"{self.base_url_v2}/Tactical/AccountAndCashDetail/{portfolio_id}")
+        return res.json()
+
+    def get_tactical_model_analyzer(self, portfolio_id, account_id=None, aggregate_alternates=None):
+        """Get model-analyzer data for a portfolio (tactical view).
+
+        Args:
+            portfolio_id: Portfolio ID
+            account_id: Optional account ID filter (maps to ``accountId``)
+            aggregate_alternates: Optional bool (maps to ``aggregateAlternates``)
+
+        Returns:
+            dict: Model-analyzer data
+        """
+        params = {}
+        if account_id is not None:
+            params["accountId"] = account_id
+        if aggregate_alternates is not None:
+            params["aggregateAlternates"] = str(aggregate_alternates).lower()
+        res = self.api_request(
+            f"{self.base_url_v2}/Tactical/ModelAnalyzer/{portfolio_id}", params=params
+        )
+        return res.json()
+
+    def get_tactical_tax_lots(self, portfolio_id, account_id=None):
+        """Get tax-lot data for a portfolio (tactical view).
+
+        Args:
+            portfolio_id: Portfolio ID
+            account_id: Optional account ID filter (maps to ``accountId``)
+
+        Returns:
+            list: Tax-lot dicts
+        """
+        params = {}
+        if account_id is not None:
+            params["accountId"] = account_id
+        res = self.api_request(f"{self.base_url_v2}/Tactical/TaxLots/{portfolio_id}", params=params)
+        return res.json()
+
+    def get_tactical_trades(self, portfolio_id, account_id=None):
+        """Get trades for a portfolio (tactical view).
+
+        Args:
+            portfolio_id: Portfolio ID
+            account_id: Optional account ID filter (maps to ``accountId``)
+
+        Returns:
+            list: Trade dicts
+        """
+        params = {}
+        if account_id is not None:
+            params["accountId"] = account_id
+        res = self.api_request(f"{self.base_url_v2}/Tactical/Trades/{portfolio_id}", params=params)
+        return res.json()
+
+    def get_tactical_restricted_securities(self, portfolio_id):
+        """Get restricted securities for a portfolio (tactical view).
+
+        Args:
+            portfolio_id: Portfolio ID
+
+        Returns:
+            list: Restricted-security dicts
+        """
+        res = self.api_request(f"{self.base_url_v2}/Tactical/RestrictedSecurities/{portfolio_id}")
+        return res.json()
+
+    # --- ESG (v2-only) -----------------------------------------------------------
+
+    def get_esg_themes(self):
+        """Get the firm-preference ESG themes.
+
+        Returns:
+            list: ESG theme dicts
+        """
+        res = self.api_request(f"{self.base_url_v2}/ESG/Themes")
+        return res.json()
+
+    def get_esg_assignments(self):
+        """Get the firm-preference ESG assignments.
+
+        Returns:
+            list: ESG assignment dicts
+        """
+        res = self.api_request(f"{self.base_url_v2}/ESG/Assignments")
+        return res.json()
+
+    def get_esg_restrictions_for_portfolio(self, portfolio_id):
+        """Get ESG restrictions associated with a portfolio.
+
+        Args:
+            portfolio_id: Portfolio ID (maps to ``portfolioId``)
+
+        Returns:
+            list: ESG restriction dicts
+        """
+        res = self.api_request(
+            f"{self.base_url_v2}/ESG/ESGRestrictionsForPortfolio",
+            params={"portfolioId": portfolio_id},
+        )
+        return res.json()
+
+    # --- Trading blocks (v2-only): read-only block views -------------------------
+
+    def get_trade_blocks(self, has_quodd=None, registration_status=None, get_adv=None):
+        """Get trade blocks.
+
+        Args:
+            has_quodd: Optional bool filter (maps to ``hasQuodd``)
+            registration_status: Optional registration-status filter
+                (maps to ``registrationStatus``)
+            get_adv: Optional bool (maps to ``getAdv``)
+
+        Returns:
+            list: Trade-block dicts
+        """
+        params = {}
+        if has_quodd is not None:
+            params["hasQuodd"] = str(has_quodd).lower()
+        if registration_status is not None:
+            params["registrationStatus"] = registration_status
+        if get_adv is not None:
+            params["getAdv"] = str(get_adv).lower()
+        res = self.api_request(f"{self.base_url_v2}/Trading/Blocks", params=params)
+        return res.json()
+
+    def get_trade_blocks_grid(
+        self, block_ids, has_quodd=None, registration_status=None, get_adv=None
+    ):
+        """Get trade-block data in the blocks-grid format for given block IDs.
+
+        Args:
+            block_ids: List of trade-block IDs (maps to ``blockIds``)
+            has_quodd: Optional bool filter (maps to ``hasQuodd``)
+            registration_status: Optional registration-status filter
+            get_adv: Optional bool (maps to ``getAdv``)
+
+        Returns:
+            list: Trade-block grid dicts
+        """
+        params = {"blockIds": block_ids}
+        if has_quodd is not None:
+            params["hasQuodd"] = str(has_quodd).lower()
+        if registration_status is not None:
+            params["registrationStatus"] = registration_status
+        if get_adv is not None:
+            params["getAdv"] = str(get_adv).lower()
+        res = self.api_request(f"{self.base_url_v2}/Trading/Blocks/BlocksGrid", params=params)
+        return res.json()
+
+    def get_trade_block_fix_messages(self, trade_block_id):
+        """Get all FIX messages for a trade block.
+
+        Args:
+            trade_block_id: Trade-block ID
+
+        Returns:
+            list: FIX message dicts
+        """
+        res = self.api_request(f"{self.base_url_v2}/Trading/Blocks/{trade_block_id}/FixMessages")
+        return res.json()
+
+    # --- Dashboard (v2-only) -----------------------------------------------------
+
+    def get_dashboards(self, user_id=None, team_id=None):
+        """Get user/team/firm-level dashboard layouts.
+
+        Args:
+            user_id: Optional user ID (maps to ``userId``)
+            team_id: Optional team ID (maps to ``teamId``)
+
+        Returns:
+            list: Dashboard layout dicts
+        """
+        params = {}
+        if user_id is not None:
+            params["userId"] = user_id
+        if team_id is not None:
+            params["teamId"] = team_id
+        res = self.api_request(f"{self.base_url_v2}/Dashboard", params=params)
+        return res.json()
+
+    def get_dashboard(self, dashboard_id):
+        """Get a single dashboard layout by ID.
+
+        Args:
+            dashboard_id: Dashboard ID
+
+        Returns:
+            dict: Dashboard layout
+        """
+        res = self.api_request(f"{self.base_url_v2}/Dashboard/{dashboard_id}")
+        return res.json()
+
+    def get_account_dashboard(self):
+        """Get the data populating the account dashboard.
+
+        Returns:
+            dict: Account-dashboard data
+        """
+        res = self.api_request(f"{self.base_url_v2}/Dashboard/AccountDashboard")
+        return res.json()
+
+    def get_dashboard_fields(self):
+        """Get the available fields and categories usable on a dashboard.
+
+        Returns:
+            list: Field/category dicts
+        """
+        res = self.api_request(f"{self.base_url_v2}/Dashboard/Fields")
+        return res.json()
+
+    def get_analytics_run_history(self):
+        """Get analytics run history (for the dashboard).
+
+        Returns:
+            list: Analytics run-history dicts
+        """
+        res = self.api_request(f"{self.base_url_v2}/Dashboard/AnalyticsRunHistory")
+        return res.json()
+
+    # --- Astro (v2-only): proposal/optimization templates & status ---------------
+
+    def get_astro_templates(self, al_client_id=None):
+        """Get the list of Astro templates.
+
+        Args:
+            al_client_id: Optional AL client ID (maps to ``alClientId``)
+
+        Returns:
+            list: Astro template dicts
+        """
+        params = {}
+        if al_client_id is not None:
+            params["alClientId"] = al_client_id
+        res = self.api_request(f"{self.base_url_v2}/Astro/Templates", params=params)
+        return res.json()
+
+    def get_astro_all_templates(self):
+        """Get Astro templates (Eclipse-UI route).
+
+        Returns:
+            dict: Response with an ``astroTemplates`` list plus ``success``/``message``
+        """
+        res = self.api_request(f"{self.base_url_v2}/Astro/AllTemplates")
+        return res.json()
+
+    # --- Optimization (v2-only): batch optimization summaries --------------------
+
+    def get_optimization_summaries(self, start_date=None, end_date=None):
+        """Get optimization summaries, optionally filtered by a date range.
+
+        Args:
+            start_date: Optional start date (``OptimizationStartTime``, ISO YYYY-MM-DD)
+            end_date: Optional end date (ISO YYYY-MM-DD)
+
+        Returns:
+            list: Optimization summary dicts
+        """
+        params = {}
+        if start_date is not None:
+            params["startDate"] = start_date
+        if end_date is not None:
+            params["endDate"] = end_date
+        res = self.api_request(f"{self.base_url_v2}/Optimization/summaries", params=params)
+        return res.json()
+
+    def get_optimization_batch_summary(self, start_date=None, end_date=None):
+        """Get batch optimization summary by date range (defaults to ~1 week).
+
+        Args:
+            start_date: Optional start date (ISO YYYY-MM-DD)
+            end_date: Optional end date (ISO YYYY-MM-DD)
+
+        Returns:
+            list: Batch optimization summary dicts
+        """
+        params = {}
+        if start_date is not None:
+            params["startDate"] = start_date
+        if end_date is not None:
+            params["endDate"] = end_date
+        res = self.api_request(f"{self.base_url_v2}/Optimization/Summary/Batch", params=params)
+        return res.json()
+
+    def get_optimization_batch_status(self, batch_name):
+        """Get the current status of a batch optimization.
+
+        Args:
+            batch_name: Optimization batch name
+
+        Returns:
+            dict: Batch status
+        """
+        res = self.api_request(f"{self.base_url_v2}/Optimization/Status/Batch/{batch_name}")
+        return res.json()
+
+    # --- Asset classification (v2-only) ------------------------------------------
+
+    def get_asset_classification_groups(self):
+        """Get all asset-classification groups.
+
+        Returns:
+            list: Classification-group dicts
+        """
+        res = self.api_request(f"{self.base_url_v2}/AssetClassification/ClassificationGroups")
+        return res.json()
+
+    def get_asset_classification_methods(self):
+        """Get all asset-classification methods.
+
+        Returns:
+            list: Classification-method dicts
+        """
+        res = self.api_request(f"{self.base_url_v2}/AssetClassification/ClassificationMethods")
+        return res.json()
+
+    # --- Analytics config (v2-only) ----------------------------------------------
+
+    def get_analytics_run_config(self):
+        """Get the run-analytics configurations.
+
+        Returns:
+            list: Run-analytics configuration dicts
+        """
+        res = self.api_request(f"{self.base_url_v2}/Analytics/RunAnalyticsConfig")
+        return res.json()
+
+    def get_analytics_banner_status(self):
+        """Get the analytics banner-spinner status.
+
+        Returns:
+            dict: Banner-spinner status
+        """
+        res = self.api_request(f"{self.base_url_v2}/Analytics/BannerSpinner/Status")
+        return res.json()
+
 
 class Eclipse(EclipseBase):
     """Best-of-both Eclipse client composing :class:`EclipseV1` and :class:`EclipseV2`.
@@ -4506,17 +4867,24 @@ class Eclipse(EclipseBase):
         self.v2 = EclipseV2(**sub_kwargs)
 
     def __getattr__(self, name):
-        """Delegate unknown attributes to the complete v1 surface.
+        """Delegate unknown attributes to the v1 surface, then the v2 surface.
 
         Only invoked for attributes not found normally (i.e. not defined on
-        Eclipse/EclipseBase). Guarded so attribute access during __init__ — before
-        ``self.v1`` exists — raises AttributeError instead of recursing.
+        Eclipse/EclipseBase). v1 is tried first so existing behavior is unchanged
+        on any name both surfaces define; v2-only methods (e.g. the Tactical /
+        ESG / Trading-block reads) fall through to ``self.v2``. Guarded so
+        attribute access during __init__ — before ``self.v1`` / ``self.v2`` exist —
+        raises AttributeError instead of recursing.
         """
         try:
             v1 = self.__dict__["v1"]
+            v2 = self.__dict__["v2"]
         except KeyError as e:
             raise AttributeError(name) from e
-        return getattr(v1, name)
+        try:
+            return getattr(v1, name)
+        except AttributeError:
+            return getattr(v2, name)
 
     # --- v2-preferred overrides (documented best-of-both choices) ---------------
 

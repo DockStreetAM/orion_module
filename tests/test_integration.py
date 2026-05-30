@@ -1018,3 +1018,74 @@ class TestEclipse21Endpoints:
     )
     def test_get_security_set_details(self, eclipse_client):
         assert isinstance(eclipse_client.get_security_set_details(), list)
+
+
+class TestEclipseV2CoverageBatch1:
+    """Live smoke tests for the v2-only read methods (coverage batch 1).
+
+    Confirms the documented v2 surface responds with the expected container type.
+    Skipped without ECLIPSE_USER/ECLIPSE_PWD. Uses .v2 explicitly.
+    """
+
+    def _first_portfolio_id(self, client):
+        portfolios = client.v1.get_all_portfolios(top=5)
+        if not portfolios:
+            pytest.skip("No portfolios available")
+        return portfolios[0]["id"]
+
+    # no-arg firm-level reads
+    def test_esg_themes(self, eclipse_client):
+        assert isinstance(eclipse_client.v2.get_esg_themes(), list)
+
+    def test_esg_assignments(self, eclipse_client):
+        assert isinstance(eclipse_client.v2.get_esg_assignments(), list)
+
+    def test_asset_classification_groups(self, eclipse_client):
+        assert isinstance(eclipse_client.v2.get_asset_classification_groups(), list)
+
+    def test_asset_classification_methods(self, eclipse_client):
+        assert isinstance(eclipse_client.v2.get_asset_classification_methods(), list)
+
+    def test_dashboard_fields(self, eclipse_client):
+        assert isinstance(eclipse_client.v2.get_dashboard_fields(), list)
+
+    def test_astro_all_templates(self, eclipse_client):
+        assert isinstance(eclipse_client.v2.get_astro_all_templates(), dict)
+
+    def test_analytics_run_config(self, eclipse_client):
+        assert isinstance(eclipse_client.v2.get_analytics_run_config(), list)
+
+    def test_analytics_banner_status(self, eclipse_client):
+        assert isinstance(eclipse_client.v2.get_analytics_banner_status(), dict)
+
+    def test_optimization_batch_summary(self, eclipse_client):
+        assert isinstance(eclipse_client.v2.get_optimization_batch_summary(), list)
+
+    def test_trade_blocks(self, eclipse_client):
+        assert isinstance(eclipse_client.v2.get_trade_blocks(), list)
+
+    # portfolio-scoped tactical / ESG reads
+    def test_tactical_portfolio_summary(self, eclipse_client):
+        pid = self._first_portfolio_id(eclipse_client)
+        assert isinstance(eclipse_client.v2.get_tactical_portfolio_summary(pid), dict)
+
+    def test_tactical_account_cash_detail(self, eclipse_client):
+        pid = self._first_portfolio_id(eclipse_client)
+        assert isinstance(eclipse_client.v2.get_tactical_account_cash_detail(pid), list)
+
+    def test_tactical_tax_lots(self, eclipse_client):
+        pid = self._first_portfolio_id(eclipse_client)
+        assert isinstance(eclipse_client.v2.get_tactical_tax_lots(pid), list)
+
+    def test_tactical_restricted_securities(self, eclipse_client):
+        pid = self._first_portfolio_id(eclipse_client)
+        assert isinstance(eclipse_client.v2.get_tactical_restricted_securities(pid), list)
+
+    def test_esg_restrictions_for_portfolio(self, eclipse_client):
+        pid = self._first_portfolio_id(eclipse_client)
+        assert isinstance(eclipse_client.v2.get_esg_restrictions_for_portfolio(pid), list)
+
+    def test_unifier_exposes_v2_only_method(self, eclipse_client):
+        # v2-only method reachable directly on the unifier (falls through to .v2)
+        pid = self._first_portfolio_id(eclipse_client)
+        assert isinstance(eclipse_client.get_tactical_portfolio_summary(pid), dict)
