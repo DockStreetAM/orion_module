@@ -1,13 +1,13 @@
 """Unit tests for newly added API endpoints.
 
-Tests for OrionAPI and EclipseAPI methods added in v1.4.0.
+Tests for OrionAPI and EclipseV1 methods added in v1.4.0.
 """
 
 from unittest.mock import Mock, patch
 
 import pytest
 
-from orionapi import EclipseAPI, OrionAPI, OrionAPIError
+from orionapi import EclipseV1, OrionAPI, OrionAPIError
 
 
 class TestOrionAssets:
@@ -228,12 +228,12 @@ class TestOrionReporting:
 
 
 class TestEclipseTrades:
-    """Test EclipseAPI trade methods."""
+    """Test EclipseV1 trade methods."""
 
     def test_get_trade_status(self):
         """Test getting trade status."""
-        with patch.object(EclipseAPI, "login"):
-            api = EclipseAPI(usr="test", pwd="pass")
+        with patch.object(EclipseV1, "login"):
+            api = EclipseV1(usr="test", pwd="pass")
 
             with patch.object(api, "api_request") as mock_api_request:
                 mock_response = Mock()
@@ -253,16 +253,16 @@ class TestEclipseTrades:
 
     def test_get_trade_status_invalid_id(self):
         """Test get_trade_status with invalid ID."""
-        with patch.object(EclipseAPI, "login"):
-            api = EclipseAPI(usr="test", pwd="pass")
+        with patch.object(EclipseV1, "login"):
+            api = EclipseV1(usr="test", pwd="pass")
 
             with pytest.raises(ValueError, match="trade_id must be a positive integer"):
                 api.get_trade_status(trade_id=0)
 
     def test_get_trade_instance(self):
         """Test getting trade instance details."""
-        with patch.object(EclipseAPI, "login"):
-            api = EclipseAPI(usr="test", pwd="pass")
+        with patch.object(EclipseV1, "login"):
+            api = EclipseV1(usr="test", pwd="pass")
 
             with patch.object(api, "api_request") as mock_api_request:
                 mock_response = Mock()
@@ -287,16 +287,16 @@ class TestEclipseTrades:
 
     def test_get_trade_instance_invalid_id(self):
         """Test get_trade_instance with invalid ID."""
-        with patch.object(EclipseAPI, "login"):
-            api = EclipseAPI(usr="test", pwd="pass")
+        with patch.object(EclipseV1, "login"):
+            api = EclipseV1(usr="test", pwd="pass")
 
             with pytest.raises(ValueError, match="instance_id must be a positive integer"):
                 api.get_trade_instance(instance_id=0)
 
     def test_get_trade_instance_logs(self):
         """Test getting trade instance logs."""
-        with patch.object(EclipseAPI, "login"):
-            api = EclipseAPI(usr="test", pwd="pass")
+        with patch.object(EclipseV1, "login"):
+            api = EclipseV1(usr="test", pwd="pass")
 
             with patch.object(api, "api_request") as mock_api_request:
                 mock_response = Mock()
@@ -322,16 +322,16 @@ class TestEclipseTrades:
 
     def test_get_trade_instance_logs_invalid_id(self):
         """Test get_trade_instance_logs with invalid ID."""
-        with patch.object(EclipseAPI, "login"):
-            api = EclipseAPI(usr="test", pwd="pass")
+        with patch.object(EclipseV1, "login"):
+            api = EclipseV1(usr="test", pwd="pass")
 
             with pytest.raises(ValueError, match="instance_id must be a positive integer"):
                 api.get_trade_instance_logs(instance_id=-1)
 
     def test_get_trade_log_detail(self):
         """Test getting detailed HTML trade log."""
-        with patch.object(EclipseAPI, "login"):
-            api = EclipseAPI(usr="test", pwd="pass")
+        with patch.object(EclipseV1, "login"):
+            api = EclipseV1(usr="test", pwd="pass")
 
             with patch.object(api, "api_request") as mock_api_request:
                 import base64
@@ -360,16 +360,16 @@ class TestEclipseTrades:
 
     def test_get_trade_log_detail_invalid_id(self):
         """Test get_trade_log_detail with invalid ID."""
-        with patch.object(EclipseAPI, "login"):
-            api = EclipseAPI(usr="test", pwd="pass")
+        with patch.object(EclipseV1, "login"):
+            api = EclipseV1(usr="test", pwd="pass")
 
             with pytest.raises(ValueError, match="log_id must be a positive integer"):
                 api.get_trade_log_detail(log_id=0)
 
     def test_get_portfolio_trade_instances(self):
         """Test getting trade instances for a portfolio."""
-        with patch.object(EclipseAPI, "login"):
-            api = EclipseAPI(usr="test", pwd="pass")
+        with patch.object(EclipseV1, "login"):
+            api = EclipseV1(usr="test", pwd="pass")
 
             with patch.object(api, "api_request") as mock_api_request:
                 mock_response = Mock()
@@ -405,8 +405,8 @@ class TestEclipseTrades:
 
     def test_get_portfolio_trade_instances_invalid_params(self):
         """Test get_portfolio_trade_instances with invalid parameters."""
-        with patch.object(EclipseAPI, "login"):
-            api = EclipseAPI(usr="test", pwd="pass")
+        with patch.object(EclipseV1, "login"):
+            api = EclipseV1(usr="test", pwd="pass")
 
             with pytest.raises(ValueError, match="portfolio_id must be a positive integer"):
                 api.get_portfolio_trade_instances(
@@ -425,12 +425,12 @@ class TestEclipseTrades:
 
 
 class TestEclipseSecurityPreferences:
-    """Test EclipseAPI security preferences methods."""
+    """Test EclipseV1 security preferences methods."""
 
     def test_get_security_preferences(self):
         """Test getting security preferences."""
-        with patch.object(EclipseAPI, "login"):
-            api = EclipseAPI(usr="test", pwd="pass")
+        with patch.object(EclipseV1, "login"):
+            api = EclipseV1(usr="test", pwd="pass")
 
             with patch.object(api, "api_request") as mock_api_request:
                 mock_response = Mock()
@@ -455,8 +455,8 @@ class TestEclipseSecurityPreferences:
 
     def test_get_security_preferences_invalid_params(self):
         """Test get_security_preferences with invalid parameters."""
-        with patch.object(EclipseAPI, "login"):
-            api = EclipseAPI(usr="test", pwd="pass")
+        with patch.object(EclipseV1, "login"):
+            api = EclipseV1(usr="test", pwd="pass")
 
             with pytest.raises(ValueError, match="portfolio_id must be a positive integer"):
                 api.get_security_preferences(portfolio_id=0, security_id=1)
@@ -466,12 +466,12 @@ class TestEclipseSecurityPreferences:
 
 
 class TestEclipseTradeRestrictions:
-    """Test EclipseAPI trade restriction methods."""
+    """Test EclipseV1 trade restriction methods."""
 
     def test_set_portfolio_tradeable_block(self):
         """Test blocking portfolio trading."""
-        with patch.object(EclipseAPI, "login"):
-            api = EclipseAPI(usr="test", pwd="pass")
+        with patch.object(EclipseV1, "login"):
+            api = EclipseV1(usr="test", pwd="pass")
 
             # Mock get_portfolio to return current portfolio state
             with (
@@ -501,8 +501,8 @@ class TestEclipseTradeRestrictions:
 
     def test_set_account_tradeable_block_advisor(self):
         """Test blocking advisor trading for an account."""
-        with patch.object(EclipseAPI, "login"):
-            api = EclipseAPI(usr="test", pwd="pass")
+        with patch.object(EclipseV1, "login"):
+            api = EclipseV1(usr="test", pwd="pass")
 
             with (
                 patch.object(api, "get_account_details") as mock_get,
@@ -534,20 +534,20 @@ class TestEclipseTradeRestrictions:
 
     def test_set_account_tradeable_invalid_restriction(self):
         """Test set_account_tradeable with invalid restriction."""
-        with patch.object(EclipseAPI, "login"):
-            api = EclipseAPI(usr="test", pwd="pass")
+        with patch.object(EclipseV1, "login"):
+            api = EclipseV1(usr="test", pwd="pass")
 
             with pytest.raises(ValueError, match="trade_restriction must be one of"):
                 api.set_account_tradeable(account_id=123, trade_restriction="invalid")
 
 
 class TestEclipseTradeTools:
-    """Test EclipseAPI trade tool methods."""
+    """Test EclipseV1 trade tool methods."""
 
     def test_spend_cash_trade(self):
         """Test generating Spend Cash trade."""
-        with patch.object(EclipseAPI, "login"):
-            api = EclipseAPI(usr="test", pwd="pass")
+        with patch.object(EclipseV1, "login"):
+            api = EclipseV1(usr="test", pwd="pass")
 
             with (
                 patch.object(api, "api_request") as mock_api_request,

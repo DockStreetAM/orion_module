@@ -15,7 +15,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 import pytest
 
-from orionapi import AuthenticationError, EclipseAPI, OrionAPI, RateLimiter
+from orionapi import AuthenticationError, Eclipse, OrionAPI, RateLimiter
 
 
 class TestRateLimiterThreadSafety:
@@ -98,6 +98,6 @@ class TestAuthHeaderWithoutLogin:
             api._get_auth_header()
 
     def test_eclipse_raises_when_not_logged_in(self):
-        api = EclipseAPI()
+        api = Eclipse()
         with pytest.raises(AuthenticationError):
             api._get_auth_header()

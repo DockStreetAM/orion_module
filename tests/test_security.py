@@ -10,7 +10,7 @@ import pytest
 
 from orionapi import (
     AuthenticationError,
-    EclipseAPI,
+    EclipseV1,
     NotFoundError,
     OrionAPI,
     OrionAPIError,
@@ -37,9 +37,9 @@ class TestCredentialSecurity:
             assert "pwd" not in api.__dict__
 
     def test_eclipse_credentials_not_stored(self):
-        """Verify EclipseAPI doesn't store plaintext credentials."""
-        with patch.object(EclipseAPI, "login"):
-            api = EclipseAPI(usr="testuser", pwd="testpass")
+        """Verify EclipseV1 doesn't store plaintext credentials."""
+        with patch.object(EclipseV1, "login"):
+            api = EclipseV1(usr="testuser", pwd="testpass")
 
             # Credentials should NOT be stored
             assert not hasattr(api, "usr")
@@ -280,7 +280,7 @@ class TestAuthenticationErrors:
                 OrionAPI(usr="bad", pwd="wrong")
 
     def test_eclipse_login_403_error(self):
-        """Test EclipseAPI raises AuthenticationError on 403."""
+        """Test EclipseV1 raises AuthenticationError on 403."""
         with patch("requests.get") as mock_get:
             mock_response = Mock()
             mock_response.ok = False
@@ -290,7 +290,7 @@ class TestAuthenticationErrors:
             mock_get.return_value = mock_response
 
             with pytest.raises(AuthenticationError, match="Login failed"):
-                EclipseAPI(usr="bad", pwd="wrong")
+                EclipseV1(usr="bad", pwd="wrong")
 
     def test_token_extraction_error(self):
         """Test error when token is missing from response."""
@@ -426,8 +426,8 @@ class TestFilePathValidation:
 
     def test_parse_security_set_file_not_found(self):
         """Test parse_security_set_file rejects non-existent file."""
-        with patch.object(EclipseAPI, "login"):
-            api = EclipseAPI(usr="test", pwd="pass")
+        with patch.object(EclipseV1, "login"):
+            api = EclipseV1(usr="test", pwd="pass")
 
             with pytest.raises(FileNotFoundError, match="File not found"):
                 api.parse_security_set_file("/nonexistent/path/file.txt")
@@ -435,12 +435,12 @@ class TestFilePathValidation:
     def test_export_security_set_invalid_parent_directory(self):
         """Test export rejects path with non-existent parent directory."""
         with (
-            patch.object(EclipseAPI, "login"),
+            patch.object(EclipseV1, "login"),
             patch.object(
-                EclipseAPI, "get_security_set", return_value={"name": "Test", "securities": []}
+                EclipseV1, "get_security_set", return_value={"name": "Test", "securities": []}
             ),
         ):
-            api = EclipseAPI(usr="test", pwd="pass")
+            api = EclipseV1(usr="test", pwd="pass")
 
             with pytest.raises(FileNotFoundError, match="Parent directory does not exist"):
                 api.export_security_set_to_file(123, "/nonexistent/dir/file.txt")
@@ -456,12 +456,12 @@ class TestBugFixes:
         Fix: Changed defaults from None to 0.0
         """
         with (
-            patch.object(EclipseAPI, "login"),
-            patch.object(EclipseAPI, "get_internal_account_id", return_value=123),
-            patch.object(EclipseAPI, "_get_auth_header", return_value={}),
-            patch.object(EclipseAPI, "_maybe_wait_for_analytics"),
+            patch.object(EclipseV1, "login"),
+            patch.object(EclipseV1, "get_internal_account_id", return_value=123),
+            patch.object(EclipseV1, "_get_auth_header", return_value={}),
+            patch.object(EclipseV1, "_maybe_wait_for_analytics"),
         ):
-            api = EclipseAPI(usr="test", pwd="pass")
+            api = EclipseV1(usr="test", pwd="pass")
 
             with patch("requests.post") as mock_post:
                 mock_response = Mock()
@@ -488,12 +488,12 @@ class TestBugFixes:
         Fix: Changed to use expire_trans_tol
         """
         with (
-            patch.object(EclipseAPI, "login"),
-            patch.object(EclipseAPI, "get_internal_account_id", return_value=123),
-            patch.object(EclipseAPI, "_get_auth_header", return_value={}),
-            patch.object(EclipseAPI, "_maybe_wait_for_analytics"),
+            patch.object(EclipseV1, "login"),
+            patch.object(EclipseV1, "get_internal_account_id", return_value=123),
+            patch.object(EclipseV1, "_get_auth_header", return_value={}),
+            patch.object(EclipseV1, "_maybe_wait_for_analytics"),
         ):
-            api = EclipseAPI(usr="test", pwd="pass")
+            api = EclipseV1(usr="test", pwd="pass")
 
             with patch("requests.post") as mock_post:
                 mock_response = Mock()
