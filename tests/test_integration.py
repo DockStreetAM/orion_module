@@ -1089,3 +1089,60 @@ class TestEclipseV2CoverageBatch1:
         # v2-only method reachable directly on the unifier (falls through to .v2)
         pid = self._first_portfolio_id(eclipse_client)
         assert isinstance(eclipse_client.get_tactical_portfolio_summary(pid), dict)
+
+
+class TestEclipseV2CoverageBatch2:
+    """Live smoke tests for v2 Trading/TradeInstance reads (coverage batch 2).
+
+    Optimization reads are role-gated (OPTIMIZER) and Notes needs a valid
+    relatedType enum, so those are covered by unit tests only.
+    """
+
+    def _date_window(self):
+        from datetime import datetime, timedelta
+
+        today = datetime.now()
+        return (today - timedelta(days=120)).strftime("%Y-%m-%d"), today.strftime("%Y-%m-%d")
+
+    def test_trading_instances_by_date_range(self, eclipse_client):
+        sd, ed = self._date_window()
+        assert isinstance(eclipse_client.v2.get_trading_instances_by_date_range(sd, ed), list)
+
+    def test_trading_instances_for_user(self, eclipse_client):
+        sd, ed = self._date_window()
+        result = eclipse_client.v2.get_trading_instances_for_user(sd, ed, offset=0, limit=10)
+        assert isinstance(result, list)
+
+    def test_trading_instances_with_trades(self, eclipse_client):
+        sd, ed = self._date_window()
+        result = eclipse_client.v2.get_trading_instances_with_trades(
+            start_date=sd, end_date=ed, take=5
+        )
+        assert isinstance(result, (list, dict))
+
+    def test_trading_active_batch_jobs(self, eclipse_client):
+        sd, ed = self._date_window()
+        assert isinstance(
+            eclipse_client.v2.get_trading_active_batch_jobs(start_date=sd, end_date=ed), list
+        )
+
+    def test_trading_instances_paginated_by_portfolio(self, eclipse_client):
+        portfolios = eclipse_client.v1.get_all_portfolios(top=1)
+        if not portfolios:
+            pytest.skip("No portfolios available")
+        result = eclipse_client.v2.get_trading_instances_paginated(
+            portfolio_id=portfolios[0]["id"], take=5
+        )
+        # Eclipse returns {"data": [...], "total": N}
+        assert isinstance(result, dict)
+        assert "data" in result
+
+    def test_trading_instance_trades(self, eclipse_client):
+        sd, ed = self._date_window()
+        instances = eclipse_client.v2.get_trading_instances_by_date_range(sd, ed)
+        if not instances:
+            pytest.skip("No trade instances in window")
+        inst_id = instances[0].get("id") or instances[0].get("tradeInstanceId")
+        if not inst_id:
+            pytest.skip("No trade-instance id field found")
+        assert isinstance(eclipse_client.v2.get_trading_instance_trades(inst_id), list)
