@@ -1,4 +1,4 @@
-__version__ = "2.12.0"
+__version__ = "2.13.0"
 
 import logging
 import re
@@ -4386,6 +4386,307 @@ class EclipseV1(EclipseBase):
         result = res.json()
         self._maybe_wait_for_analytics(sync)
         return result
+
+    # =========================================================================
+    # v1 read coverage (account / holding / portfolio). Reference/lookup reads
+    # plus account & portfolio sub-resource reads. No trade execution/approval.
+    # =========================================================================
+
+    # --- Account reference + sub-resource reads ---
+
+    def get_account_filters(self):
+        """Get the available account filters.
+
+        Returns:
+            list: Account-filter dicts
+        """
+        return self.api_request(f"{self.base_url}/account/accounts/accountfilters").json()
+
+    def get_accounts_without_portfolio(self):
+        """Get accounts not assigned to a portfolio.
+
+        Returns:
+            list: Account dicts
+        """
+        return self.api_request(f"{self.base_url}/account/accounts/noPortfolio").json()
+
+    def get_account_model_types(self, account_id):
+        """Get the model types for an account.
+
+        Args:
+            account_id: Internal account ID
+
+        Returns:
+            list: Model-type dicts
+        """
+        return self.api_request(
+            f"{self.base_url}/account/accounts/{account_id}/model/modelTypes"
+        ).json()
+
+    def get_account_submodels(self, account_id, model_type_id=None):
+        """Get the submodels for an account.
+
+        Args:
+            account_id: Internal account ID
+            model_type_id: Optional model-type filter (maps to ``modelTypeId``)
+
+        Returns:
+            list: Submodel dicts
+        """
+        params = {}
+        if model_type_id is not None:
+            params["modelTypeId"] = model_type_id
+        return self.api_request(
+            f"{self.base_url}/account/accounts/{account_id}/model/submodels", params=params
+        ).json()
+
+    def get_aside_cash_percent_calc_types(self):
+        """Get set-aside-cash percent calculation types.
+
+        Returns:
+            list: Calculation-type dicts
+        """
+        return self.api_request(
+            f"{self.base_url}/account/accounts/accountSetAsidePercentCalculationType"
+        ).json()
+
+    def get_aside_cash_amount_types(self):
+        """Get set-aside-cash amount types.
+
+        Returns:
+            list: Amount-type dicts
+        """
+        return self.api_request(f"{self.base_url}/account/accounts/asideCashAmountType").json()
+
+    def get_aside_cash_expiration_types(self):
+        """Get set-aside-cash expiration types.
+
+        Returns:
+            list: Expiration-type dicts
+        """
+        return self.api_request(f"{self.base_url}/account/accounts/asideCashExpirationType").json()
+
+    def get_aside_cash_transaction_types(self):
+        """Get set-aside-cash transaction types.
+
+        Returns:
+            list: Transaction-type dicts
+        """
+        return self.api_request(f"{self.base_url}/account/accounts/asideCashTransactionType").json()
+
+    def get_accounts_simple_by_type(self, account_type):
+        """Get a simple account list filtered by account type.
+
+        Args:
+            account_type: Account type
+
+        Returns:
+            list: Account dicts
+        """
+        return self.api_request(
+            f"{self.base_url}/account/accounts/simpleList/type/{account_type}"
+        ).json()
+
+    def get_account_custodial_information(self, account_id):
+        """Get custodial information for an account.
+
+        Args:
+            account_id: Internal account ID
+
+        Returns:
+            dict: Custodial information
+        """
+        return self.api_request(
+            f"{self.base_url}/account/accounts/{account_id}/custodialInformation"
+        ).json()
+
+    def get_account_sma(self, account_id):
+        """Get SMA info for an account.
+
+        Args:
+            account_id: Internal account ID
+
+        Returns:
+            dict: SMA info
+        """
+        return self.api_request(f"{self.base_url}/account/accounts/{account_id}/sma").json()
+
+    def get_restricted_plans(self):
+        """Get the restricted plans.
+
+        Returns:
+            list: Restricted-plan dicts
+        """
+        return self.api_request(f"{self.base_url}/account/accounts/restrictedPlans").json()
+
+    def get_portfolio_account_count(self):
+        """Get the portfolio/account count.
+
+        .. note::
+            As of 2026-05 this documented endpoint returns
+            ``400 'id is not numeric string'`` on live Eclipse — the server routes
+            the ``portfolioAccountCount`` segment into ``/account/accounts/{id}``.
+            Kept faithful to the documented path, but the upstream route appears
+            broken (same class of issue as :meth:`get_security_set_details`).
+
+        Returns:
+            dict | int: Count
+        """
+        return self.api_request(f"{self.base_url}/account/accounts/portfolioAccountCount").json()
+
+    def get_account_portfolio_id(self, account_id):
+        """Get the portfolio ID for an account.
+
+        Args:
+            account_id: Internal account ID
+
+        Returns:
+            dict | int: Portfolio ID
+        """
+        return self.api_request(f"{self.base_url}/account/accounts/{account_id}/portfolioId").json()
+
+    # --- Holding reads ---
+
+    def get_holding(self, holding_id):
+        """Get a holding by ID.
+
+        Args:
+            holding_id: Holding ID
+
+        Returns:
+            dict: Holding
+        """
+        return self.api_request(f"{self.base_url}/holding/holdings/{holding_id}").json()
+
+    def get_holding_filters(self):
+        """Get the available holding filters.
+
+        Returns:
+            list: Holding-filter dicts
+        """
+        return self.api_request(f"{self.base_url}/holding/holdings/holdingfilters").json()
+
+    def get_holding_transactions(self, holding_id):
+        """Get transactions for a holding.
+
+        Args:
+            holding_id: Holding ID
+
+        Returns:
+            list: Transaction dicts
+        """
+        return self.api_request(
+            f"{self.base_url}/holding/holdings/{holding_id}/transactions"
+        ).json()
+
+    def search_holdings(self, search):
+        """Search holdings by id or name.
+
+        Args:
+            search: Search string (id or name)
+
+        Returns:
+            list: Holding dicts
+        """
+        return self.api_request(
+            f"{self.base_url}/holding/holdings", params={"search": search}
+        ).json()
+
+    # --- Portfolio reference + sub-resource reads ---
+
+    def get_portfolio_filters(self):
+        """Get the available portfolio filters.
+
+        Returns:
+            list: Portfolio-filter dicts
+        """
+        return self.api_request(f"{self.base_url}/portfolio/portfolios/portfolioFilters").json()
+
+    def get_portfolio_accounts_detailed(self, portfolio_id):
+        """Get detailed accounts for a portfolio.
+
+        Args:
+            portfolio_id: Portfolio ID
+
+        Returns:
+            list: Detailed account dicts
+        """
+        return self.api_request(
+            f"{self.base_url}/portfolio/portfolios/{portfolio_id}/accounts/detailed"
+        ).json()
+
+    def get_portfolio_accounts_summary(self, portfolio_id):
+        """Get an account summary for a portfolio.
+
+        Args:
+            portfolio_id: Portfolio ID
+
+        Returns:
+            list | dict: Account summary
+        """
+        return self.api_request(
+            f"{self.base_url}/portfolio/portfolios/{portfolio_id}/accounts/summary"
+        ).json()
+
+    def get_portfolio_simple(self, portfolio_id):
+        """Get a lightweight portfolio record by ID.
+
+        Args:
+            portfolio_id: Portfolio ID
+
+        Returns:
+            dict: Lightweight portfolio
+        """
+        return self.api_request(
+            f"{self.base_url}/portfolio/portfolios/simple/{portfolio_id}"
+        ).json()
+
+    def get_portfolio_set_asides(self, portfolio_id):
+        """Get set-aside cash for a portfolio.
+
+        Args:
+            portfolio_id: Portfolio ID
+
+        Returns:
+            list: Set-aside dicts
+        """
+        return self.api_request(
+            f"{self.base_url}/portfolio/portfolios/{portfolio_id}/asidecash"
+        ).json()
+
+    def get_portfolio_pending_models(self, portfolio_id):
+        """Get pending models for a portfolio.
+
+        Args:
+            portfolio_id: Portfolio ID
+
+        Returns:
+            list | dict: Pending models
+        """
+        return self.api_request(
+            f"{self.base_url}/portfolio/portfolios/{portfolio_id}/pending/models"
+        ).json()
+
+    def get_portfolio_contribution_amount(self, portfolio_id):
+        """Get the contribution amount for a portfolio.
+
+        Args:
+            portfolio_id: Portfolio ID
+
+        Returns:
+            dict: Contribution amount
+        """
+        return self.api_request(
+            f"{self.base_url}/portfolio/portfolios/{portfolio_id}/contributionamount"
+        ).json()
+
+    def get_sleeves(self):
+        """Get all sleeves (v1).
+
+        Returns:
+            list: Sleeve dicts
+        """
+        return self.api_request(f"{self.base_url}/portfolio/sleeves").json()
 
 
 class EclipseV2(EclipseBase):

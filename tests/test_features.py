@@ -2979,3 +2979,122 @@ class TestEclipseV2BlockMetaRefBatch11:
     def test_sync_trade_analysis_report(self):
         m = self._p("post", lambda a: a.sync_trade_analysis_report({"x": 1}))
         assert m.call_args.args[0] == f"{V2_BASE}/TradeAnalysisReport/SyncTradeAnalysisReport"
+
+
+class TestEclipseV1ReadCoverageBatch12:
+    """URL/params coverage for v1 account/holding/portfolio reads (batch 12)."""
+
+    def _g(self, fn):
+        api = _eclipse_v1()
+        mock = _mock_get([])
+        with patch("requests.get", mock):
+            fn(api)
+        return mock
+
+    def test_account_filters(self):
+        m = self._g(lambda a: a.get_account_filters())
+        assert m.call_args.args[0] == f"{V1_BASE}/account/accounts/accountfilters"
+
+    def test_accounts_without_portfolio(self):
+        m = self._g(lambda a: a.get_accounts_without_portfolio())
+        assert m.call_args.args[0] == f"{V1_BASE}/account/accounts/noPortfolio"
+
+    def test_account_model_types(self):
+        m = self._g(lambda a: a.get_account_model_types(5))
+        assert m.call_args.args[0] == f"{V1_BASE}/account/accounts/5/model/modelTypes"
+
+    def test_account_submodels(self):
+        m = self._g(lambda a: a.get_account_submodels(5, model_type_id=2))
+        assert m.call_args.args[0] == f"{V1_BASE}/account/accounts/5/model/submodels"
+        assert m.call_args.kwargs["params"] == {"modelTypeId": 2}
+
+    def test_aside_cash_percent_calc_types(self):
+        m = self._g(lambda a: a.get_aside_cash_percent_calc_types())
+        assert m.call_args.args[0] == (
+            f"{V1_BASE}/account/accounts/accountSetAsidePercentCalculationType"
+        )
+
+    def test_aside_cash_amount_types(self):
+        m = self._g(lambda a: a.get_aside_cash_amount_types())
+        assert m.call_args.args[0] == f"{V1_BASE}/account/accounts/asideCashAmountType"
+
+    def test_aside_cash_expiration_types(self):
+        m = self._g(lambda a: a.get_aside_cash_expiration_types())
+        assert m.call_args.args[0] == f"{V1_BASE}/account/accounts/asideCashExpirationType"
+
+    def test_aside_cash_transaction_types(self):
+        m = self._g(lambda a: a.get_aside_cash_transaction_types())
+        assert m.call_args.args[0] == f"{V1_BASE}/account/accounts/asideCashTransactionType"
+
+    def test_accounts_simple_by_type(self):
+        m = self._g(lambda a: a.get_accounts_simple_by_type("IRA"))
+        assert m.call_args.args[0] == f"{V1_BASE}/account/accounts/simpleList/type/IRA"
+
+    def test_account_custodial_information(self):
+        m = self._g(lambda a: a.get_account_custodial_information(5))
+        assert m.call_args.args[0] == f"{V1_BASE}/account/accounts/5/custodialInformation"
+
+    def test_account_sma(self):
+        m = self._g(lambda a: a.get_account_sma(5))
+        assert m.call_args.args[0] == f"{V1_BASE}/account/accounts/5/sma"
+
+    def test_restricted_plans(self):
+        m = self._g(lambda a: a.get_restricted_plans())
+        assert m.call_args.args[0] == f"{V1_BASE}/account/accounts/restrictedPlans"
+
+    def test_portfolio_account_count(self):
+        m = self._g(lambda a: a.get_portfolio_account_count())
+        assert m.call_args.args[0] == f"{V1_BASE}/account/accounts/portfolioAccountCount"
+
+    def test_account_portfolio_id(self):
+        m = self._g(lambda a: a.get_account_portfolio_id(5))
+        assert m.call_args.args[0] == f"{V1_BASE}/account/accounts/5/portfolioId"
+
+    def test_holding(self):
+        m = self._g(lambda a: a.get_holding(9))
+        assert m.call_args.args[0] == f"{V1_BASE}/holding/holdings/9"
+
+    def test_holding_filters(self):
+        m = self._g(lambda a: a.get_holding_filters())
+        assert m.call_args.args[0] == f"{V1_BASE}/holding/holdings/holdingfilters"
+
+    def test_holding_transactions(self):
+        m = self._g(lambda a: a.get_holding_transactions(9))
+        assert m.call_args.args[0] == f"{V1_BASE}/holding/holdings/9/transactions"
+
+    def test_search_holdings(self):
+        m = self._g(lambda a: a.search_holdings("AAPL"))
+        assert m.call_args.args[0] == f"{V1_BASE}/holding/holdings"
+        assert m.call_args.kwargs["params"] == {"search": "AAPL"}
+
+    def test_portfolio_filters(self):
+        m = self._g(lambda a: a.get_portfolio_filters())
+        assert m.call_args.args[0] == f"{V1_BASE}/portfolio/portfolios/portfolioFilters"
+
+    def test_portfolio_accounts_detailed(self):
+        m = self._g(lambda a: a.get_portfolio_accounts_detailed(7))
+        assert m.call_args.args[0] == f"{V1_BASE}/portfolio/portfolios/7/accounts/detailed"
+
+    def test_portfolio_accounts_summary(self):
+        m = self._g(lambda a: a.get_portfolio_accounts_summary(7))
+        assert m.call_args.args[0] == f"{V1_BASE}/portfolio/portfolios/7/accounts/summary"
+
+    def test_portfolio_simple(self):
+        m = self._g(lambda a: a.get_portfolio_simple(7))
+        assert m.call_args.args[0] == f"{V1_BASE}/portfolio/portfolios/simple/7"
+
+    def test_portfolio_set_asides(self):
+        m = self._g(lambda a: a.get_portfolio_set_asides(7))
+        assert m.call_args.args[0] == f"{V1_BASE}/portfolio/portfolios/7/asidecash"
+
+    def test_portfolio_pending_models(self):
+        m = self._g(lambda a: a.get_portfolio_pending_models(7))
+        assert m.call_args.args[0] == f"{V1_BASE}/portfolio/portfolios/7/pending/models"
+
+    def test_portfolio_contribution_amount(self):
+        m = self._g(lambda a: a.get_portfolio_contribution_amount(7))
+        assert m.call_args.args[0] == f"{V1_BASE}/portfolio/portfolios/7/contributionamount"
+
+    def test_sleeves(self):
+        m = self._g(lambda a: a.get_sleeves())
+        assert m.call_args.args[0] == f"{V1_BASE}/portfolio/sleeves"
