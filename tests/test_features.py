@@ -3975,3 +3975,20 @@ class TestApiReferenceDoc:
         text = ref.read_text()
         for cls in ("OrionAPI", "EclipseV1", "EclipseV2", "Eclipse"):
             assert f"## {cls}" in text
+
+
+class TestVersionConsistency:
+    """__version__ and pyproject.toml version must match (guards release drift)."""
+
+    def test_versions_match(self):
+        import re
+        from pathlib import Path
+
+        import orionapi
+
+        pyproject = (Path(__file__).resolve().parent.parent / "pyproject.toml").read_text()
+        m = re.search(r'^version = "([^"]+)"', pyproject, re.M)
+        assert m, "version not found in pyproject.toml"
+        assert m.group(1) == orionapi.__version__, (
+            f"pyproject {m.group(1)} != __version__ {orionapi.__version__}"
+        )
