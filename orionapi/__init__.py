@@ -1,4 +1,4 @@
-__version__ = "2.10.0"
+__version__ = "2.11.0"
 
 import logging
 import re
@@ -7344,6 +7344,447 @@ class EclipseV2(EclipseBase):
         res = self.api_request(
             f"{self.base_url_v2}/Extracts/job/{job_id}", requests.delete, params=params
         )
+        return res.json()
+
+    # =========================================================================
+    # Org / workflow / reference (v2). Search, firm/team/user, admin custodian &
+    # token, OrionConnect lookups, and the v2 Workflow surface. Reads plus a few
+    # CRUD writes (covered by mocked unit tests only).
+    # =========================================================================
+
+    # --- Search ---
+
+    def account_search(self, search, limit=None, offset=None):
+        """Search accounts (v2 UI search).
+
+        Args:
+            search: Search string
+            limit / offset: Optional paging window
+
+        Returns:
+            list: Account search results
+        """
+        params = {"search": search}
+        if limit is not None:
+            params["limit"] = limit
+        if offset is not None:
+            params["offset"] = offset
+        res = self.api_request(f"{self.base_url_v2}/AccountSearch/AccountSearchList", params=params)
+        return res.json()
+
+    def security_search(
+        self, search, skip=None, take=None, external_firm_id=None, external_account_id=None
+    ):
+        """Search securities (v2 UI search).
+
+        Note:
+            Eclipse requires an external firm/account context — pass
+            ``external_firm_id`` and ``external_account_id``. A bare ``search``
+            returns ``400 PortfolioNotFound``. For a context-free security lookup
+            use :meth:`EclipseV1.search_securities` instead.
+
+        Args:
+            search: Search string
+            skip / take: Optional paging window
+            external_firm_id: External firm ID (``externalFirmId``)
+            external_account_id: External account ID (``externalAccountId``)
+
+        Returns:
+            list: Security search results
+        """
+        params = {"search": search}
+        for key, val in (
+            ("skip", skip),
+            ("take", take),
+            ("externalFirmId", external_firm_id),
+            ("externalAccountId", external_account_id),
+        ):
+            if val is not None:
+                params[key] = val
+        res = self.api_request(
+            f"{self.base_url_v2}/SecuritySearch/SecuritySearchList", params=params
+        )
+        return res.json()
+
+    def global_search(self, search=None, name=None, status=None, include_value=None, limit=None):
+        """Global search across Eclipse entities (v2).
+
+        Args:
+            search: Optional search string
+            name: Optional name filter
+            status: Optional status filter
+            include_value: Optional bool (maps to ``includeValue``)
+            limit: Optional max results
+
+        Returns:
+            list | dict: Global search results
+        """
+        params = {}
+        if search is not None:
+            params["search"] = search
+        if name is not None:
+            params["name"] = name
+        if status is not None:
+            params["status"] = status
+        if include_value is not None:
+            params["includeValue"] = str(include_value).lower()
+        if limit is not None:
+            params["limit"] = limit
+        res = self.api_request(f"{self.base_url_v2}/GlobalSearch/GlobalSearchList", params=params)
+        return res.json()
+
+    # --- Firm ---
+
+    def get_firm_types(self):
+        """Get the firm types.
+
+        Returns:
+            list: Firm-type dicts
+        """
+        res = self.api_request(f"{self.base_url_v2}/Firm/FirmTypes")
+        return res.json()
+
+    def get_eclipse_firms_by_al_client_id(self, al_client_id):
+        """Get Eclipse firms by AL client ID.
+
+        Args:
+            al_client_id: AL client ID
+
+        Returns:
+            list: Firm dicts
+        """
+        res = self.api_request(
+            f"{self.base_url_v2}/Firm/GetEclipseFirmsByAlClientId/{al_client_id}"
+        )
+        return res.json()
+
+    def get_firm_logo(self):
+        """Get the firm logo.
+
+        Returns:
+            dict: Firm logo
+        """
+        res = self.api_request(f"{self.base_url_v2}/Firm/Logo")
+        return res.json()
+
+    def get_firm_logo_base64(self):
+        """Get the firm logo as base64.
+
+        Returns:
+            dict | str: Base64 logo
+        """
+        res = self.api_request(f"{self.base_url_v2}/Firm/Logo/Base64")
+        return res.json()
+
+    # --- Team / ServiceTeams / User ---
+
+    def get_teams(self, external_id=None):
+        """Get teams.
+
+        Args:
+            external_id: Optional external ID filter (maps to ``externalId``)
+
+        Returns:
+            list: Team dicts
+        """
+        params = {}
+        if external_id is not None:
+            params["externalId"] = external_id
+        res = self.api_request(f"{self.base_url_v2}/Team/Team/GetTeams", params=params)
+        return res.json()
+
+    def get_service_team(self):
+        """Get the service team.
+
+        Returns:
+            dict: Service-team info
+        """
+        res = self.api_request(f"{self.base_url_v2}/ServiceTeams/GetServiceTeam")
+        return res.json()
+
+    def get_service_teams(self, service_type=None):
+        """Get service teams.
+
+        Args:
+            service_type: Optional service-type filter (maps to ``serviceType``)
+
+        Returns:
+            list: Service-team dicts
+        """
+        params = {}
+        if service_type is not None:
+            params["serviceType"] = service_type
+        res = self.api_request(f"{self.base_url_v2}/ServiceTeams/GetServiceTeams", params=params)
+        return res.json()
+
+    def get_advisor_number(self):
+        """Get the advisor number.
+
+        Returns:
+            dict | str: Advisor number
+        """
+        res = self.api_request(f"{self.base_url_v2}/ServiceTeams/GetAdvisorNumber")
+        return res.json()
+
+    def get_user(self, user_id):
+        """Get a user by ID.
+
+        Args:
+            user_id: User ID
+
+        Returns:
+            dict: User
+        """
+        res = self.api_request(f"{self.base_url_v2}/User/{user_id}")
+        return res.json()
+
+    # --- Admin: token + custodian/execution reference ---
+
+    def get_token_environment(self):
+        """Get the token environment.
+
+        Returns:
+            dict | str: Environment
+        """
+        res = self.api_request(f"{self.base_url_v2}/Admin/Token/Environment")
+        return res.json()
+
+    def get_token_info(self):
+        """Get token info for the authenticated session.
+
+        Returns:
+            dict: Token info
+        """
+        res = self.api_request(f"{self.base_url_v2}/Admin/Token/Info")
+        return res.json()
+
+    def get_execution_destination_types(self):
+        """Get execution-destination types.
+
+        Returns:
+            list: Destination-type dicts
+        """
+        res = self.api_request(f"{self.base_url_v2}/Admin/Custodian/GetExecutionDestinationTypes")
+        return res.json()
+
+    def get_all_executing_destinations(self):
+        """Get all executing destinations.
+
+        Returns:
+            list: Destination dicts
+        """
+        res = self.api_request(f"{self.base_url_v2}/Admin/Custodian/GetAllExecutingDestinations")
+        return res.json()
+
+    def get_allocation_instructions(self):
+        """Get allocation instructions.
+
+        Returns:
+            list: Allocation-instruction dicts
+        """
+        res = self.api_request(f"{self.base_url_v2}/Admin/Custodian/GetAllocationInstructions")
+        return res.json()
+
+    def get_custodian_execution_settings(self, custodian_id):
+        """Get execution settings for a custodian.
+
+        Args:
+            custodian_id: Custodian ID (maps to ``custodianId``)
+
+        Returns:
+            dict: Execution settings
+        """
+        res = self.api_request(
+            f"{self.base_url_v2}/Admin/Custodian/CustodianExecutionSettings",
+            params={"custodianId": custodian_id},
+        )
+        return res.json()
+
+    def get_executing_destinations_for_security_type(self, security_type_id):
+        """Get executing destinations (with type) for a security type.
+
+        Args:
+            security_type_id: Security-type ID (maps to ``securityTypeId``)
+
+        Returns:
+            list: Destination dicts
+        """
+        res = self.api_request(
+            f"{self.base_url_v2}/Admin/Custodian/GetExecutingDestinationsWithTypeForSecurityType",
+            params={"securityTypeId": security_type_id},
+        )
+        return res.json()
+
+    def get_outsource_trade_execution_firm(self, custodian_id):
+        """Get the outsource trade-execution firm for a custodian.
+
+        Args:
+            custodian_id: Custodian ID (maps to ``custodianId``)
+
+        Returns:
+            dict: Outsource-firm info
+        """
+        res = self.api_request(
+            f"{self.base_url_v2}/Admin/Custodian/GetOutsourceTradeExecutionFirm",
+            params={"custodianId": custodian_id},
+        )
+        return res.json()
+
+    def get_custodian_algo_instructions(self, custodian_id):
+        """Get custodian algo instructions.
+
+        Args:
+            custodian_id: Custodian ID
+
+        Returns:
+            list: Algo-instruction dicts
+        """
+        res = self.api_request(
+            f"{self.base_url_v2}/Admin/Custodian/{custodian_id}/CustodianAlgoInstructions"
+        )
+        return res.json()
+
+    def get_trade_execution_allocation_types(self):
+        """Get trade-execution allocation types.
+
+        Returns:
+            list: Allocation-type dicts
+        """
+        res = self.api_request(f"{self.base_url_v2}/Admin/tradeExecutionTypes/allocation")
+        return res.json()
+
+    def get_trade_execution_types(self):
+        """Get trade-execution types.
+
+        Returns:
+            list: Execution-type dicts
+        """
+        res = self.api_request(f"{self.base_url_v2}/Admin/tradeExecutionTypes/execution")
+        return res.json()
+
+    # --- OrionConnect lookups ---
+
+    def get_firm_entity_option_by_code(self, code):
+        """Get a firm entity option by code.
+
+        Args:
+            code: Option code (maps to ``code``)
+
+        Returns:
+            dict: Firm-entity option
+        """
+        res = self.api_request(
+            f"{self.base_url_v2}/OrionConnect/GetFirmEntityOptionByCode", params={"code": code}
+        )
+        return res.json()
+
+    def get_product_classes(self):
+        """Get OrionConnect product classes.
+
+        Returns:
+            list: Product-class dicts
+        """
+        res = self.api_request(f"{self.base_url_v2}/OrionConnect/GetProductClasses")
+        return res.json()
+
+    def get_risk_categories(self):
+        """Get OrionConnect risk categories.
+
+        Returns:
+            list: Risk-category dicts
+        """
+        res = self.api_request(f"{self.base_url_v2}/OrionConnect/GetRiskCategories")
+        return res.json()
+
+    # --- Workflow (reads + CRUD) ---
+
+    def get_workflow_contexts(self):
+        """Get workflow contexts.
+
+        Returns:
+            list: Workflow-context dicts
+        """
+        res = self.api_request(f"{self.base_url_v2}/Workflow/contexts")
+        return res.json()
+
+    def get_workflow_context(self, context_id):
+        """Get a workflow context by ID.
+
+        Args:
+            context_id: Workflow-context ID
+
+        Returns:
+            dict: Workflow context
+        """
+        res = self.api_request(f"{self.base_url_v2}/Workflow/contexts/{context_id}")
+        return res.json()
+
+    def create_workflow_context(self, context):
+        """Create a workflow context (mutating).
+
+        Args:
+            context: Workflow-context DTO (request body)
+
+        Returns:
+            dict: Created context
+        """
+        res = self.api_request(f"{self.base_url_v2}/Workflow/contexts", requests.post, json=context)
+        return res.json()
+
+    def update_workflow_context(self, context_id, context):
+        """Update a workflow context (mutating).
+
+        Args:
+            context_id: Workflow-context ID
+            context: Workflow-context DTO (request body)
+
+        Returns:
+            dict: Updated context
+        """
+        res = self.api_request(
+            f"{self.base_url_v2}/Workflow/contexts/{context_id}", requests.put, json=context
+        )
+        return res.json()
+
+    def delete_workflow_context(self, context_id):
+        """Delete a workflow context (mutating).
+
+        Args:
+            context_id: Workflow-context ID
+        """
+        res = self.api_request(
+            f"{self.base_url_v2}/Workflow/contexts/{context_id}", requests.delete
+        )
+        return res.json()
+
+    def get_workflow_tools(self):
+        """Get workflow tools.
+
+        Returns:
+            list: Workflow-tool dicts
+        """
+        res = self.api_request(f"{self.base_url_v2}/Workflow/tools")
+        return res.json()
+
+    def get_workflow_mcp_servers(self):
+        """Get workflow MCP servers.
+
+        Returns:
+            list: MCP-server dicts
+        """
+        res = self.api_request(f"{self.base_url_v2}/Workflow/mcp-servers")
+        return res.json()
+
+    def get_workflow_mcp_server(self, server_id):
+        """Get a workflow MCP server by ID.
+
+        Args:
+            server_id: MCP-server ID
+
+        Returns:
+            dict: MCP server
+        """
+        res = self.api_request(f"{self.base_url_v2}/Workflow/mcp-servers/{server_id}")
         return res.json()
 
 
