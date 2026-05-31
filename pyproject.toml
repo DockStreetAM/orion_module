@@ -27,6 +27,11 @@ ignore = ["E501", "A002", "UP038"]
 # UP038: isinstance(x, (A, B)) is faster at runtime than isinstance(x, A | B);
 #        the rule was later deprecated by ruff for the same reason.
 
+[tool.ruff.lint.per-file-ignores]
+# models.py is auto-generated from the Eclipse v2 Swagger; its TypedDict class
+# names intentionally mirror the upstream schema names (not CapWords).
+"orionapi/models.py" = ["N801"]
+
 [tool.ruff.format]
 quote-style = "double"
 indent-style = "space"
