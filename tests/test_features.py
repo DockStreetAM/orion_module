@@ -1524,3 +1524,158 @@ class TestEclipseV2ReadEndpointsBatch3:
             api.get_preference("AllowWashSales")
         assert mock_get.call_args.args[0] == f"{V2_BASE}/Preference/Preference/GetPreference"
         assert mock_get.call_args.kwargs["params"] == {"preferenceName": "AllowWashSales"}
+
+
+class TestEclipseV2ReadEndpointsBatch4:
+    """URL/params coverage for v2 model / modeling / security / lookup reads."""
+
+    # --- Model / Modeling ---
+
+    def test_models_v2_filters(self):
+        api = _eclipse_for_set_asides()
+        mock_get = _mock_get([])
+        with patch("requests.get", mock_get):
+            api.get_models_v2(search="Core", name="C", model_id=5)
+        assert mock_get.call_args.args[0] == f"{V2_BASE}/Model/GetAllModels"
+        assert mock_get.call_args.kwargs["params"] == {
+            "modelId": 5,
+            "search": "Core",
+            "name": "C",
+        }
+
+    def test_model_types_v2(self):
+        api = _eclipse_for_set_asides()
+        mock_get = _mock_get([])
+        with patch("requests.get", mock_get):
+            api.get_model_types_v2()
+        assert mock_get.call_args.args[0] == f"{V2_BASE}/Model/GetModelTypes"
+
+    def test_model_risk_profile(self):
+        api = _eclipse_for_set_asides()
+        mock_get = _mock_get({})
+        with patch("requests.get", mock_get):
+            api.get_model_risk_profile(5, "1Y")
+        assert mock_get.call_args.args[0] == f"{V2_BASE}/Model/5/RiskProfile/1Y"
+
+    def test_model_sync_oc_firms(self):
+        api = _eclipse_for_set_asides()
+        mock_get = _mock_get([])
+        with patch("requests.get", mock_get):
+            api.get_model_sync_oc_firms(5)
+        assert mock_get.call_args.args[0] == f"{V2_BASE}/Model/GetModelSyncToOCFirms"
+        assert mock_get.call_args.kwargs["params"] == {"modelId": 5}
+
+    def test_model_levels(self):
+        api = _eclipse_for_set_asides()
+        mock_get = _mock_get([])
+        with patch("requests.get", mock_get):
+            api.get_model_levels(5)
+        assert mock_get.call_args.args[0] == f"{V2_BASE}/Modeling/Models/5/Levels"
+
+    def test_model_analysis_v2(self):
+        api = _eclipse_for_set_asides()
+        mock_get = _mock_get({})
+        with patch("requests.get", mock_get):
+            api.get_model_analysis_v2(5, asset_type="class", is_include_cost_basis=True)
+        assert mock_get.call_args.args[0] == f"{V2_BASE}/Modeling/Models/5/ModelAnalysis"
+        assert mock_get.call_args.kwargs["params"] == {
+            "assetType": "class",
+            "isIncludeCostBasis": "true",
+        }
+
+    def test_model_aggregate_analysis(self):
+        api = _eclipse_for_set_asides()
+        mock_get = _mock_get({})
+        with patch("requests.get", mock_get):
+            api.get_model_aggregate_analysis(5)
+        assert mock_get.call_args.args[0] == (
+            f"{V2_BASE}/Modeling/Models/5/ModelAnalysis/ModelAggregate"
+        )
+        assert mock_get.call_args.kwargs["params"] == {}
+
+    def test_astro_models(self):
+        api = _eclipse_for_set_asides()
+        mock_get = _mock_get([])
+        with patch("requests.get", mock_get):
+            api.get_astro_models()
+        assert mock_get.call_args.args[0] == f"{V2_BASE}/Modeling/Models/Astro"
+
+    def test_strategist_models(self):
+        api = _eclipse_for_set_asides()
+        mock_get = _mock_get([])
+        with patch("requests.get", mock_get):
+            api.get_strategist_models()
+        assert mock_get.call_args.args[0] == f"{V2_BASE}/Modeling/Models/GetStrategistModels"
+
+    def test_stress_test_scenarios(self):
+        api = _eclipse_for_set_asides()
+        mock_get = _mock_get([])
+        with patch("requests.get", mock_get):
+            api.get_stress_test_scenarios()
+        assert mock_get.call_args.args[0] == f"{V2_BASE}/Modeling/Models/StressTestScenarios"
+
+    def test_hidden_levers_user_status(self):
+        api = _eclipse_for_set_asides()
+        mock_get = _mock_get({})
+        with patch("requests.get", mock_get):
+            api.get_hidden_levers_user_status("a@b.com")
+        assert mock_get.call_args.args[0] == f"{V2_BASE}/Modeling/Models/UserStatus"
+        assert mock_get.call_args.kwargs["params"] == {"email": "a@b.com"}
+
+    # --- Security / SecuritySet ---
+
+    def test_get_securities(self):
+        api = _eclipse_for_set_asides()
+        mock_get = _mock_get([])
+        with patch("requests.get", mock_get):
+            api.get_securities(security_id=42, is_cached=True)
+        assert mock_get.call_args.args[0] == f"{V2_BASE}/Security/GetSecurities"
+        assert mock_get.call_args.kwargs["params"] == {"securityId": 42, "isCached": "true"}
+
+    def test_security_sets_v2(self):
+        api = _eclipse_for_set_asides()
+        mock_get = _mock_get([])
+        with patch("requests.get", mock_get):
+            api.get_security_sets_v2(security_set_id=9)
+        assert mock_get.call_args.args[0] == f"{V2_BASE}/SecuritySet/GetSecuritySets"
+        assert mock_get.call_args.kwargs["params"] == {"securitySetId": 9}
+
+    def test_security_set_history(self):
+        api = _eclipse_for_set_asides()
+        mock_get = _mock_get([])
+        with patch("requests.get", mock_get):
+            api.get_security_set_history(9, from_date="2026-01-01")
+        assert mock_get.call_args.args[0] == f"{V2_BASE}/SecuritySet/9/History"
+        assert mock_get.call_args.kwargs["params"] == {"fromDate": "2026-01-01"}
+
+    def test_security_set_detail_history(self):
+        api = _eclipse_for_set_asides()
+        mock_get = _mock_get([])
+        with patch("requests.get", mock_get):
+            api.get_security_set_detail_history(9)
+        assert mock_get.call_args.args[0] == f"{V2_BASE}/SecuritySet/9/DetailHistory"
+
+    # --- Lookup ---
+
+    def test_hidden_levers_durations(self):
+        api = _eclipse_for_set_asides()
+        mock_get = _mock_get([])
+        with patch("requests.get", mock_get):
+            api.get_hidden_levers_durations()
+        assert mock_get.call_args.args[0] == f"{V2_BASE}/Lookup/HiddenLeversDurations"
+
+    def test_sma_account_type_restrictions_all(self):
+        api = _eclipse_for_set_asides()
+        mock_get = _mock_get([])
+        with patch("requests.get", mock_get):
+            api.get_sma_account_type_restrictions()
+        assert mock_get.call_args.args[0] == f"{V2_BASE}/Lookup/SmaAccountTypeRestrictions"
+
+    def test_sma_account_type_restrictions_category(self):
+        api = _eclipse_for_set_asides()
+        mock_get = _mock_get([])
+        with patch("requests.get", mock_get):
+            api.get_sma_account_type_restrictions(category="IRA")
+        assert mock_get.call_args.args[0] == (
+            f"{V2_BASE}/Lookup/SmaAccountTypeRestrictions/Category/IRA"
+        )

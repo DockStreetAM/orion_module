@@ -1,4 +1,4 @@
-__version__ = "2.4.0"
+__version__ = "2.5.0"
 
 import logging
 import re
@@ -5595,6 +5595,287 @@ class EclipseV2(EclipseBase):
             f"{self.base_url_v2}/Preference/Preference/GetPreference",
             params={"preferenceName": preference_name},
         )
+        return res.json()
+
+    # --- Model / Modeling (v2 reads) ---------------------------------------------
+    # ``_v2`` suffix where a v1 method of the same base name already exists, so the
+    # method stays reachable on the Eclipse unifier (v1 wins bare-name collisions).
+
+    def get_models_v2(self, filter=None, model_id=None, search=None, name=None):
+        """Get models via the v2 GetAllModels endpoint (rich filters).
+
+        Args:
+            filter: Optional filter (maps to ``filter``)
+            model_id: Optional model ID (maps to ``modelId``)
+            search: Optional search string (maps to ``search``)
+            name: Optional name filter (maps to ``name``)
+
+        Returns:
+            list: Model dicts
+        """
+        params = {}
+        if filter is not None:
+            params["filter"] = filter
+        if model_id is not None:
+            params["modelId"] = model_id
+        if search is not None:
+            params["search"] = search
+        if name is not None:
+            params["name"] = name
+        res = self.api_request(f"{self.base_url_v2}/Model/GetAllModels", params=params)
+        return res.json()
+
+    def get_model_types_v2(self):
+        """Get all model types (v2).
+
+        Returns:
+            list: Model-type dicts
+        """
+        res = self.api_request(f"{self.base_url_v2}/Model/GetModelTypes")
+        return res.json()
+
+    def get_model_risk_profile(self, model_id, duration):
+        """Get the HiddenLevers risk-profile information for a model.
+
+        Args:
+            model_id: Model ID
+            duration: Risk-profile duration (see :meth:`get_hidden_levers_durations`)
+
+        Returns:
+            dict: Risk-profile information
+        """
+        res = self.api_request(f"{self.base_url_v2}/Model/{model_id}/RiskProfile/{duration}")
+        return res.json()
+
+    def get_model_sync_oc_firms(self, model_id):
+        """Get the Orion Connect firms available to sync a model to.
+
+        Args:
+            model_id: Model ID (maps to ``modelId``)
+
+        Returns:
+            list: OC-firm dicts
+        """
+        res = self.api_request(
+            f"{self.base_url_v2}/Model/GetModelSyncToOCFirms", params={"modelId": model_id}
+        )
+        return res.json()
+
+    def get_model_levels(self, model_id):
+        """Get all the levels for a model.
+
+        Args:
+            model_id: Model ID
+
+        Returns:
+            list: Model-level dicts
+        """
+        res = self.api_request(f"{self.base_url_v2}/Modeling/Models/{model_id}/Levels")
+        return res.json()
+
+    def get_model_analysis_v2(
+        self,
+        model_id,
+        asset_type="securityset",
+        is_include_cost_basis=None,
+        is_include_trade_block_account=None,
+        is_exclude_asset=None,
+    ):
+        """Get model analysis (v2) for a security set / category / class / subclass.
+
+        Args:
+            model_id: Model ID
+            asset_type: Aggregation level (default "securityset"; maps to ``assetType``)
+            is_include_cost_basis: Optional bool (``isIncludeCostBasis``)
+            is_include_trade_block_account: Optional bool (``isIncludeTradeBlockAccount``)
+            is_exclude_asset: Optional bool (``isExcludeAsset``)
+
+        Returns:
+            dict: Model analysis
+        """
+        params = {"assetType": asset_type}
+        if is_include_cost_basis is not None:
+            params["isIncludeCostBasis"] = str(is_include_cost_basis).lower()
+        if is_include_trade_block_account is not None:
+            params["isIncludeTradeBlockAccount"] = str(is_include_trade_block_account).lower()
+        if is_exclude_asset is not None:
+            params["isExcludeAsset"] = str(is_exclude_asset).lower()
+        res = self.api_request(
+            f"{self.base_url_v2}/Modeling/Models/{model_id}/ModelAnalysis", params=params
+        )
+        return res.json()
+
+    def get_model_aggregate_analysis(
+        self,
+        model_id,
+        is_include_cost_basis=None,
+        is_include_trade_block_account=None,
+        is_exclude_asset=None,
+    ):
+        """Get the model-aggregate detail for model analysis.
+
+        Args:
+            model_id: Model ID
+            is_include_cost_basis: Optional bool (``isIncludeCostBasis``)
+            is_include_trade_block_account: Optional bool (``isIncludeTradeBlockAccount``)
+            is_exclude_asset: Optional bool (``isExcludeAsset``)
+
+        Returns:
+            dict: Model-aggregate analysis
+        """
+        params = {}
+        if is_include_cost_basis is not None:
+            params["isIncludeCostBasis"] = str(is_include_cost_basis).lower()
+        if is_include_trade_block_account is not None:
+            params["isIncludeTradeBlockAccount"] = str(is_include_trade_block_account).lower()
+        if is_exclude_asset is not None:
+            params["isExcludeAsset"] = str(is_exclude_asset).lower()
+        res = self.api_request(
+            f"{self.base_url_v2}/Modeling/Models/{model_id}/ModelAnalysis/ModelAggregate",
+            params=params,
+        )
+        return res.json()
+
+    def get_astro_models(self):
+        """Get Astro models.
+
+        Returns:
+            list: Astro-model dicts
+        """
+        res = self.api_request(f"{self.base_url_v2}/Modeling/Models/Astro")
+        return res.json()
+
+    def get_strategist_models(self):
+        """Get community models with their associated strategist (for the user).
+
+        Returns:
+            list: Community/strategist model dicts
+        """
+        res = self.api_request(f"{self.base_url_v2}/Modeling/Models/GetStrategistModels")
+        return res.json()
+
+    def get_stress_test_scenarios(self):
+        """Get HiddenLevers stress-test scenarios.
+
+        Returns:
+            list: Stress-test scenario dicts
+        """
+        res = self.api_request(f"{self.base_url_v2}/Modeling/Models/StressTestScenarios")
+        return res.json()
+
+    def get_hidden_levers_user_status(self, email):
+        """Get the HiddenLevers status (paid or free) of a user.
+
+        Args:
+            email: User email (maps to ``email``)
+
+        Returns:
+            dict: User status
+        """
+        res = self.api_request(
+            f"{self.base_url_v2}/Modeling/Models/UserStatus", params={"email": email}
+        )
+        return res.json()
+
+    # --- Security / SecuritySet (v2 reads) ---------------------------------------
+
+    def get_securities(self, security_id=None, is_cached=None):
+        """Get securities (v2).
+
+        Args:
+            security_id: Optional security ID (maps to ``securityId``)
+            is_cached: Optional bool (maps to ``isCached``)
+
+        Returns:
+            list: Security dicts
+        """
+        params = {}
+        if security_id is not None:
+            params["securityId"] = security_id
+        if is_cached is not None:
+            params["isCached"] = str(is_cached).lower()
+        res = self.api_request(f"{self.base_url_v2}/Security/GetSecurities", params=params)
+        return res.json()
+
+    def get_security_sets_v2(self, security_set_id=None):
+        """Get security sets via the v2 GetSecuritySets endpoint.
+
+        Args:
+            security_set_id: Optional security-set ID (maps to ``securitySetId``)
+
+        Returns:
+            list: Security-set dicts
+        """
+        params = {}
+        if security_set_id is not None:
+            params["securitySetId"] = security_set_id
+        res = self.api_request(f"{self.base_url_v2}/SecuritySet/GetSecuritySets", params=params)
+        return res.json()
+
+    def get_security_set_history(self, security_set_id, from_date=None, to_date=None):
+        """Get the change history for a security set.
+
+        Args:
+            security_set_id: Security-set ID
+            from_date / to_date: Optional ISO date window (``fromDate`` / ``toDate``)
+
+        Returns:
+            list: History dicts
+        """
+        params = {}
+        if from_date is not None:
+            params["fromDate"] = from_date
+        if to_date is not None:
+            params["toDate"] = to_date
+        res = self.api_request(
+            f"{self.base_url_v2}/SecuritySet/{security_set_id}/History", params=params
+        )
+        return res.json()
+
+    def get_security_set_detail_history(self, security_set_id, from_date=None, to_date=None):
+        """Get the detailed change history for a security set.
+
+        Args:
+            security_set_id: Security-set ID
+            from_date / to_date: Optional ISO date window (``fromDate`` / ``toDate``)
+
+        Returns:
+            dict: Detailed history (``details``, ``alternatives``, ``equivalences``, etc.)
+        """
+        params = {}
+        if from_date is not None:
+            params["fromDate"] = from_date
+        if to_date is not None:
+            params["toDate"] = to_date
+        res = self.api_request(
+            f"{self.base_url_v2}/SecuritySet/{security_set_id}/DetailHistory", params=params
+        )
+        return res.json()
+
+    # --- Lookup (v2 reference data) ----------------------------------------------
+
+    def get_hidden_levers_durations(self):
+        """Get the available HiddenLevers risk-profile durations.
+
+        Returns:
+            list: Duration values
+        """
+        res = self.api_request(f"{self.base_url_v2}/Lookup/HiddenLeversDurations")
+        return res.json()
+
+    def get_sma_account_type_restrictions(self, category=None):
+        """Get SMA account-type restriction values.
+
+        Args:
+            category: Optional category; when provided, hits the per-category route.
+
+        Returns:
+            list: Account-type restriction values
+        """
+        path = "/Lookup/SmaAccountTypeRestrictions"
+        if category is not None:
+            path += f"/Category/{category}"
+        res = self.api_request(f"{self.base_url_v2}{path}")
         return res.json()
 
 
