@@ -1406,3 +1406,35 @@ class TestEclipseV2OrgRefBatch10:
 
     def test_workflow_mcp_servers(self, eclipse_client):
         assert isinstance(eclipse_client.v2.get_workflow_mcp_servers(), list)
+
+
+class TestEclipseV1ReadCoverageBatch12:
+    """Live smoke tests for v1 reference/sub-resource reads (batch 12).
+
+    get_portfolio_account_count 400s upstream (route collision) and get_sleeves
+    is role-gated (SLEEVES), so those are unit-tested only.
+    """
+
+    def test_account_filters(self, eclipse_client):
+        assert isinstance(eclipse_client.v1.get_account_filters(), list)
+
+    def test_aside_cash_amount_types(self, eclipse_client):
+        assert isinstance(eclipse_client.v1.get_aside_cash_amount_types(), list)
+
+    def test_aside_cash_expiration_types(self, eclipse_client):
+        assert isinstance(eclipse_client.v1.get_aside_cash_expiration_types(), list)
+
+    def test_aside_cash_transaction_types(self, eclipse_client):
+        assert isinstance(eclipse_client.v1.get_aside_cash_transaction_types(), list)
+
+    def test_restricted_plans(self, eclipse_client):
+        assert isinstance(eclipse_client.v1.get_restricted_plans(), list)
+
+    def test_holding_filters(self, eclipse_client):
+        assert isinstance(eclipse_client.v1.get_holding_filters(), list)
+
+    def test_portfolio_filters(self, eclipse_client):
+        assert isinstance(eclipse_client.v1.get_portfolio_filters(), (list, dict))
+
+    def test_accounts_without_portfolio(self, eclipse_client):
+        assert isinstance(eclipse_client.v1.get_accounts_without_portfolio(), list)
