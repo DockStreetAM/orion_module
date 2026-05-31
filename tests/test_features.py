@@ -3693,3 +3693,238 @@ class TestEclipseCoverageBatch16Sweep:
         m = self._v1("put", lambda a: a.update_submodel_by_model({"x": 1}, model_id=5))
         assert m.call_args.args[0] == f"{V1_BASE}/modeling/models/submodels"
         assert m.call_args.kwargs["params"] == {"modelId": 5}
+
+
+class TestEclipseV2TradeToolAdminAnalyticsBatch17:
+    """v2 TradeTool/Admin/Analytics (batch 17)."""
+
+    def _v2(self, verb, fn):
+        api = _eclipse_for_set_asides()
+        m = _mock_get([]) if verb == "get" else _mock_post({})
+        with patch(f"requests.{verb}", m):
+            fn(api)
+        return m
+
+    def test_calc_contributions_for_sleeves(self):
+        m = self._v2("get", lambda a: a.get_calculate_contributions_for_sleeves())
+        assert m.call_args.args[0] == f"{V2_BASE}/TradeTool/CalculateContributionsForSleeves"
+
+    def test_raise_cash_by_fund(self):
+        m = self._v2("post", lambda a: a.raise_cash_by_fund({"x": 1}))
+        assert m.call_args.args[0] == f"{V2_BASE}/TradeTool/RaiseCashByFund"
+
+    def test_raise_cash_distribution_full_rebalance(self):
+        m = self._v2("post", lambda a: a.raise_cash_distribution_full_rebalance({"x": 1}))
+        assert m.call_args.args[0] == f"{V2_BASE}/TradeTool/RaiseCashDistributionFullRebalance"
+
+    def test_tlh_opportunity_flag(self):
+        m = self._v2("post", lambda a: a.get_tlh_opportunity_flag({"x": 1}))
+        assert m.call_args.args[0] == f"{V2_BASE}/TradeTool/TlhOpportunityFlag"
+
+    def test_create_custodian(self):
+        m = self._v2("post", lambda a: a.create_custodian({"name": "C"}))
+        assert m.call_args.args[0] == f"{V2_BASE}/Admin/Custodian"
+
+    def test_custodian_algo_tag_info(self):
+        m = self._v2("get", lambda a: a.get_custodian_algo_tag_info(3))
+        assert m.call_args.args[0] == f"{V2_BASE}/Admin/Custodian/CustodianAlgoTagInfo/3"
+
+    def test_custodian_algo_tag_info_by_custodian(self):
+        m = self._v2("get", lambda a: a.get_custodian_algo_tag_info_by_custodian(5))
+        assert m.call_args.args[0] == (
+            f"{V2_BASE}/Admin/Custodian/CustodianAlgoTagInfoByCustodian/5"
+        )
+
+    def test_custodian_algo_tag_info_by_ids(self):
+        m = self._v2("post", lambda a: a.get_custodian_algo_tag_info_by_ids([1]))
+        assert m.call_args.args[0] == f"{V2_BASE}/Admin/Custodian/GetCustodianAlgoTagInfoByIds"
+
+    def test_create_custodian_algo_instructions(self):
+        m = self._v2("post", lambda a: a.create_custodian_algo_instructions(5, {"x": 1}))
+        assert m.call_args.args[0] == f"{V2_BASE}/Admin/Custodian/5/CustodianAlgoInstructions"
+
+    def test_get_custodian_algo_instruction(self):
+        m = self._v2("get", lambda a: a.get_custodian_algo_instruction(5, 9))
+        assert m.call_args.args[0] == f"{V2_BASE}/Admin/Custodian/5/CustodianAlgoInstructions/9"
+
+    def test_update_custodian_algo_instructions(self):
+        m = self._v2("put", lambda a: a.update_custodian_algo_instructions(5, 9, {"x": 1}))
+        assert m.call_args.args[0] == f"{V2_BASE}/Admin/Custodian/5/CustodianAlgoInstructions/9"
+
+    def test_delete_custodian_algo_instructions(self):
+        m = self._v2("delete", lambda a: a.delete_custodian_algo_instructions(5, 9))
+        assert m.call_args.args[0] == f"{V2_BASE}/Admin/Custodian/5/CustodianAlgoInstructions/9"
+
+    def test_get_trade_execution_sftp_config(self):
+        m = self._v2("get", lambda a: a.get_trade_execution_sftp_config(2))
+        assert m.call_args.args[0] == f"{V2_BASE}/Admin/tradeExecutionTypes/2/sftpConfig"
+
+    def test_update_trade_execution_sftp_config(self):
+        m = self._v2("put", lambda a: a.update_trade_execution_sftp_config(2, {"x": 1}))
+        assert m.call_args.args[0] == f"{V2_BASE}/Admin/tradeExecutionTypes/2/sftpConfig"
+
+    def test_cancel_analytics(self):
+        m = self._v2("post", lambda a: a.cancel_analytics())
+        assert m.call_args.args[0] == f"{V2_BASE}/Analytics/Cancel"
+
+    def test_portfolios_analytics_status(self):
+        m = self._v2("post", lambda a: a.get_portfolios_analytics_status([1]))
+        assert m.call_args.args[0] == f"{V2_BASE}/Analytics/GetPortfoliosAnalyticsStatus"
+
+    def test_reset_analytics_run_history(self):
+        m = self._v2("get", lambda a: a.reset_analytics_run_history())
+        assert m.call_args.args[0] == f"{V2_BASE}/Analytics/ResetAnalyticsRunHistory"
+
+    def test_run_analytics_v2(self):
+        m = self._v2("post", lambda a: a.run_analytics_v2({"x": 1}))
+        assert m.call_args.args[0] == f"{V2_BASE}/Analytics/RunAnalytics"
+
+    def test_update_run_analytics_config(self):
+        m = self._v2("put", lambda a: a.update_run_analytics_config(7, {"x": 1}))
+        assert m.call_args.args[0] == f"{V2_BASE}/Analytics/RunAnalyticsConfig/7"
+
+    def test_update_analytics_status(self):
+        m = self._v2("post", lambda a: a.update_analytics_status({"x": 1}))
+        assert m.call_args.args[0] == f"{V2_BASE}/Analytics/StatusUpdate"
+
+
+class TestEclipseV1TradeToolAdminBatch17:
+    """v1 TradeTool reference/generate/TLH + Admin token (batch 17)."""
+
+    def _v1(self, verb, fn):
+        api = _eclipse_v1()
+        m = _mock_get([]) if verb == "get" else _mock_post({})
+        with patch(f"requests.{verb}", m):
+            fn(api)
+        return m
+
+    def test_priority_rankings(self):
+        m = self._v1("get", lambda a: a.get_trade_priority_rankings())
+        assert m.call_args.args[0] == f"{V1_BASE}/tradetool/priorityrankings"
+
+    def test_tactical_rebalance_cash_protection(self):
+        m = self._v1("get", lambda a: a.get_tactical_rebalance_cash_protection())
+        assert m.call_args.args[0] == f"{V1_BASE}/tradetool/tacticalRebalanceCashProtection"
+
+    def test_allow_wash_sales(self):
+        m = self._v1("get", lambda a: a.get_allow_wash_sales_options())
+        assert m.call_args.args[0] == f"{V1_BASE}/tradetool/allowwashsales"
+
+    def test_allow_short_term_gains(self):
+        m = self._v1("get", lambda a: a.get_allow_short_term_gains_options())
+        assert m.call_args.args[0] == f"{V1_BASE}/tradetool/allowshorttermgains"
+
+    def test_trade_side(self):
+        m = self._v1("get", lambda a: a.get_trade_side_options())
+        assert m.call_args.args[0] == f"{V1_BASE}/tradetool/tradeside"
+
+    def test_tlh_gainloss_options(self):
+        m = self._v1("get", lambda a: a.get_tlh_gainloss_options())
+        assert m.call_args.args[0] == f"{V1_BASE}/tradetool/taxLossHarvesting/gainloss/options"
+
+    def test_tlh_sign_options(self):
+        m = self._v1("get", lambda a: a.get_tlh_sign_options())
+        assert m.call_args.args[0] == f"{V1_BASE}/tradetool/taxLossHarvesting/sign/options"
+
+    def test_tlh_term_options(self):
+        m = self._v1("get", lambda a: a.get_tlh_term_options())
+        assert m.call_args.args[0] == f"{V1_BASE}/tradetool/taxLossHarvesting/term/options"
+
+    def test_generate_trade_instance(self):
+        m = self._v1("post", lambda a: a.generate_trade_instance({"isViewOnly": True}))
+        assert m.call_args.args[0] == f"{V1_BASE}/tradetool/tradeInstance/action/generateinstance"
+
+    def test_generate_prorated_cash_trade(self):
+        m = self._v1("post", lambda a: a.generate_prorated_cash_trade({"x": 1}))
+        assert m.call_args.args[0] == f"{V1_BASE}/tradetool/proratedcash/action/generatetrade"
+
+    def test_generate_raise_cash_trade(self):
+        m = self._v1("post", lambda a: a.generate_raise_cash_trade({"x": 1}))
+        assert m.call_args.args[0] == f"{V1_BASE}/tradetool/raisecash/action/generatetrade"
+
+    def test_auto_rebalance(self):
+        m = self._v1("post", lambda a: a.auto_rebalance({"x": 1}))
+        assert m.call_args.args[0] == f"{V1_BASE}/tradetool/rebalancer/action/autoRebalance"
+
+    def test_generate_global_trade(self):
+        m = self._v1("post", lambda a: a.generate_global_trade({"x": 1}))
+        assert m.call_args.args[0] == f"{V1_BASE}/tradetool/globaltrades/action/generateTrade"
+
+    def test_deserialize_global_trade(self):
+        m = self._v1("post", lambda a: a.deserialize_global_trade({"x": 1}))
+        assert m.call_args.args[0] == f"{V1_BASE}/tradetool/globaltrades/action/deserialize"
+
+    def test_generate_liquidate_trade(self):
+        m = self._v1("post", lambda a: a.generate_liquidate_trade({"x": 1}))
+        assert m.call_args.args[0] == f"{V1_BASE}/tradetool/liquidate/generateTrade"
+
+    def test_deserialize_ticker_swap(self):
+        m = self._v1("post", lambda a: a.deserialize_ticker_swap({"x": 1}))
+        assert m.call_args.args[0] == f"{V1_BASE}/tradetool/tickerswap/action/deserialize"
+
+    def test_generate_trade_to_target(self):
+        m = self._v1("post", lambda a: a.generate_trade_to_target({"x": 1}))
+        assert m.call_args.args[0] == f"{V1_BASE}/tradetool/tradetotarget/action/generateTrade"
+
+    def test_deserialize_trade_to_target(self):
+        m = self._v1("post", lambda a: a.deserialize_trade_to_target({"x": 1}))
+        assert m.call_args.args[0] == f"{V1_BASE}/tradetool/tradetotarget/action/deserialize"
+
+    def test_upload_trade_file(self):
+        m = self._v1("post", lambda a: a.upload_trade_file({"x": 1}, is_sleeve=True))
+        assert m.call_args.args[0] == f"{V1_BASE}/tradetool/uploadfile"
+        assert m.call_args.kwargs["params"] == {"isSleeve": "true"}
+
+    def test_create_tlh_trade(self):
+        m = self._v1("post", lambda a: a.create_tlh_trade({"x": 1}))
+        assert m.call_args.args[0] == (
+            f"{V1_BASE}/tradetool/taxLossHarvesting/action/createTLHTrade"
+        )
+
+    def test_create_tlh_trade_batch(self):
+        m = self._v1("post", lambda a: a.create_tlh_trade_batch({"x": 1}))
+        assert m.call_args.args[0] == (
+            f"{V1_BASE}/tradetool/taxLossHarvesting/action/createTLHTradeBatchId"
+        )
+
+    def test_create_tlh_trade_generic(self):
+        m = self._v1("post", lambda a: a.create_tlh_trade_generic({"x": 1}))
+        assert m.call_args.args[0] == f"{V1_BASE}/tradetool/taxLossHarvesting/action/createTrade"
+
+    def test_search_tlh_securities(self):
+        m = self._v1("post", lambda a: a.search_tlh_securities({"x": 1}))
+        assert m.call_args.args[0] == (
+            f"{V1_BASE}/tradetool/taxLossHarvesting/action/searchTLHsecurity"
+        )
+
+    def test_validate_tlh_securities(self):
+        m = self._v1("post", lambda a: a.validate_tlh_securities({"x": 1}))
+        assert m.call_args.args[0] == (
+            f"{V1_BASE}/tradetool/taxLossHarvesting/action/validateTLHSecurities"
+        )
+
+    def test_validate_buy_preferred_tlh_securities(self):
+        m = self._v1("post", lambda a: a.validate_buy_preferred_tlh_securities({"x": 1}))
+        assert m.call_args.args[0] == (
+            f"{V1_BASE}/tradetool/taxLossHarvesting/action/validateBuyPreferredTHSecurities"
+        )
+
+    def test_get_firm_token(self):
+        m = self._v1("post", lambda a: a.get_firm_token({"firmId": 1}))
+        assert m.call_args.args[0] == f"{V1_BASE}/admin/token/firm"
+
+    def test_get_firm_token_by_id(self):
+        m = self._v1("get", lambda a: a.get_firm_token_by_id(5))
+        assert m.call_args.args[0] == f"{V1_BASE}/admin/token/firm/5"
+
+    def test_login_as(self):
+        m = self._v1("post", lambda a: a.login_as({"userId": 1}))
+        assert m.call_args.args[0] == f"{V1_BASE}/admin/token/loginas"
+
+    def test_revert_login_as(self):
+        m = self._v1("get", lambda a: a.revert_login_as())
+        assert m.call_args.args[0] == f"{V1_BASE}/admin/token/loginas/revert"
+
+    def test_logout(self):
+        m = self._v1("get", lambda a: a.logout())
+        assert m.call_args.args[0] == f"{V1_BASE}/admin/logout"

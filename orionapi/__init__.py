@@ -1,4 +1,4 @@
-__version__ = "2.17.0"
+__version__ = "2.18.0"
 
 import logging
 import re
@@ -5791,6 +5791,391 @@ class EclipseV1(EclipseBase):
             params=params,
         ).json()
 
+    # =========================================================================
+    # Coverage batch 17 (v1): TradeTool (reference + generate/TLH) + Admin token.
+    # Trade-generation endpoints stage trades; pass isViewOnly in the body for
+    # preview. Mutating endpoints unit-tested only.
+    # =========================================================================
+
+    # --- TradeTool reference reads (v1) ---
+
+    def get_trade_priority_rankings(self):
+        """Get the available trade priority rankings.
+
+        Returns:
+            list: Priority-ranking dicts
+        """
+        return self.api_request(f"{self.base_url}/tradetool/priorityrankings").json()
+
+    def get_tactical_rebalance_cash_protection(self):
+        """Get the tactical-rebalance cash-protection options.
+
+        Returns:
+            list | dict: Cash-protection options
+        """
+        return self.api_request(f"{self.base_url}/tradetool/tacticalRebalanceCashProtection").json()
+
+    def get_allow_wash_sales_options(self):
+        """Get the allow-wash-sales options.
+
+        Returns:
+            list: Option dicts
+        """
+        return self.api_request(f"{self.base_url}/tradetool/allowwashsales").json()
+
+    def get_allow_short_term_gains_options(self):
+        """Get the allow-short-term-gains options.
+
+        Returns:
+            list: Option dicts
+        """
+        return self.api_request(f"{self.base_url}/tradetool/allowshorttermgains").json()
+
+    def get_trade_side_options(self):
+        """Get the trade-side options.
+
+        Returns:
+            list: Option dicts
+        """
+        return self.api_request(f"{self.base_url}/tradetool/tradeside").json()
+
+    def get_tlh_gainloss_options(self):
+        """Get the tax-loss-harvesting gain/loss options.
+
+        Returns:
+            list: Option dicts
+        """
+        return self.api_request(
+            f"{self.base_url}/tradetool/taxLossHarvesting/gainloss/options"
+        ).json()
+
+    def get_tlh_sign_options(self):
+        """Get the tax-loss-harvesting sign options.
+
+        Returns:
+            list: Option dicts
+        """
+        return self.api_request(f"{self.base_url}/tradetool/taxLossHarvesting/sign/options").json()
+
+    def get_tlh_term_options(self):
+        """Get the tax-loss-harvesting term options.
+
+        Returns:
+            list: Option dicts
+        """
+        return self.api_request(f"{self.base_url}/tradetool/taxLossHarvesting/term/options").json()
+
+    # --- TradeTool generate / action (v1; pass isViewOnly in body for preview) ---
+
+    def generate_trade_instance(self, payload):
+        """Generate a trade instance.
+
+        Args:
+            payload: Generate DTO (request body; set isViewOnly for preview)
+
+        Returns:
+            dict: Generated instance
+        """
+        return self.api_request(
+            f"{self.base_url}/tradetool/tradeInstance/action/generateinstance",
+            requests.post,
+            json=payload,
+        ).json()
+
+    def generate_prorated_cash_trade(self, payload):
+        """Generate a prorated-cash trade.
+
+        Args:
+            payload: Generate DTO (request body; set isViewOnly for preview)
+
+        Returns:
+            dict: Generated trade
+        """
+        return self.api_request(
+            f"{self.base_url}/tradetool/proratedcash/action/generatetrade",
+            requests.post,
+            json=payload,
+        ).json()
+
+    def generate_raise_cash_trade(self, payload):
+        """Generate a raise-cash trade.
+
+        Args:
+            payload: Generate DTO (request body; set isViewOnly for preview)
+
+        Returns:
+            dict: Generated trade
+        """
+        return self.api_request(
+            f"{self.base_url}/tradetool/raisecash/action/generatetrade",
+            requests.post,
+            json=payload,
+        ).json()
+
+    def auto_rebalance(self, payload):
+        """Generate an auto-rebalance trade.
+
+        Args:
+            payload: Auto-rebalance DTO (request body; set isViewOnly for preview)
+
+        Returns:
+            dict: Generated trade
+        """
+        return self.api_request(
+            f"{self.base_url}/tradetool/rebalancer/action/autoRebalance",
+            requests.post,
+            json=payload,
+        ).json()
+
+    def generate_global_trade(self, payload):
+        """Generate a global trade.
+
+        Args:
+            payload: Generate DTO (request body; set isViewOnly for preview)
+
+        Returns:
+            dict: Generated trade
+        """
+        return self.api_request(
+            f"{self.base_url}/tradetool/globaltrades/action/generateTrade",
+            requests.post,
+            json=payload,
+        ).json()
+
+    def deserialize_global_trade(self, payload):
+        """Deserialize a global-trade upload (POST-body).
+
+        Args:
+            payload: Serialized DTO (request body)
+
+        Returns:
+            dict: Deserialized trade
+        """
+        return self.api_request(
+            f"{self.base_url}/tradetool/globaltrades/action/deserialize",
+            requests.post,
+            json=payload,
+        ).json()
+
+    def generate_liquidate_trade(self, payload):
+        """Generate a liquidation trade.
+
+        Args:
+            payload: Liquidate DTO (request body; set isViewOnly for preview)
+
+        Returns:
+            dict: Generated trade
+        """
+        return self.api_request(
+            f"{self.base_url}/tradetool/liquidate/generateTrade", requests.post, json=payload
+        ).json()
+
+    def deserialize_ticker_swap(self, payload):
+        """Deserialize a ticker-swap upload (POST-body).
+
+        Args:
+            payload: Serialized DTO (request body)
+
+        Returns:
+            dict: Deserialized data
+        """
+        return self.api_request(
+            f"{self.base_url}/tradetool/tickerswap/action/deserialize",
+            requests.post,
+            json=payload,
+        ).json()
+
+    def generate_trade_to_target(self, payload):
+        """Generate a trade-to-target trade.
+
+        Args:
+            payload: Trade-to-target DTO (request body; set isViewOnly for preview)
+
+        Returns:
+            dict: Generated trade
+        """
+        return self.api_request(
+            f"{self.base_url}/tradetool/tradetotarget/action/generateTrade",
+            requests.post,
+            json=payload,
+        ).json()
+
+    def deserialize_trade_to_target(self, payload):
+        """Deserialize a trade-to-target upload (POST-body).
+
+        Args:
+            payload: Serialized DTO (request body)
+
+        Returns:
+            dict: Deserialized data
+        """
+        return self.api_request(
+            f"{self.base_url}/tradetool/tradetotarget/action/deserialize",
+            requests.post,
+            json=payload,
+        ).json()
+
+    def upload_trade_file(self, payload, is_sleeve=None):
+        """Upload a trade file.
+
+        Args:
+            payload: Upload DTO (request body)
+            is_sleeve: Optional bool (maps to ``isSleeve``)
+        """
+        params = {}
+        if is_sleeve is not None:
+            params["isSleeve"] = str(is_sleeve).lower()
+        return self.api_request(
+            f"{self.base_url}/tradetool/uploadfile", requests.post, json=payload, params=params
+        ).json()
+
+    # --- TradeTool TLH suite (v1) ---
+
+    def create_tlh_trade(self, payload):
+        """Create a tax-loss-harvesting trade.
+
+        Args:
+            payload: TLH DTO (request body; set isViewOnly for preview)
+
+        Returns:
+            dict: Created trade
+        """
+        return self.api_request(
+            f"{self.base_url}/tradetool/taxLossHarvesting/action/createTLHTrade",
+            requests.post,
+            json=payload,
+        ).json()
+
+    def create_tlh_trade_batch(self, payload):
+        """Create a tax-loss-harvesting trade by batch ID.
+
+        Args:
+            payload: TLH batch DTO (request body)
+
+        Returns:
+            dict: Created trade
+        """
+        return self.api_request(
+            f"{self.base_url}/tradetool/taxLossHarvesting/action/createTLHTradeBatchId",
+            requests.post,
+            json=payload,
+        ).json()
+
+    def create_tlh_trade_generic(self, payload):
+        """Create a tax-loss-harvesting trade (generic createTrade).
+
+        Args:
+            payload: TLH DTO (request body)
+
+        Returns:
+            dict: Created trade
+        """
+        return self.api_request(
+            f"{self.base_url}/tradetool/taxLossHarvesting/action/createTrade",
+            requests.post,
+            json=payload,
+        ).json()
+
+    def search_tlh_securities(self, payload):
+        """Search tax-loss-harvesting securities (POST-body).
+
+        Args:
+            payload: Search DTO (request body)
+
+        Returns:
+            list: Security dicts
+        """
+        return self.api_request(
+            f"{self.base_url}/tradetool/taxLossHarvesting/action/searchTLHsecurity",
+            requests.post,
+            json=payload,
+        ).json()
+
+    def validate_tlh_securities(self, payload):
+        """Validate tax-loss-harvesting securities (POST-body).
+
+        Args:
+            payload: Validation DTO (request body)
+
+        Returns:
+            dict: Validation result
+        """
+        return self.api_request(
+            f"{self.base_url}/tradetool/taxLossHarvesting/action/validateTLHSecurities",
+            requests.post,
+            json=payload,
+        ).json()
+
+    def validate_buy_preferred_tlh_securities(self, payload):
+        """Validate buy-preferred tax-loss-harvesting securities (POST-body).
+
+        Args:
+            payload: Validation DTO (request body)
+
+        Returns:
+            dict: Validation result
+        """
+        return self.api_request(
+            f"{self.base_url}/tradetool/taxLossHarvesting/action/validateBuyPreferredTHSecurities",
+            requests.post,
+            json=payload,
+        ).json()
+
+    # --- Admin token (v1) ---
+
+    def get_firm_token(self, payload):
+        """Get a firm token (mutating; token issuance).
+
+        Args:
+            payload: Firm DTO (request body)
+
+        Returns:
+            dict: Token
+        """
+        return self.api_request(
+            f"{self.base_url}/admin/token/firm", requests.post, json=payload
+        ).json()
+
+    def get_firm_token_by_id(self, firm_id):
+        """Get a firm token by firm ID.
+
+        Args:
+            firm_id: Firm ID
+
+        Returns:
+            dict: Token
+        """
+        return self.api_request(f"{self.base_url}/admin/token/firm/{firm_id}").json()
+
+    def login_as(self, payload):
+        """Impersonate (login as) another user (mutating).
+
+        Args:
+            payload: Login-as DTO (request body)
+
+        Returns:
+            dict: Token / session
+        """
+        return self.api_request(
+            f"{self.base_url}/admin/token/loginas", requests.post, json=payload
+        ).json()
+
+    def revert_login_as(self):
+        """Revert a login-as impersonation.
+
+        Returns:
+            dict: Token / session
+        """
+        return self.api_request(f"{self.base_url}/admin/token/loginas/revert").json()
+
+    def logout(self):
+        """Log out the current session.
+
+        Returns:
+            dict: Logout result
+        """
+        return self.api_request(f"{self.base_url}/admin/logout").json()
+
 
 class EclipseV2(EclipseBase):
     """Eclipse client targeting the v2 API surface (``/api/v2/...``) only.
@@ -10143,6 +10528,264 @@ class EclipseV2(EclipseBase):
             f"{self.base_url_v2}/Portfolio/Sleeves/SleeveStrategyAggregatesByFirmIds",
             requests.post,
             json=payload,
+        ).json()
+
+    # =========================================================================
+    # Coverage batch 17 (v2): TradeTool, Admin (custodian/execution), Analytics.
+    # Trade-generation endpoints stage/preview trades; pass isViewOnly in the
+    # body for preview. Mutating endpoints unit-tested only.
+    # =========================================================================
+
+    # --- TradeTool (v2) ---
+
+    def get_calculate_contributions_for_sleeves(self):
+        """Calculate contributions for sleeves.
+
+        Returns:
+            dict | list: Contribution calculations
+        """
+        return self.api_request(
+            f"{self.base_url_v2}/TradeTool/CalculateContributionsForSleeves"
+        ).json()
+
+    def raise_cash_by_fund(self, payload):
+        """Generate a raise-cash-by-fund trade (pass isViewOnly in body for preview).
+
+        Args:
+            payload: Raise-cash DTO (request body)
+
+        Returns:
+            dict: Generated trade
+        """
+        return self.api_request(
+            f"{self.base_url_v2}/TradeTool/RaiseCashByFund", requests.post, json=payload
+        ).json()
+
+    def raise_cash_distribution_full_rebalance(self, payload):
+        """Generate a raise-cash-distribution full-rebalance trade.
+
+        Args:
+            payload: Rebalance DTO (request body; pass isViewOnly for preview)
+
+        Returns:
+            dict: Generated trade
+        """
+        return self.api_request(
+            f"{self.base_url_v2}/TradeTool/RaiseCashDistributionFullRebalance",
+            requests.post,
+            json=payload,
+        ).json()
+
+    def get_tlh_opportunity_flag(self, payload):
+        """Get the tax-loss-harvesting opportunity flag (POST-body read).
+
+        Args:
+            payload: Criteria DTO (request body)
+
+        Returns:
+            dict: TLH opportunity flag(s)
+        """
+        return self.api_request(
+            f"{self.base_url_v2}/TradeTool/TlhOpportunityFlag", requests.post, json=payload
+        ).json()
+
+    # --- Admin: custodian + execution (v2) ---
+
+    def create_custodian(self, payload):
+        """Create a custodian (mutating).
+
+        Args:
+            payload: Custodian DTO (request body)
+
+        Returns:
+            dict: Created custodian
+        """
+        return self.api_request(
+            f"{self.base_url_v2}/Admin/Custodian", requests.post, json=payload
+        ).json()
+
+    def get_custodian_algo_tag_info(self, tag_info_id):
+        """Get custodian algo tag info by ID.
+
+        Args:
+            tag_info_id: Algo-tag-info ID
+
+        Returns:
+            dict: Algo tag info
+        """
+        return self.api_request(
+            f"{self.base_url_v2}/Admin/Custodian/CustodianAlgoTagInfo/{tag_info_id}"
+        ).json()
+
+    def get_custodian_algo_tag_info_by_custodian(self, custodian_id):
+        """Get custodian algo tag info for a custodian.
+
+        Args:
+            custodian_id: Custodian ID
+
+        Returns:
+            list: Algo-tag-info dicts
+        """
+        return self.api_request(
+            f"{self.base_url_v2}/Admin/Custodian/CustodianAlgoTagInfoByCustodian/{custodian_id}"
+        ).json()
+
+    def get_custodian_algo_tag_info_by_ids(self, payload):
+        """Get custodian algo tag info for a list of IDs (POST-body read).
+
+        Args:
+            payload: List of IDs (request body)
+
+        Returns:
+            list: Algo-tag-info dicts
+        """
+        return self.api_request(
+            f"{self.base_url_v2}/Admin/Custodian/GetCustodianAlgoTagInfoByIds",
+            requests.post,
+            json=payload,
+        ).json()
+
+    def create_custodian_algo_instructions(self, custodian_id, payload):
+        """Create custodian algo instructions (mutating).
+
+        Args:
+            custodian_id: Custodian ID
+            payload: Algo-instructions DTO (request body)
+        """
+        return self.api_request(
+            f"{self.base_url_v2}/Admin/Custodian/{custodian_id}/CustodianAlgoInstructions",
+            requests.post,
+            json=payload,
+        ).json()
+
+    def get_custodian_algo_instruction(self, custodian_id, tag_info_id):
+        """Get a custodian algo instruction by tag-info ID.
+
+        Args:
+            custodian_id: Custodian ID
+            tag_info_id: Algo-tag-info ID
+
+        Returns:
+            dict: Algo instruction
+        """
+        return self.api_request(
+            f"{self.base_url_v2}/Admin/Custodian/{custodian_id}"
+            f"/CustodianAlgoInstructions/{tag_info_id}"
+        ).json()
+
+    def update_custodian_algo_instructions(self, custodian_id, instruction_id, payload):
+        """Update custodian algo instructions (mutating).
+
+        Args:
+            custodian_id: Custodian ID
+            instruction_id: Instruction ID
+            payload: Algo-instructions DTO (request body)
+        """
+        return self.api_request(
+            f"{self.base_url_v2}/Admin/Custodian/{custodian_id}"
+            f"/CustodianAlgoInstructions/{instruction_id}",
+            requests.put,
+            json=payload,
+        ).json()
+
+    def delete_custodian_algo_instructions(self, custodian_id, instruction_id):
+        """Delete custodian algo instructions (mutating).
+
+        Args:
+            custodian_id: Custodian ID
+            instruction_id: Instruction ID
+        """
+        return self.api_request(
+            f"{self.base_url_v2}/Admin/Custodian/{custodian_id}"
+            f"/CustodianAlgoInstructions/{instruction_id}",
+            requests.delete,
+        ).json()
+
+    def get_trade_execution_sftp_config(self, trade_execution_type_id):
+        """Get the SFTP config for a trade-execution type.
+
+        Args:
+            trade_execution_type_id: Trade-execution-type ID
+
+        Returns:
+            dict: SFTP config
+        """
+        return self.api_request(
+            f"{self.base_url_v2}/Admin/tradeExecutionTypes/{trade_execution_type_id}/sftpConfig"
+        ).json()
+
+    def update_trade_execution_sftp_config(self, trade_execution_type_id, payload):
+        """Update the SFTP config for a trade-execution type (mutating).
+
+        Args:
+            trade_execution_type_id: Trade-execution-type ID
+            payload: SFTP-config DTO (request body)
+        """
+        return self.api_request(
+            f"{self.base_url_v2}/Admin/tradeExecutionTypes/{trade_execution_type_id}/sftpConfig",
+            requests.put,
+            json=payload,
+        ).json()
+
+    # --- Analytics (v2) ---
+
+    def cancel_analytics(self):
+        """Cancel the running analytics (mutating)."""
+        return self.api_request(f"{self.base_url_v2}/Analytics/Cancel", requests.post).json()
+
+    def get_portfolios_analytics_status(self, payload):
+        """Get analytics status for a set of portfolios (POST-body read).
+
+        Args:
+            payload: Portfolio-IDs DTO (request body)
+
+        Returns:
+            dict | list: Analytics status
+        """
+        return self.api_request(
+            f"{self.base_url_v2}/Analytics/GetPortfoliosAnalyticsStatus",
+            requests.post,
+            json=payload,
+        ).json()
+
+    def reset_analytics_run_history(self):
+        """Reset the analytics run history (mutating)."""
+        return self.api_request(f"{self.base_url_v2}/Analytics/ResetAnalyticsRunHistory").json()
+
+    def run_analytics_v2(self, payload):
+        """Run analytics (v2, mutating).
+
+        Args:
+            payload: Run-analytics DTO (request body)
+
+        Returns:
+            dict: Run result
+        """
+        return self.api_request(
+            f"{self.base_url_v2}/Analytics/RunAnalytics", requests.post, json=payload
+        ).json()
+
+    def update_run_analytics_config(self, config_id, payload):
+        """Update a run-analytics configuration (mutating).
+
+        Args:
+            config_id: Configuration ID
+            payload: Config DTO (request body)
+        """
+        return self.api_request(
+            f"{self.base_url_v2}/Analytics/RunAnalyticsConfig/{config_id}",
+            requests.put,
+            json=payload,
+        ).json()
+
+    def update_analytics_status(self, payload):
+        """Update the analytics status (mutating).
+
+        Args:
+            payload: Status DTO (request body)
+        """
+        return self.api_request(
+            f"{self.base_url_v2}/Analytics/StatusUpdate", requests.post, json=payload
         ).json()
 
 
