@@ -1571,3 +1571,18 @@ class TestEclipseV1TradeToolRefBatch17:
 
     def test_tactical_rebalance_cash_protection(self, eclipse_client):
         assert isinstance(eclipse_client.v1.get_tactical_rebalance_cash_protection(), (list, dict))
+
+
+class TestEclipseV1InstanceTrades:
+    """Live smoke for v1 get_instance_trades (fills the MCP delegation-map gap)."""
+
+    def test_instance_trades(self, eclipse_client):
+        from datetime import datetime, timedelta
+
+        ed = datetime.now().strftime("%Y-%m-%d")
+        sd = (datetime.now() - timedelta(days=120)).strftime("%Y-%m-%d")
+        instances = eclipse_client.v1.get_trade_instances(sd, ed, normalize=False)
+        if not instances:
+            pytest.skip("no trade instances in window")
+        result = eclipse_client.v1.get_instance_trades(instances[0]["id"])
+        assert isinstance(result, list)
