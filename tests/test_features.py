@@ -2540,3 +2540,280 @@ class TestEclipseV2ImportExportBatch9:
             api.delete_extract_job(55, reason="cleanup")
         assert mock_del.call_args.args[0] == f"{V2_BASE}/Extracts/job/55"
         assert mock_del.call_args.kwargs["params"] == {"reason": "cleanup"}
+
+
+class TestEclipseV2OrgRefBatch10:
+    """URL/params/verb coverage for v2 org / workflow / reference (batch 10)."""
+
+    # --- search ---
+
+    def test_account_search(self):
+        api = _eclipse_for_set_asides()
+        mock_get = _mock_get([])
+        with patch("requests.get", mock_get):
+            api.account_search("Smith", limit=10, offset=0)
+        assert mock_get.call_args.args[0] == f"{V2_BASE}/AccountSearch/AccountSearchList"
+        assert mock_get.call_args.kwargs["params"] == {"search": "Smith", "limit": 10, "offset": 0}
+
+    def test_security_search(self):
+        api = _eclipse_for_set_asides()
+        mock_get = _mock_get([])
+        with patch("requests.get", mock_get):
+            api.security_search("AAPL", take=5)
+        assert mock_get.call_args.args[0] == f"{V2_BASE}/SecuritySearch/SecuritySearchList"
+        assert mock_get.call_args.kwargs["params"] == {"search": "AAPL", "take": 5}
+
+    def test_global_search(self):
+        api = _eclipse_for_set_asides()
+        mock_get = _mock_get([])
+        with patch("requests.get", mock_get):
+            api.global_search(search="x", include_value=True, limit=20)
+        assert mock_get.call_args.args[0] == f"{V2_BASE}/GlobalSearch/GlobalSearchList"
+        assert mock_get.call_args.kwargs["params"] == {
+            "search": "x",
+            "includeValue": "true",
+            "limit": 20,
+        }
+
+    # --- firm ---
+
+    def test_firm_types(self):
+        api = _eclipse_for_set_asides()
+        mock_get = _mock_get([])
+        with patch("requests.get", mock_get):
+            api.get_firm_types()
+        assert mock_get.call_args.args[0] == f"{V2_BASE}/Firm/FirmTypes"
+
+    def test_eclipse_firms_by_al_client_id(self):
+        api = _eclipse_for_set_asides()
+        mock_get = _mock_get([])
+        with patch("requests.get", mock_get):
+            api.get_eclipse_firms_by_al_client_id(99)
+        assert mock_get.call_args.args[0] == f"{V2_BASE}/Firm/GetEclipseFirmsByAlClientId/99"
+
+    def test_firm_logo(self):
+        api = _eclipse_for_set_asides()
+        mock_get = _mock_get({})
+        with patch("requests.get", mock_get):
+            api.get_firm_logo()
+        assert mock_get.call_args.args[0] == f"{V2_BASE}/Firm/Logo"
+
+    def test_firm_logo_base64(self):
+        api = _eclipse_for_set_asides()
+        mock_get = _mock_get({})
+        with patch("requests.get", mock_get):
+            api.get_firm_logo_base64()
+        assert mock_get.call_args.args[0] == f"{V2_BASE}/Firm/Logo/Base64"
+
+    # --- team / serviceteams / user ---
+
+    def test_get_teams(self):
+        api = _eclipse_for_set_asides()
+        mock_get = _mock_get([])
+        with patch("requests.get", mock_get):
+            api.get_teams(external_id="ext1")
+        assert mock_get.call_args.args[0] == f"{V2_BASE}/Team/Team/GetTeams"
+        assert mock_get.call_args.kwargs["params"] == {"externalId": "ext1"}
+
+    def test_get_service_team(self):
+        api = _eclipse_for_set_asides()
+        mock_get = _mock_get({})
+        with patch("requests.get", mock_get):
+            api.get_service_team()
+        assert mock_get.call_args.args[0] == f"{V2_BASE}/ServiceTeams/GetServiceTeam"
+
+    def test_get_service_teams(self):
+        api = _eclipse_for_set_asides()
+        mock_get = _mock_get([])
+        with patch("requests.get", mock_get):
+            api.get_service_teams(service_type="Trading")
+        assert mock_get.call_args.args[0] == f"{V2_BASE}/ServiceTeams/GetServiceTeams"
+        assert mock_get.call_args.kwargs["params"] == {"serviceType": "Trading"}
+
+    def test_get_advisor_number(self):
+        api = _eclipse_for_set_asides()
+        mock_get = _mock_get({})
+        with patch("requests.get", mock_get):
+            api.get_advisor_number()
+        assert mock_get.call_args.args[0] == f"{V2_BASE}/ServiceTeams/GetAdvisorNumber"
+
+    def test_get_user(self):
+        api = _eclipse_for_set_asides()
+        mock_get = _mock_get({})
+        with patch("requests.get", mock_get):
+            api.get_user(42)
+        assert mock_get.call_args.args[0] == f"{V2_BASE}/User/42"
+
+    # --- admin token + custodian/execution ---
+
+    def test_token_environment(self):
+        api = _eclipse_for_set_asides()
+        mock_get = _mock_get({})
+        with patch("requests.get", mock_get):
+            api.get_token_environment()
+        assert mock_get.call_args.args[0] == f"{V2_BASE}/Admin/Token/Environment"
+
+    def test_token_info(self):
+        api = _eclipse_for_set_asides()
+        mock_get = _mock_get({})
+        with patch("requests.get", mock_get):
+            api.get_token_info()
+        assert mock_get.call_args.args[0] == f"{V2_BASE}/Admin/Token/Info"
+
+    def test_execution_destination_types(self):
+        api = _eclipse_for_set_asides()
+        mock_get = _mock_get([])
+        with patch("requests.get", mock_get):
+            api.get_execution_destination_types()
+        assert mock_get.call_args.args[0] == (
+            f"{V2_BASE}/Admin/Custodian/GetExecutionDestinationTypes"
+        )
+
+    def test_all_executing_destinations(self):
+        api = _eclipse_for_set_asides()
+        mock_get = _mock_get([])
+        with patch("requests.get", mock_get):
+            api.get_all_executing_destinations()
+        assert (
+            mock_get.call_args.args[0] == f"{V2_BASE}/Admin/Custodian/GetAllExecutingDestinations"
+        )
+
+    def test_allocation_instructions(self):
+        api = _eclipse_for_set_asides()
+        mock_get = _mock_get([])
+        with patch("requests.get", mock_get):
+            api.get_allocation_instructions()
+        assert mock_get.call_args.args[0] == f"{V2_BASE}/Admin/Custodian/GetAllocationInstructions"
+
+    def test_custodian_execution_settings(self):
+        api = _eclipse_for_set_asides()
+        mock_get = _mock_get({})
+        with patch("requests.get", mock_get):
+            api.get_custodian_execution_settings(5)
+        assert mock_get.call_args.args[0] == f"{V2_BASE}/Admin/Custodian/CustodianExecutionSettings"
+        assert mock_get.call_args.kwargs["params"] == {"custodianId": 5}
+
+    def test_executing_destinations_for_security_type(self):
+        api = _eclipse_for_set_asides()
+        mock_get = _mock_get([])
+        with patch("requests.get", mock_get):
+            api.get_executing_destinations_for_security_type(3)
+        assert mock_get.call_args.args[0] == (
+            f"{V2_BASE}/Admin/Custodian/GetExecutingDestinationsWithTypeForSecurityType"
+        )
+        assert mock_get.call_args.kwargs["params"] == {"securityTypeId": 3}
+
+    def test_outsource_trade_execution_firm(self):
+        api = _eclipse_for_set_asides()
+        mock_get = _mock_get({})
+        with patch("requests.get", mock_get):
+            api.get_outsource_trade_execution_firm(5)
+        assert mock_get.call_args.args[0] == (
+            f"{V2_BASE}/Admin/Custodian/GetOutsourceTradeExecutionFirm"
+        )
+
+    def test_custodian_algo_instructions(self):
+        api = _eclipse_for_set_asides()
+        mock_get = _mock_get([])
+        with patch("requests.get", mock_get):
+            api.get_custodian_algo_instructions(5)
+        assert mock_get.call_args.args[0] == (
+            f"{V2_BASE}/Admin/Custodian/5/CustodianAlgoInstructions"
+        )
+
+    def test_trade_execution_allocation_types(self):
+        api = _eclipse_for_set_asides()
+        mock_get = _mock_get([])
+        with patch("requests.get", mock_get):
+            api.get_trade_execution_allocation_types()
+        assert mock_get.call_args.args[0] == f"{V2_BASE}/Admin/tradeExecutionTypes/allocation"
+
+    def test_trade_execution_types(self):
+        api = _eclipse_for_set_asides()
+        mock_get = _mock_get([])
+        with patch("requests.get", mock_get):
+            api.get_trade_execution_types()
+        assert mock_get.call_args.args[0] == f"{V2_BASE}/Admin/tradeExecutionTypes/execution"
+
+    # --- orionconnect ---
+
+    def test_firm_entity_option_by_code(self):
+        api = _eclipse_for_set_asides()
+        mock_get = _mock_get({})
+        with patch("requests.get", mock_get):
+            api.get_firm_entity_option_by_code("ABC")
+        assert mock_get.call_args.args[0] == f"{V2_BASE}/OrionConnect/GetFirmEntityOptionByCode"
+        assert mock_get.call_args.kwargs["params"] == {"code": "ABC"}
+
+    def test_product_classes(self):
+        api = _eclipse_for_set_asides()
+        mock_get = _mock_get([])
+        with patch("requests.get", mock_get):
+            api.get_product_classes()
+        assert mock_get.call_args.args[0] == f"{V2_BASE}/OrionConnect/GetProductClasses"
+
+    def test_risk_categories(self):
+        api = _eclipse_for_set_asides()
+        mock_get = _mock_get([])
+        with patch("requests.get", mock_get):
+            api.get_risk_categories()
+        assert mock_get.call_args.args[0] == f"{V2_BASE}/OrionConnect/GetRiskCategories"
+
+    # --- workflow (reads + CRUD) ---
+
+    def test_workflow_contexts(self):
+        api = _eclipse_for_set_asides()
+        mock_get = _mock_get([])
+        with patch("requests.get", mock_get):
+            api.get_workflow_contexts()
+        assert mock_get.call_args.args[0] == f"{V2_BASE}/Workflow/contexts"
+
+    def test_workflow_context(self):
+        api = _eclipse_for_set_asides()
+        mock_get = _mock_get({})
+        with patch("requests.get", mock_get):
+            api.get_workflow_context(7)
+        assert mock_get.call_args.args[0] == f"{V2_BASE}/Workflow/contexts/7"
+
+    def test_create_workflow_context(self):
+        api = _eclipse_for_set_asides()
+        mock_post = _mock_post({"id": 1})
+        with patch("requests.post", mock_post):
+            api.create_workflow_context({"name": "C"})
+        assert mock_post.call_args.args[0] == f"{V2_BASE}/Workflow/contexts"
+        assert mock_post.call_args.kwargs["json"] == {"name": "C"}
+
+    def test_update_workflow_context(self):
+        api = _eclipse_for_set_asides()
+        mock_put = _mock_post({"id": 7})
+        with patch("requests.put", mock_put):
+            api.update_workflow_context(7, {"name": "C"})
+        assert mock_put.call_args.args[0] == f"{V2_BASE}/Workflow/contexts/7"
+
+    def test_delete_workflow_context(self):
+        api = _eclipse_for_set_asides()
+        mock_del = _mock_post({})
+        with patch("requests.delete", mock_del):
+            api.delete_workflow_context(7)
+        assert mock_del.call_args.args[0] == f"{V2_BASE}/Workflow/contexts/7"
+
+    def test_workflow_tools(self):
+        api = _eclipse_for_set_asides()
+        mock_get = _mock_get([])
+        with patch("requests.get", mock_get):
+            api.get_workflow_tools()
+        assert mock_get.call_args.args[0] == f"{V2_BASE}/Workflow/tools"
+
+    def test_workflow_mcp_servers(self):
+        api = _eclipse_for_set_asides()
+        mock_get = _mock_get([])
+        with patch("requests.get", mock_get):
+            api.get_workflow_mcp_servers()
+        assert mock_get.call_args.args[0] == f"{V2_BASE}/Workflow/mcp-servers"
+
+    def test_workflow_mcp_server(self):
+        api = _eclipse_for_set_asides()
+        mock_get = _mock_get({})
+        with patch("requests.get", mock_get):
+            api.get_workflow_mcp_server(3)
+        assert mock_get.call_args.args[0] == f"{V2_BASE}/Workflow/mcp-servers/3"
