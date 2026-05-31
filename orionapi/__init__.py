@@ -1,4 +1,4 @@
-__version__ = "2.7.0"
+__version__ = "2.8.0"
 
 import logging
 import re
@@ -6233,6 +6233,329 @@ class EclipseV2(EclipseBase):
             f"{self.base_url_v2}/Notifications/Notification/SendTradingNotification",
             requests.post,
             json=notification,
+        )
+        return res.json()
+
+    # --- Preference reads (v2; complements get_preference) -----------------------
+
+    def get_preference_securities(self, level_name, record_id):
+        """Get portfolio- or account-level preference securities.
+
+        Args:
+            level_name: Preference level (e.g. "Portfolio", "Account")
+            record_id: Portfolio or account ID
+
+        Returns:
+            list: Preference-security dicts
+        """
+        res = self.api_request(
+            f"{self.base_url_v2}/Preference/Preference/{level_name}/Securities/{record_id}"
+        )
+        return res.json()
+
+    def get_tax_lot_depletion_preference(
+        self, related_type, record_id, preference_value_id=None, inherited_preference_value_id=None
+    ):
+        """Get tax-lot depletion-method preference values for a record.
+
+        Args:
+            related_type: Related entity type (e.g. "Portfolio", "Account")
+            record_id: Record ID
+            preference_value_id: Optional preference value ID (``preferenceValueId``)
+            inherited_preference_value_id: Optional inherited value ID
+                (``inheritedPreferenceValueId``)
+
+        Returns:
+            dict: Tax-lot depletion preference values
+        """
+        params = {}
+        if preference_value_id is not None:
+            params["preferenceValueId"] = preference_value_id
+        if inherited_preference_value_id is not None:
+            params["inheritedPreferenceValueId"] = inherited_preference_value_id
+        res = self.api_request(
+            f"{self.base_url_v2}/Preference/Preference/{related_type}"
+            f"/taxLotDepletionMethodPreference/{record_id}",
+            params=params,
+        )
+        return res.json()
+
+    def get_tax_lot_depletion_preference_master(
+        self, related_type, preference_value_id=None, inherited_preference_value_id=None
+    ):
+        """Get the tax-lot depletion-method preference master (JSON structure).
+
+        Args:
+            related_type: Related entity type (e.g. "Portfolio", "Account")
+            preference_value_id: Optional preference value ID (``preferenceValueId``)
+            inherited_preference_value_id: Optional inherited value ID
+
+        Returns:
+            dict: Master preference structure
+        """
+        params = {}
+        if preference_value_id is not None:
+            params["preferenceValueId"] = preference_value_id
+        if inherited_preference_value_id is not None:
+            params["inheritedPreferenceValueId"] = inherited_preference_value_id
+        res = self.api_request(
+            f"{self.base_url_v2}/Preference/Preference/{related_type}"
+            f"/taxLotDepletionMethodPreference/Master",
+            params=params,
+        )
+        return res.json()
+
+    def get_money_market_allocation_preference(self, related_type, related_type_id):
+        """Get money-market allocation preference values.
+
+        Args:
+            related_type: Related entity type (e.g. "Portfolio", "Account")
+            related_type_id: Related entity ID
+
+        Returns:
+            dict: Allocation preference values
+        """
+        res = self.api_request(
+            f"{self.base_url_v2}/Preference/Preference/MoneyMarketPreference/Allocation"
+            f"/{related_type}/{related_type_id}"
+        )
+        return res.json()
+
+    def get_money_market_allocation_preference_master(self, related_type):
+        """Get the money-market allocation preference master (JSON structure).
+
+        Args:
+            related_type: Related entity type (e.g. "Portfolio", "Account")
+
+        Returns:
+            dict: Master allocation preference structure
+        """
+        res = self.api_request(
+            f"{self.base_url_v2}/Preference/Preference/MoneyMarketPreference/Allocation"
+            f"/{related_type}/Master"
+        )
+        return res.json()
+
+    def get_money_market_fund_preference(self, related_type, related_type_id):
+        """Get money-market fund preference values.
+
+        Args:
+            related_type: Related entity type (e.g. "Portfolio", "Account")
+            related_type_id: Related entity ID
+
+        Returns:
+            dict: Fund preference values
+        """
+        res = self.api_request(
+            f"{self.base_url_v2}/Preference/Preference/MoneyMarketPreference/Fund"
+            f"/{related_type}/{related_type_id}"
+        )
+        return res.json()
+
+    def get_money_market_fund_preference_master(self, related_type):
+        """Get the money-market fund preference master (JSON structure).
+
+        Args:
+            related_type: Related entity type (e.g. "Portfolio", "Account")
+
+        Returns:
+            dict: Master fund preference structure
+        """
+        res = self.api_request(
+            f"{self.base_url_v2}/Preference/Preference/MoneyMarketPreference/Fund"
+            f"/{related_type}/Master"
+        )
+        return res.json()
+
+    def get_money_market_fund_preference_by_security(self, security_id):
+        """Get money-market fund preferences by security ID.
+
+        Args:
+            security_id: Security ID
+
+        Returns:
+            dict: Fund preferences for the security
+        """
+        res = self.api_request(
+            f"{self.base_url_v2}/Preference/Preference/MoneyMarketPreference/Fund"
+            f"/Security/{security_id}"
+        )
+        return res.json()
+
+    # --- Preference writes (mutating) --------------------------------------------
+
+    def set_account_preferences(self, preferences):
+        """Set account preferences.
+
+        Args:
+            preferences: Account-preferences DTO (request body)
+
+        Returns:
+            dict: Result
+        """
+        res = self.api_request(
+            f"{self.base_url_v2}/Preference/Preference/AccountPreferences",
+            requests.post,
+            json=preferences,
+        )
+        return res.json()
+
+    def update_security_preference_batch_job(self, payload):
+        """Update the batch job for a security-preference change.
+
+        Args:
+            payload: Batch-job DTO (request body)
+
+        Returns:
+            dict: Result
+        """
+        res = self.api_request(
+            f"{self.base_url_v2}/Preference/Preference/UpdateBatchJobForSecurityPreferenceChange",
+            requests.put,
+            json=payload,
+        )
+        return res.json()
+
+    def update_money_market_allocation_preference(self, payload):
+        """Update money-market allocation preference.
+
+        Args:
+            payload: Allocation-preference DTO (request body)
+
+        Returns:
+            dict: Result
+        """
+        res = self.api_request(
+            f"{self.base_url_v2}/Preference/Preference/UpdateMoneyMarketAllocationPreference",
+            requests.put,
+            json=payload,
+        )
+        return res.json()
+
+    def update_money_market_fund_preference(self, payload):
+        """Update money-market fund preference.
+
+        Args:
+            payload: Fund-preference DTO (request body)
+
+        Returns:
+            dict: Result
+        """
+        res = self.api_request(
+            f"{self.base_url_v2}/Preference/Preference/UpdateMoneyMarketFundPreference",
+            requests.put,
+            json=payload,
+        )
+        return res.json()
+
+    # --- Configuration / FeatureFlags / BusinessDayRules -------------------------
+
+    def get_configuration(self, config_id):
+        """Get a configuration by ID.
+
+        Args:
+            config_id: Configuration ID
+
+        Returns:
+            dict: Configuration
+        """
+        res = self.api_request(f"{self.base_url_v2}/Configuration/{config_id}")
+        return res.json()
+
+    def delete_configuration(self, config_id):
+        """Delete a configuration by ID (mutating).
+
+        Args:
+            config_id: Configuration ID
+        """
+        res = self.api_request(f"{self.base_url_v2}/Configuration/{config_id}", requests.delete)
+        return res.json()
+
+    def get_feature_flag(self, feature_flag_name):
+        """Get the value of a feature flag.
+
+        Args:
+            feature_flag_name: Feature-flag name
+
+        Returns:
+            dict: Feature-flag value
+        """
+        res = self.api_request(f"{self.base_url_v2}/FeatureFlags/{feature_flag_name}")
+        return res.json()
+
+    def get_previous_business_day(self, reference_date):
+        """Get the previous business day relative to a reference date.
+
+        Args:
+            reference_date: Reference date (ISO YYYY-MM-DD; maps to ``referenceDate``)
+
+        Returns:
+            dict | str: Previous business day
+        """
+        res = self.api_request(
+            f"{self.base_url_v2}/BusinessDayRules/PreviousDay",
+            params={"referenceDate": reference_date},
+        )
+        return res.json()
+
+    # --- Set-aside cash (reads + mutating deletes) -------------------------------
+
+    def get_set_aside_expiring_transactions(self, set_aside_id, set_aside_type=None):
+        """Get the expiring transactions for a set-aside.
+
+        Args:
+            set_aside_id: Set-aside ID
+            set_aside_type: Optional set-aside type (maps to ``setAsideType``)
+
+        Returns:
+            list: Expiring-transaction dicts
+        """
+        params = {}
+        if set_aside_type is not None:
+            params["setAsideType"] = set_aside_type
+        res = self.api_request(
+            f"{self.base_url_v2}/SetAsideCash/SetAsideExpiringTransactions/{set_aside_id}",
+            params=params,
+        )
+        return res.json()
+
+    def billing_set_aside_cash(self, payload):
+        """Create billing set-aside cash (mutating).
+
+        Args:
+            payload: Billing set-aside DTO (request body)
+
+        Returns:
+            dict: Result
+        """
+        res = self.api_request(
+            f"{self.base_url_v2}/SetAsideCash/BillingSetAsideCash", requests.post, json=payload
+        )
+        return res.json()
+
+    def delete_account_set_aside_cash(self, payload):
+        """Delete account set-aside cash (mutating).
+
+        Args:
+            payload: DTO identifying the account set-asides to delete (request body)
+        """
+        res = self.api_request(
+            f"{self.base_url_v2}/SetAsideCash/DeleteAccountSetAsideCash",
+            requests.post,
+            json=payload,
+        )
+        return res.json()
+
+    def delete_portfolio_set_aside_cash(self, payload):
+        """Delete portfolio set-aside cash (mutating).
+
+        Args:
+            payload: DTO identifying the portfolio set-asides to delete (request body)
+        """
+        res = self.api_request(
+            f"{self.base_url_v2}/SetAsideCash/DeletePortfolioSetAsideCash",
+            requests.post,
+            json=payload,
         )
         return res.json()
 
