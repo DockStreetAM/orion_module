@@ -1,4 +1,4 @@
-__version__ = "2.8.0"
+__version__ = "2.9.0"
 
 import logging
 import re
@@ -6554,6 +6554,387 @@ class EclipseV2(EclipseBase):
         """
         res = self.api_request(
             f"{self.base_url_v2}/SetAsideCash/DeletePortfolioSetAsideCash",
+            requests.post,
+            json=payload,
+        )
+        return res.json()
+
+    # =========================================================================
+    # Data-management CRUD / actions (v2). Account, portfolio, and model data
+    # operations (no trade execution/approval). POST-with-body "list"/"status"
+    # endpoints are filtered reads; the rest are mutating and are covered by
+    # mocked unit tests only.
+    # =========================================================================
+
+    # --- Account filtered list + actions ---
+
+    def list_accounts(self, body=None, filter_id=None, portfolio_id=None, limit=None, offset=None):
+        """List accounts via the v2 POST-body filtered endpoint.
+
+        Args:
+            body: Optional filter DTO (request body)
+            filter_id: Optional filter ID (``filterId``)
+            portfolio_id: Optional portfolio filter (``portfolioId``)
+            limit / offset: Optional paging window
+
+        Returns:
+            list | dict: Accounts
+        """
+        params = {}
+        for key, val in (
+            ("filterId", filter_id),
+            ("portfolioId", portfolio_id),
+            ("limit", limit),
+            ("offset", offset),
+        ):
+            if val is not None:
+                params[key] = val
+        res = self.api_request(
+            f"{self.base_url_v2}/Account/Accounts/list", requests.post, json=body, params=params
+        )
+        return res.json()
+
+    def update_account_details(self, account_id, details, with_reverse_sync=None):
+        """Update an account's details (mutating).
+
+        Args:
+            account_id: Account ID
+            details: Account-details DTO (request body)
+            with_reverse_sync: Optional bool (maps to ``withReverseSync``)
+
+        Returns:
+            dict: Updated account
+        """
+        params = {}
+        if with_reverse_sync is not None:
+            params["withReverseSync"] = str(with_reverse_sync).lower()
+        res = self.api_request(
+            f"{self.base_url_v2}/Account/Accounts/{account_id}/Details",
+            requests.put,
+            json=details,
+            params=params,
+        )
+        return res.json()
+
+    def set_account_trade_block(self, payload):
+        """Set the trade-block state on accounts (mutating).
+
+        Args:
+            payload: Trade-block DTO (request body)
+        """
+        res = self.api_request(
+            f"{self.base_url_v2}/Account/Accounts/action/setAccountTradeBlock",
+            requests.put,
+            json=payload,
+        )
+        return res.json()
+
+    def expire_account_set_asides(self, payload):
+        """Expire account set-asides (mutating).
+
+        Args:
+            payload: DTO identifying the set-asides to expire (request body)
+        """
+        res = self.api_request(
+            f"{self.base_url_v2}/Account/Accounts/expireAccountSetAsides",
+            requests.put,
+            json=payload,
+        )
+        return res.json()
+
+    def set_account_tags(self, payload):
+        """Set tags on accounts (mutating).
+
+        Args:
+            payload: Account-tags DTO (request body)
+        """
+        res = self.api_request(
+            f"{self.base_url_v2}/Account/Accounts/Tags", requests.put, json=payload
+        )
+        return res.json()
+
+    def update_restricted_plan(self, restricted_plan_id, payload):
+        """Update a restricted plan (mutating).
+
+        Args:
+            restricted_plan_id: Restricted-plan ID
+            payload: Restricted-plan DTO (request body)
+        """
+        res = self.api_request(
+            f"{self.base_url_v2}/Account/Accounts/RestrictedPlan/{restricted_plan_id}",
+            requests.put,
+            json=payload,
+        )
+        return res.json()
+
+    def set_accounts_do_not_trade_reverse_sync(self, payload):
+        """Reverse-sync the do-not-trade flag for accounts (mutating).
+
+        Args:
+            payload: DTO (request body)
+        """
+        res = self.api_request(
+            f"{self.base_url_v2}/Account/Accounts/donottradereversesync",
+            requests.post,
+            json=payload,
+        )
+        return res.json()
+
+    # --- Astro account actions ---
+
+    def start_astro_accounts(self, payload):
+        """Start an Astro batch for accounts (mutating).
+
+        Args:
+            payload: Astro-start DTO (request body)
+
+        Returns:
+            dict: Batch start result
+        """
+        res = self.api_request(
+            f"{self.base_url_v2}/Account/AstroAccounts/Start", requests.post, json=payload
+        )
+        return res.json()
+
+    def get_astro_accounts_status_count(self, payload, unique_batch_identifier=None):
+        """Get the Astro account status count for a batch (POST-body read).
+
+        Args:
+            payload: Status-request DTO (request body)
+            unique_batch_identifier: Optional batch identifier (``uniqueBatchIdentifier``)
+
+        Returns:
+            dict: Status count
+        """
+        params = {}
+        if unique_batch_identifier is not None:
+            params["uniqueBatchIdentifier"] = unique_batch_identifier
+        res = self.api_request(
+            f"{self.base_url_v2}/Account/AstroAccounts/Status/Count",
+            requests.post,
+            json=payload,
+            params=params,
+        )
+        return res.json()
+
+    def get_astro_accounts_status_detail(self, payload, unique_batch_identifier=None):
+        """Get the Astro account status detail for a batch (POST-body read).
+
+        Args:
+            payload: Status-request DTO (request body)
+            unique_batch_identifier: Optional batch identifier (``uniqueBatchIdentifier``)
+
+        Returns:
+            list | dict: Status detail
+        """
+        params = {}
+        if unique_batch_identifier is not None:
+            params["uniqueBatchIdentifier"] = unique_batch_identifier
+        res = self.api_request(
+            f"{self.base_url_v2}/Account/AstroAccounts/Status/Detail",
+            requests.post,
+            json=payload,
+            params=params,
+        )
+        return res.json()
+
+    def withdraw_astro_cash(self, payload):
+        """Withdraw cash via Astro (mutating).
+
+        Args:
+            payload: Withdraw-cash DTO (request body)
+        """
+        res = self.api_request(
+            f"{self.base_url_v2}/Account/AstroAccounts/WithdrawCash", requests.post, json=payload
+        )
+        return res.json()
+
+    def delete_astro_securities_restrictions(self, account_id, payload):
+        """Delete Astro security restrictions for an account (mutating).
+
+        Args:
+            account_id: Account ID
+            payload: DTO identifying restrictions to delete (request body)
+        """
+        res = self.api_request(
+            f"{self.base_url_v2}/Account/AstroAccounts/{account_id}/DeleteSecuritiesRestrictions",
+            requests.post,
+            json=payload,
+        )
+        return res.json()
+
+    def save_astro_investor_preferences(self, account_id, payload):
+        """Save Astro investor preferences for an account (mutating).
+
+        Args:
+            account_id: Account ID
+            payload: Investor-preferences DTO (request body)
+        """
+        res = self.api_request(
+            f"{self.base_url_v2}/Account/AstroAccounts/preference"
+            f"/SaveInvestorPreferences/{account_id}",
+            requests.put,
+            json=payload,
+        )
+        return res.json()
+
+    # --- Portfolio actions + filtered list ---
+
+    def list_portfolios(self, body=None, filter_id=None, limit=None, offset=None):
+        """List portfolios via the v2 POST-body filtered endpoint.
+
+        Args:
+            body: Optional filter DTO (request body)
+            filter_id: Optional filter ID (``filterId``)
+            limit / offset: Optional paging window
+
+        Returns:
+            list | dict: Portfolios
+        """
+        params = {}
+        for key, val in (("filterId", filter_id), ("limit", limit), ("offset", offset)):
+            if val is not None:
+                params[key] = val
+        res = self.api_request(
+            f"{self.base_url_v2}/Portfolio/Portfolios/list", requests.post, json=body, params=params
+        )
+        return res.json()
+
+    def get_portfolios_by_external_account_ids(self, payload):
+        """Get portfolio info by a list of external account IDs (POST-body read).
+
+        Args:
+            payload: List of external account ID DTOs (request body)
+
+        Returns:
+            list: Portfolio-info dicts
+        """
+        res = self.api_request(
+            f"{self.base_url_v2}/Portfolio/Portfolios/PortfolioInfoByExternalAccountIdList",
+            requests.post,
+            json=payload,
+        )
+        return res.json()
+
+    def assign_model_to_portfolios(self, payload):
+        """Assign a model to portfolios (mutating).
+
+        Args:
+            payload: Model-assignment DTO (request body)
+        """
+        res = self.api_request(
+            f"{self.base_url_v2}/Portfolio/Portfolios/action/assignModel",
+            requests.put,
+            json=payload,
+        )
+        return res.json()
+
+    def set_portfolio_trade_block(self, payload):
+        """Set the trade-block state on portfolios (mutating).
+
+        Args:
+            payload: Trade-block DTO (request body)
+        """
+        res = self.api_request(
+            f"{self.base_url_v2}/Portfolio/Portfolios/action/setPortfolioTradeBlock",
+            requests.put,
+            json=payload,
+        )
+        return res.json()
+
+    def reverse_sync_portfolio_assignments(self, payload):
+        """Reverse-sync portfolio model assignments (mutating).
+
+        Args:
+            payload: DTO (request body)
+        """
+        res = self.api_request(
+            f"{self.base_url_v2}/Portfolio/Portfolios/Action/ReverseSyncPortfolioAssignments",
+            requests.post,
+            json=payload,
+        )
+        return res.json()
+
+    def get_sleeve_strategies_by_firm_ids(self, payload):
+        """Get sleeve strategies for a list of firm IDs (POST-body read).
+
+        Args:
+            payload: List of firm IDs (request body)
+
+        Returns:
+            list: Sleeve-strategy dicts
+        """
+        res = self.api_request(
+            f"{self.base_url_v2}/Portfolio/Sleeves/SleeveStrategiesByFirmIds",
+            requests.post,
+            json=payload,
+        )
+        return res.json()
+
+    # --- Model creates / actions ---
+
+    def create_model_from_aggs(self, payload):
+        """Create a model from model aggregates (mutating).
+
+        Args:
+            payload: Model-aggregates DTO (request body)
+
+        Returns:
+            dict: Created model
+        """
+        res = self.api_request(
+            f"{self.base_url_v2}/Model/CreateFromModelAggs", requests.post, json=payload
+        )
+        return res.json()
+
+    def create_sma_model(self, payload):
+        """Create an SMA model (mutating).
+
+        Args:
+            payload: SMA-model DTO (request body)
+
+        Returns:
+            dict: Created model
+        """
+        res = self.api_request(f"{self.base_url_v2}/Model/SMA", requests.post, json=payload)
+        return res.json()
+
+    def create_ticker_based_model(self, payload):
+        """Create a ticker-based model (mutating).
+
+        Args:
+            payload: Ticker-based-model DTO (request body)
+
+        Returns:
+            dict: Created model
+        """
+        res = self.api_request(
+            f"{self.base_url_v2}/Model/TickerBasedModel", requests.post, json=payload
+        )
+        return res.json()
+
+    def get_community_models_by_list(self, payload):
+        """Get community models for a list of identifiers (POST-body read).
+
+        Args:
+            payload: List of identifiers (request body)
+
+        Returns:
+            list: Community-model dicts
+        """
+        res = self.api_request(
+            f"{self.base_url_v2}/Model/GetCommunityModelsByList", requests.post, json=payload
+        )
+        return res.json()
+
+    def trigger_security_set_reverse_sync(self, payload):
+        """Trigger a security-set reverse sync (mutating).
+
+        Args:
+            payload: DTO (request body)
+        """
+        res = self.api_request(
+            f"{self.base_url_v2}/Model/Action/TriggerSecuritySetReverseSync",
             requests.post,
             json=payload,
         )
