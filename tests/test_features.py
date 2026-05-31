@@ -1304,3 +1304,223 @@ class TestEclipseV2ReadEndpointsBatch2:
             api.get_note_related_entities(7, "Portfolio")
         assert mock_get.call_args.args[0] == f"{V2_BASE}/Notes/RelatedEntities"
         assert mock_get.call_args.kwargs["params"] == {"entityId": 7, "entityType": "Portfolio"}
+
+
+class TestEclipseV2ReadEndpointsBatch3:
+    """URL/params coverage for v2 account / portfolio / sleeve / preference reads."""
+
+    # --- Account detail ---
+
+    def test_account_cash_details(self):
+        api = _eclipse_for_set_asides()
+        mock_get = _mock_get({})
+        with patch("requests.get", mock_get):
+            api.get_account_cash_details(57)
+        assert mock_get.call_args.args[0] == f"{V2_BASE}/Account/Accounts/57/CashDetails"
+
+    def test_account_gain_loss_summary(self):
+        api = _eclipse_for_set_asides()
+        mock_get = _mock_get({})
+        with patch("requests.get", mock_get):
+            api.get_account_gain_loss_summary(57)
+        assert mock_get.call_args.args[0] == f"{V2_BASE}/Account/Accounts/57/GainLossSummary"
+
+    def test_account_history_params(self):
+        api = _eclipse_for_set_asides()
+        mock_get = _mock_get([])
+        with patch("requests.get", mock_get):
+            api.get_account_history(57, from_date="2026-01-01", to_date="2026-02-01")
+        assert mock_get.call_args.args[0] == f"{V2_BASE}/Account/Accounts/57/History"
+        assert mock_get.call_args.kwargs["params"] == {
+            "fromDate": "2026-01-01",
+            "toDate": "2026-02-01",
+        }
+
+    def test_account_model_history(self):
+        api = _eclipse_for_set_asides()
+        mock_get = _mock_get([])
+        with patch("requests.get", mock_get):
+            api.get_account_model_history(57)
+        assert mock_get.call_args.args[0] == f"{V2_BASE}/Account/Accounts/57/ModelHistory"
+        assert mock_get.call_args.kwargs["params"] == {}
+
+    def test_account_transactions(self):
+        api = _eclipse_for_set_asides()
+        mock_get = _mock_get([])
+        with patch("requests.get", mock_get):
+            api.get_account_transactions(57, start_date="2026-01-01", end_date="2026-02-01")
+        assert mock_get.call_args.args[0] == f"{V2_BASE}/Account/Accounts/57/Transactions"
+        assert mock_get.call_args.kwargs["params"] == {
+            "startDate": "2026-01-01",
+            "endDate": "2026-02-01",
+        }
+
+    def test_accessible_account_count(self):
+        api = _eclipse_for_set_asides()
+        mock_get = _mock_get(3)
+        with patch("requests.get", mock_get):
+            api.get_accessible_account_count()
+        assert mock_get.call_args.args[0] == f"{V2_BASE}/Account/Accounts/AccessibleCount"
+
+    def test_account_by_external(self):
+        api = _eclipse_for_set_asides()
+        mock_get = _mock_get({})
+        with patch("requests.get", mock_get):
+            api.get_account_by_external(11, 22)
+        assert mock_get.call_args.args[0] == f"{V2_BASE}/Account/Accounts/byexternal/11/22"
+
+    # --- Astro accounts ---
+
+    def test_astro_accounts(self):
+        api = _eclipse_for_set_asides()
+        mock_get = _mock_get([])
+        with patch("requests.get", mock_get):
+            api.get_astro_accounts(filter="alerts")
+        assert mock_get.call_args.args[0] == f"{V2_BASE}/Account/AstroAccounts"
+        assert mock_get.call_args.kwargs["params"] == {"filter": "alerts"}
+
+    def test_astro_account_filters(self):
+        api = _eclipse_for_set_asides()
+        mock_get = _mock_get([])
+        with patch("requests.get", mock_get):
+            api.get_astro_account_filters()
+        assert mock_get.call_args.args[0] == f"{V2_BASE}/Account/AstroAccounts/Filters"
+
+    def test_astro_account_securities_restrictions(self):
+        api = _eclipse_for_set_asides()
+        mock_get = _mock_get([])
+        with patch("requests.get", mock_get):
+            api.get_astro_account_securities_restrictions(57)
+        assert mock_get.call_args.args[0] == (
+            f"{V2_BASE}/Account/AstroAccounts/57/SecuritiesRestrictions"
+        )
+
+    def test_astro_account_investor_preferences(self):
+        api = _eclipse_for_set_asides()
+        mock_get = _mock_get({})
+        with patch("requests.get", mock_get):
+            api.get_astro_account_investor_preferences(57, strategy_name="Core")
+        assert mock_get.call_args.args[0] == (
+            f"{V2_BASE}/Account/AstroAccounts/57/InvestorPreferences"
+        )
+        assert mock_get.call_args.kwargs["params"] == {"strategyName": "Core"}
+
+    # --- Portfolio detail ---
+
+    def test_portfolio_allocations(self):
+        api = _eclipse_for_set_asides()
+        mock_get = _mock_get([])
+        with patch("requests.get", mock_get):
+            api.get_portfolio_allocations(7)
+        assert mock_get.call_args.args[0] == f"{V2_BASE}/Portfolio/Portfolios/7/Allocations"
+
+    def test_portfolio_cash_details(self):
+        api = _eclipse_for_set_asides()
+        mock_get = _mock_get({})
+        with patch("requests.get", mock_get):
+            api.get_portfolio_cash_details(7)
+        assert mock_get.call_args.args[0] == f"{V2_BASE}/Portfolio/Portfolios/CashDetails/7"
+
+    def test_portfolio_gain_loss_summary(self):
+        api = _eclipse_for_set_asides()
+        mock_get = _mock_get({})
+        with patch("requests.get", mock_get):
+            api.get_portfolio_gain_loss_summary(7)
+        assert mock_get.call_args.args[0] == f"{V2_BASE}/Portfolio/Portfolios/7/GainLossSummary"
+
+    def test_portfolio_mac_history(self):
+        api = _eclipse_for_set_asides()
+        mock_get = _mock_get([])
+        with patch("requests.get", mock_get):
+            api.get_portfolio_mac_history(7, from_date="2026-01-01")
+        assert mock_get.call_args.args[0] == f"{V2_BASE}/Portfolio/Portfolios/7/MacHistory"
+        assert mock_get.call_args.kwargs["params"] == {"fromDate": "2026-01-01"}
+
+    def test_portfolio_auto_rebalance_history(self):
+        api = _eclipse_for_set_asides()
+        mock_get = _mock_get([])
+        with patch("requests.get", mock_get):
+            api.get_portfolio_auto_rebalance_history(7, start_date="2026-01-01")
+        assert mock_get.call_args.args[0] == (
+            f"{V2_BASE}/Portfolio/Portfolios/7/AutoRebalanceHistory"
+        )
+        assert mock_get.call_args.kwargs["params"] == {"startDate": "2026-01-01"}
+
+    def test_portfolio_tree(self):
+        api = _eclipse_for_set_asides()
+        mock_get = _mock_get({})
+        with patch("requests.get", mock_get):
+            api.get_portfolio_tree(portfolio_id=7)
+        assert mock_get.call_args.args[0] == f"{V2_BASE}/Portfolio/Portfolios/PortfolioTree"
+        assert mock_get.call_args.kwargs["params"] == {"portfolioId": 7}
+
+    def test_portfolio_search(self):
+        api = _eclipse_for_set_asides()
+        mock_get = _mock_get([])
+        with patch("requests.get", mock_get):
+            api.get_portfolio_search(search="Smith", include_value=True, limit=10, offset=0)
+        assert mock_get.call_args.args[0] == f"{V2_BASE}/Portfolio/Portfolios/GetPortfolioSearch"
+        assert mock_get.call_args.kwargs["params"] == {
+            "search": "Smith",
+            "includeValue": "true",
+            "limit": 10,
+            "offset": 0,
+        }
+
+    def test_accessible_portfolio_count(self):
+        api = _eclipse_for_set_asides()
+        mock_get = _mock_get(5)
+        with patch("requests.get", mock_get):
+            api.get_accessible_portfolio_count()
+        assert mock_get.call_args.args[0] == f"{V2_BASE}/Portfolio/Portfolios/AccessibleCount"
+
+    def test_user_portfolio_ids(self):
+        api = _eclipse_for_set_asides()
+        mock_get = _mock_get([])
+        with patch("requests.get", mock_get):
+            api.get_user_portfolio_ids()
+        assert mock_get.call_args.args[0] == f"{V2_BASE}/Portfolio/Portfolios/GetUserPortfolioIds"
+
+    # --- Sleeves ---
+
+    def test_sleeve_allocations(self):
+        api = _eclipse_for_set_asides()
+        mock_get = _mock_get([])
+        with patch("requests.get", mock_get):
+            api.get_sleeve_allocations(57)
+        assert mock_get.call_args.args[0] == f"{V2_BASE}/Portfolio/Sleeves/57/Allocations"
+
+    def test_sleeve_strategies(self):
+        api = _eclipse_for_set_asides()
+        mock_get = _mock_get([])
+        with patch("requests.get", mock_get):
+            api.get_sleeve_strategies()
+        assert mock_get.call_args.args[0] == f"{V2_BASE}/Portfolio/Sleeves/SleeveStrategies"
+
+    def test_sleeve_contribution_methods(self):
+        api = _eclipse_for_set_asides()
+        mock_get = _mock_get([])
+        with patch("requests.get", mock_get):
+            api.get_sleeve_contribution_methods()
+        assert mock_get.call_args.args[0] == (
+            f"{V2_BASE}/Portfolio/Sleeves/SleeveContributionMethods"
+        )
+
+    def test_sleeve_distribution_methods(self):
+        api = _eclipse_for_set_asides()
+        mock_get = _mock_get([])
+        with patch("requests.get", mock_get):
+            api.get_sleeve_distribution_methods()
+        assert mock_get.call_args.args[0] == (
+            f"{V2_BASE}/Portfolio/Sleeves/SleeveDistributionMethods"
+        )
+
+    # --- Preference ---
+
+    def test_get_preference(self):
+        api = _eclipse_for_set_asides()
+        mock_get = _mock_get({})
+        with patch("requests.get", mock_get):
+            api.get_preference("AllowWashSales")
+        assert mock_get.call_args.args[0] == f"{V2_BASE}/Preference/Preference/GetPreference"
+        assert mock_get.call_args.kwargs["params"] == {"preferenceName": "AllowWashSales"}
