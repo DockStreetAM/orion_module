@@ -1,4 +1,4 @@
-__version__ = "2.11.0"
+__version__ = "2.12.0"
 
 import logging
 import re
@@ -7785,6 +7785,448 @@ class EclipseV2(EclipseBase):
             dict: MCP server
         """
         res = self.api_request(f"{self.base_url_v2}/Workflow/mcp-servers/{server_id}")
+        return res.json()
+
+    # =========================================================================
+    # Trade-block restriction metadata + reference misc (v2). Trade BLOCKS here
+    # are do-not-trade restrictions / reasons (config), NOT trade approval or
+    # execution. Plus security price changes, compare tool, data errors,
+    # communities, preference audit. Writes covered by mocked unit tests only.
+    # =========================================================================
+
+    # --- TradeBlockReasons (restriction reason config) ---
+
+    def get_editable_trade_block_reasons(self):
+        """Get the editable trade-block reasons.
+
+        Returns:
+            list: Trade-block-reason dicts
+        """
+        res = self.api_request(f"{self.base_url_v2}/TradeBlockReasons/Editable")
+        return res.json()
+
+    def get_trade_block_reason_role_permissions(self, reason_id):
+        """Get role permissions for a trade-block reason.
+
+        Args:
+            reason_id: Trade-block-reason ID
+
+        Returns:
+            list: Role-permission dicts
+        """
+        res = self.api_request(f"{self.base_url_v2}/TradeBlockReasons/{reason_id}/RolePermissions")
+        return res.json()
+
+    def get_trade_block_reason_permissions_by_role(self, role_id):
+        """Get trade-block-reason permissions for a role.
+
+        Args:
+            role_id: Role ID
+
+        Returns:
+            list: Permission dicts
+        """
+        res = self.api_request(
+            f"{self.base_url_v2}/TradeBlockReasons/TradeBlockReasonPermissionsByRole/{role_id}"
+        )
+        return res.json()
+
+    def get_trade_block_reason_permissions_by_global_ids(self, global_ids):
+        """Get trade-block-reason permissions for a list of global IDs (POST-body read).
+
+        Args:
+            global_ids: List of global IDs (request body)
+
+        Returns:
+            list: Permission dicts
+        """
+        res = self.api_request(
+            f"{self.base_url_v2}/TradeBlockReasons/TradeBlockReasonsPermissionByGlobalIds",
+            requests.post,
+            json=global_ids,
+        )
+        return res.json()
+
+    def add_trade_block_reason_by_name(self, payload):
+        """Add a trade-block reason by name (mutating).
+
+        Args:
+            payload: Trade-block-reason DTO (request body)
+
+        Returns:
+            dict: Created reason
+        """
+        res = self.api_request(
+            f"{self.base_url_v2}/TradeBlockReasons/AddByName", requests.post, json=payload
+        )
+        return res.json()
+
+    def delete_trade_block_reason(self, reason_id):
+        """Delete a trade-block reason (mutating).
+
+        Args:
+            reason_id: Trade-block-reason ID
+        """
+        res = self.api_request(f"{self.base_url_v2}/TradeBlockReasons/{reason_id}", requests.delete)
+        return res.json()
+
+    def set_trade_block_reason_role_permissions(self, reason_id, payload):
+        """Set role permissions for a trade-block reason (mutating).
+
+        Args:
+            reason_id: Trade-block-reason ID
+            payload: Role-permissions DTO (request body)
+        """
+        res = self.api_request(
+            f"{self.base_url_v2}/TradeBlockReasons/{reason_id}/RolePermissions",
+            requests.put,
+            json=payload,
+        )
+        return res.json()
+
+    def set_trade_block_reason_permissions_by_role(self, role_id, payload):
+        """Set trade-block-reason permissions for a role (mutating).
+
+        Args:
+            role_id: Role ID
+            payload: Permissions DTO (request body)
+        """
+        res = self.api_request(
+            f"{self.base_url_v2}/TradeBlockReasons/TradeBlockReasonPermissionsByRole/{role_id}",
+            requests.put,
+            json=payload,
+        )
+        return res.json()
+
+    # --- TradeBlockDetails (restriction records) ---
+
+    def get_trade_block_details_history(
+        self, related_type, related_type_id, start_date=None, end_date=None
+    ):
+        """Get trade-block-detail history for an entity.
+
+        Args:
+            related_type: Related entity type
+            related_type_id: Related entity ID
+            start_date / end_date: Optional ISO date window
+
+        Returns:
+            list: History dicts
+        """
+        params = {}
+        if start_date is not None:
+            params["startDate"] = start_date
+        if end_date is not None:
+            params["endDate"] = end_date
+        res = self.api_request(
+            f"{self.base_url_v2}/TradeBlockDetails/History/{related_type}/{related_type_id}",
+            params=params,
+        )
+        return res.json()
+
+    def get_trade_block_details_related_entities(self, entity_id, entity_type):
+        """Get entities related to a trade-block-detail entity.
+
+        Args:
+            entity_id: Entity ID (maps to ``entityId``)
+            entity_type: Entity type (maps to ``entityType``)
+
+        Returns:
+            list: Related-entity dicts
+        """
+        res = self.api_request(
+            f"{self.base_url_v2}/TradeBlockDetails/RelatedEntities",
+            params={"entityId": entity_id, "entityType": entity_type},
+        )
+        return res.json()
+
+    def add_trade_block_details(self, payload):
+        """Add trade-block details (mutating).
+
+        Args:
+            payload: List of trade-block-detail DTOs (request body)
+        """
+        res = self.api_request(
+            f"{self.base_url_v2}/TradeBlockDetails/AddList", requests.post, json=payload
+        )
+        return res.json()
+
+    def update_trade_block_details(self, payload):
+        """Update trade-block details (mutating).
+
+        Args:
+            payload: List of trade-block-detail DTOs (request body)
+        """
+        res = self.api_request(
+            f"{self.base_url_v2}/TradeBlockDetails/UpdateList", requests.post, json=payload
+        )
+        return res.json()
+
+    def delete_trade_block_details(self, payload):
+        """Delete trade-block details (batch, mutating).
+
+        Args:
+            payload: List of trade-block-detail DTOs / IDs (request body)
+        """
+        res = self.api_request(
+            f"{self.base_url_v2}/TradeBlockDetails/DeleteList", requests.post, json=payload
+        )
+        return res.json()
+
+    def add_manual_trade_block_detail(self, related_type, related_type_id, payload):
+        """Add a manual trade-block detail for an entity (mutating).
+
+        Args:
+            related_type: Related entity type
+            related_type_id: Related entity ID
+            payload: Trade-block-detail DTO (request body)
+        """
+        res = self.api_request(
+            f"{self.base_url_v2}/TradeBlockDetails/Manual/{related_type}/{related_type_id}",
+            requests.post,
+            json=payload,
+        )
+        return res.json()
+
+    def add_fixed_income_trade_block_detail(self, related_type, payload):
+        """Add a fixed-income trade-block detail (mutating).
+
+        Args:
+            related_type: Related entity type
+            payload: Trade-block-detail DTO (request body)
+        """
+        res = self.api_request(
+            f"{self.base_url_v2}/TradeBlockDetails/FixedIncome/{related_type}",
+            requests.post,
+            json=payload,
+        )
+        return res.json()
+
+    def update_trade_block_detail(self, detail_id, payload):
+        """Update a single trade-block detail (mutating).
+
+        Args:
+            detail_id: Trade-block-detail ID
+            payload: Trade-block-detail DTO (request body)
+        """
+        res = self.api_request(
+            f"{self.base_url_v2}/TradeBlockDetails/{detail_id}", requests.put, json=payload
+        )
+        return res.json()
+
+    def delete_trade_block_detail(self, detail_id):
+        """Delete a single trade-block detail (mutating).
+
+        Args:
+            detail_id: Trade-block-detail ID
+        """
+        res = self.api_request(f"{self.base_url_v2}/TradeBlockDetails/{detail_id}", requests.delete)
+        return res.json()
+
+    def delete_deletable_trade_block_details(self, entity_id, entity_type_id):
+        """Delete the deletable trade-block details for an entity (mutating).
+
+        Args:
+            entity_id: Entity ID
+            entity_type_id: Entity-type ID
+        """
+        res = self.api_request(
+            f"{self.base_url_v2}/TradeBlockDetails/DeletableDetails/{entity_id}/{entity_type_id}",
+            requests.delete,
+        )
+        return res.json()
+
+    # --- SecurityPriceChanges ---
+
+    def get_all_price_updates(self):
+        """Get all security price updates.
+
+        Returns:
+            list: Price-update dicts
+        """
+        res = self.api_request(f"{self.base_url_v2}/SecurityPriceChanges/GetAllUpdates")
+        return res.json()
+
+    def get_todays_price_updates(self):
+        """Get today's security price updates.
+
+        Returns:
+            list: Price-update dicts
+        """
+        res = self.api_request(f"{self.base_url_v2}/SecurityPriceChanges/GetTodaysUpdates")
+        return res.json()
+
+    def get_price_updates_for_day(self, payload):
+        """Get security price updates for a specific day (POST-body read).
+
+        Args:
+            payload: Day-request DTO (request body)
+
+        Returns:
+            list: Price-update dicts
+        """
+        res = self.api_request(
+            f"{self.base_url_v2}/SecurityPriceChanges/GetSpecificDayUpdates",
+            requests.post,
+            json=payload,
+        )
+        return res.json()
+
+    # --- CompareTool ---
+
+    def get_compare_tool_status(self, correlation_id):
+        """Get the status of a compare-tool run.
+
+        Args:
+            correlation_id: Compare-tool correlation ID
+
+        Returns:
+            dict: Status
+        """
+        res = self.api_request(f"{self.base_url_v2}/CompareTool/Status/{correlation_id}")
+        return res.json()
+
+    def compare_trades(self, payload):
+        """Run a trade comparison (POST-body).
+
+        Args:
+            payload: Compare-request DTO (request body)
+
+        Returns:
+            dict: Comparison result
+        """
+        res = self.api_request(
+            f"{self.base_url_v2}/CompareTool/Trades", requests.post, json=payload
+        )
+        return res.json()
+
+    # --- DataErrors ---
+
+    def get_all_portfolio_account_errors(self):
+        """Get all portfolio/account data errors.
+
+        Returns:
+            list: Error dicts
+        """
+        res = self.api_request(f"{self.base_url_v2}/DataErrors/GetAllPortfolioAccounts")
+        return res.json()
+
+    def get_all_portfolio_account_errors_count(self):
+        """Get the count of portfolio/account data errors.
+
+        Returns:
+            int | dict: Error count
+        """
+        res = self.api_request(f"{self.base_url_v2}/DataErrors/GetAllPortfolioAccountsCount")
+        return res.json()
+
+    # --- Communities ---
+
+    def get_community_trade_queue_details(self, trade_queue_id):
+        """Get community trade-queue details.
+
+        Args:
+            trade_queue_id: Trade-queue ID
+
+        Returns:
+            dict: Trade-queue details
+        """
+        res = self.api_request(f"{self.base_url_v2}/Communities/tradeQueueDetails/{trade_queue_id}")
+        return res.json()
+
+    def validate_community_model_unassign(self, payload, apply_delete=None):
+        """Validate (and optionally apply) a community-model unassign (mutating when applied).
+
+        Args:
+            payload: Validation DTO (request body)
+            apply_delete: Optional bool (maps to ``applyDelete``)
+
+        Returns:
+            dict: Validation result
+        """
+        params = {}
+        if apply_delete is not None:
+            params["applyDelete"] = str(apply_delete).lower()
+        res = self.api_request(
+            f"{self.base_url_v2}/Communities/ModelUnAssignValidation",
+            requests.post,
+            json=payload,
+            params=params,
+        )
+        return res.json()
+
+    def sync_community_model(self, payload):
+        """Sync a community model (mutating).
+
+        Args:
+            payload: Sync DTO (request body)
+        """
+        res = self.api_request(
+            f"{self.base_url_v2}/Communities/SyncCommunityModel", requests.post, json=payload
+        )
+        return res.json()
+
+    # --- PreferenceAuditHistory ---
+
+    def get_money_market_preference_audit_history(self, start_date=None, end_date=None):
+        """Get money-market preference audit history.
+
+        Args:
+            start_date / end_date: Optional ISO date window (``startDate`` / ``endDate``)
+
+        Returns:
+            list: Audit-history dicts
+        """
+        params = {}
+        if start_date is not None:
+            params["startDate"] = start_date
+        if end_date is not None:
+            params["endDate"] = end_date
+        res = self.api_request(
+            f"{self.base_url_v2}/PreferenceAuditHistory/MoneyMarket", params=params
+        )
+        return res.json()
+
+    # --- SecuritySettingPreference + TradeAnalysisReport ---
+
+    def set_security_setting_equivalents(self, related_type, payload):
+        """Set security-setting equivalents for a related type (mutating).
+
+        Args:
+            related_type: Related entity type
+            payload: Equivalents DTO (request body)
+        """
+        res = self.api_request(
+            f"{self.base_url_v2}/SecuritySettingPreference/Equivalents/{related_type}",
+            requests.post,
+            json=payload,
+        )
+        return res.json()
+
+    def upload_security_setting_equivalents(self, payload):
+        """Upload security-setting equivalents (mutating).
+
+        Args:
+            payload: Upload DTO (request body)
+        """
+        res = self.api_request(
+            f"{self.base_url_v2}/SecuritySettingPreference/Equivalents/Upload",
+            requests.post,
+            json=payload,
+        )
+        return res.json()
+
+    def sync_trade_analysis_report(self, payload):
+        """Sync the trade-analysis report (mutating).
+
+        Args:
+            payload: Sync DTO (request body)
+        """
+        res = self.api_request(
+            f"{self.base_url_v2}/TradeAnalysisReport/SyncTradeAnalysisReport",
+            requests.post,
+            json=payload,
+        )
         return res.json()
 
 
