@@ -1,4 +1,4 @@
-__version__ = "2.6.0"
+__version__ = "2.7.0"
 
 import logging
 import re
@@ -6043,6 +6043,197 @@ class EclipseV2(EclipseBase):
             tag: Tag DTO / identifier (request body)
         """
         res = self.api_request(f"{self.base_url_v2}/Tags/delete", requests.post, json=tag)
+        return res.json()
+
+    # --- ESG writes (mutating) ---
+
+    def create_esg_theme(self, theme):
+        """Create an ESG theme.
+
+        Args:
+            theme: ESG-theme DTO (request body)
+
+        Returns:
+            dict: Created theme
+        """
+        res = self.api_request(f"{self.base_url_v2}/ESG/Themes", requests.post, json=theme)
+        return res.json()
+
+    def update_esg_theme(self, theme):
+        """Update an ESG theme.
+
+        Args:
+            theme: ESG-theme DTO (request body)
+
+        Returns:
+            dict: Updated theme
+        """
+        res = self.api_request(f"{self.base_url_v2}/ESG/Themes", requests.put, json=theme)
+        return res.json()
+
+    def delete_esg_themes(self, themes):
+        """Delete ESG themes.
+
+        Args:
+            themes: List of ESG-theme DTOs / IDs (request body)
+        """
+        res = self.api_request(f"{self.base_url_v2}/ESG/Themes", requests.delete, json=themes)
+        return res.json()
+
+    def create_esg_assignments(self, assignments):
+        """Create ESG assignments.
+
+        Args:
+            assignments: List of ESG-assignment DTOs (request body)
+
+        Returns:
+            list | dict: Created assignments
+        """
+        res = self.api_request(
+            f"{self.base_url_v2}/ESG/Assignments", requests.post, json=assignments
+        )
+        return res.json()
+
+    def update_esg_restrictions_for_portfolio(self, restrictions):
+        """Update the ESG restrictions for a portfolio.
+
+        Args:
+            restrictions: ESG-restrictions DTO (request body)
+
+        Returns:
+            dict: Updated restrictions
+        """
+        res = self.api_request(
+            f"{self.base_url_v2}/ESG/ESGRestrictionsForPortfolio", requests.put, json=restrictions
+        )
+        return res.json()
+
+    # --- Asset classification writes (mutating) ---
+
+    def create_asset_classification_group(self, group):
+        """Create an asset-classification group.
+
+        Args:
+            group: Classification-group DTO (request body)
+
+        Returns:
+            dict: Created group
+        """
+        res = self.api_request(
+            f"{self.base_url_v2}/AssetClassification/ClassificationGroup",
+            requests.post,
+            json=group,
+        )
+        return res.json()
+
+    def update_asset_classification_group(self, group):
+        """Update an asset-classification group.
+
+        Args:
+            group: Classification-group DTO (request body)
+
+        Returns:
+            dict: Updated group
+        """
+        res = self.api_request(
+            f"{self.base_url_v2}/AssetClassification/ClassificationGroup",
+            requests.put,
+            json=group,
+        )
+        return res.json()
+
+    def delete_asset_classification_group(self, group_id):
+        """Delete an asset-classification group.
+
+        Args:
+            group_id: Classification-group ID
+        """
+        res = self.api_request(
+            f"{self.base_url_v2}/AssetClassification/ClassificationGroup/{group_id}",
+            requests.delete,
+        )
+        return res.json()
+
+    def classify_securities(self, classifications):
+        """Assign classifications to securities.
+
+        Args:
+            classifications: Security-classification DTO(s) (request body)
+
+        Returns:
+            dict: Result
+        """
+        res = self.api_request(
+            f"{self.base_url_v2}/AssetClassification/Security/Classifications",
+            requests.post,
+            json=classifications,
+        )
+        return res.json()
+
+    # --- Notification writes (mutating) ---
+
+    def create_notification(self, notification):
+        """Create a notification.
+
+        Args:
+            notification: Notification DTO (request body)
+
+        Returns:
+            dict: Created notification
+        """
+        res = self.api_request(
+            f"{self.base_url_v2}/Notifications/Notification/CreateNotification",
+            requests.post,
+            json=notification,
+        )
+        return res.json()
+
+    def update_notification(self, notification):
+        """Update a notification.
+
+        Args:
+            notification: Notification DTO (request body)
+
+        Returns:
+            dict: Updated notification
+        """
+        res = self.api_request(
+            f"{self.base_url_v2}/Notifications/Notification/UpdateNotification",
+            requests.put,
+            json=notification,
+        )
+        return res.json()
+
+    def send_notification(self, notification):
+        """Send a notification.
+
+        Args:
+            notification: Notification DTO (request body)
+
+        Returns:
+            dict: Result
+        """
+        res = self.api_request(
+            f"{self.base_url_v2}/Notifications/Notification/SendNotification",
+            requests.post,
+            json=notification,
+        )
+        return res.json()
+
+    def send_trading_notification(self, notification):
+        """Send a trading notification.
+
+        Args:
+            notification: Trading-notification DTO (request body)
+
+        Returns:
+            dict: Result
+        """
+        res = self.api_request(
+            f"{self.base_url_v2}/Notifications/Notification/SendTradingNotification",
+            requests.post,
+            json=notification,
+        )
         return res.json()
 
 
