@@ -3613,3 +3613,83 @@ class TestEclipseV1CoverageBatch15:
     def test_security_maintain(self):
         m = self._g(lambda a: a.get_security_maintain("NY"))
         assert m.call_args.args[0] == f"{V1_BASE}/security/securities/maintain/NY"
+
+
+class TestEclipseCoverageBatch16Sweep:
+    """Sweep of remaining focus-category endpoints (batch 16)."""
+
+    def _v2(self, verb, fn):
+        api = _eclipse_for_set_asides()
+        m = _mock_get([]) if verb == "get" else _mock_post({})
+        with patch(f"requests.{verb}", m):
+            fn(api)
+        return m
+
+    def _v1(self, verb, fn):
+        api = _eclipse_v1()
+        m = _mock_get([]) if verb == "get" else _mock_post({})
+        with patch(f"requests.{verb}", m):
+            fn(api)
+        return m
+
+    # v2
+    def test_do_not_trade_all_reverse_sync(self):
+        m = self._v2("post", lambda a: a.set_accounts_do_not_trade_all_reverse_sync({"x": 1}))
+        assert m.call_args.args[0] == f"{V2_BASE}/Account/Accounts/donottradeallaccountsreversesync"
+
+    def test_account_excluded_cash_details(self):
+        m = self._v2("get", lambda a: a.get_account_excluded_cash_details(5, "account"))
+        assert m.call_args.args[0] == (
+            f"{V2_BASE}/Account/Accounts/5/account/modelTolerance/AccountExcludedCashDetails"
+        )
+
+    def test_astro_account_message(self):
+        m = self._v2("get", lambda a: a.get_astro_account_message(5, "b1"))
+        assert m.call_args.args[0] == f"{V2_BASE}/Account/AstroAccounts/Message/Account/5/Batch/b1"
+
+    def test_export_portfolios_grid(self):
+        m = self._v2("post", lambda a: a.export_portfolios_grid())
+        assert m.call_args.args[0] == f"{V2_BASE}/Portfolio/Portfolios/list/export/excel/griddata"
+
+    def test_patch_portfolio(self):
+        m = self._v2("patch", lambda a: a.patch_portfolio(7, {"x": 1}))
+        assert m.call_args.args[0] == f"{V2_BASE}/Portfolio/Portfolios/7"
+        assert m.call_args.kwargs["json"] == {"x": 1}
+
+    def test_sleeve_strategy_aggregates_by_firm_ids(self):
+        m = self._v2("post", lambda a: a.get_sleeve_strategy_aggregates_by_firm_ids([1]))
+        assert (
+            m.call_args.args[0] == f"{V2_BASE}/Portfolio/Sleeves/SleeveStrategyAggregatesByFirmIds"
+        )
+
+    # v1
+    def test_account_portfolio_id_by_firm(self):
+        m = self._v1("get", lambda a: a.get_account_portfolio_id_by_firm(5, 9))
+        assert m.call_args.args[0] == f"{V1_BASE}/account/accounts/5/9/portfolioId"
+
+    def test_security_count(self):
+        m = self._v1("post", lambda a: a.get_security_count(42, {"x": 1}))
+        assert m.call_args.args[0] == f"{V1_BASE}/security/securities/42/count"
+
+    def test_create_portfolio_aside_cash(self):
+        m = self._v1("post", lambda a: a.create_portfolio_aside_cash(7, {"amount": 100}))
+        assert m.call_args.args[0] == f"{V1_BASE}/portfolio/portfolios/7/asideCash"
+
+    def test_sleeve_allocations_v1(self):
+        m = self._v1("get", lambda a: a.get_sleeve_allocations_v1(5))
+        assert m.call_args.args[0] == f"{V1_BASE}/portfolio/sleeves/5/allocations"
+
+    def test_model_tolerance_detail(self):
+        m = self._v1("get", lambda a: a.get_model_tolerance_detail(7, 5, asset_type="class"))
+        assert m.call_args.args[0] == f"{V1_BASE}/portfolio/portfolios/7/modelTolerance/5"
+        assert m.call_args.kwargs["params"] == {"assetType": "class"}
+
+    def test_delete_submodel(self):
+        m = self._v1("delete", lambda a: a.delete_submodel(8, model_id=5, model_detail_id=3))
+        assert m.call_args.args[0] == f"{V1_BASE}/modeling/models/submodels/8"
+        assert m.call_args.kwargs["params"] == {"modelId": 5, "modelDetailId": 3}
+
+    def test_update_submodel_by_model(self):
+        m = self._v1("put", lambda a: a.update_submodel_by_model({"x": 1}, model_id=5))
+        assert m.call_args.args[0] == f"{V1_BASE}/modeling/models/submodels"
+        assert m.call_args.kwargs["params"] == {"modelId": 5}
