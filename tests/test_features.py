@@ -1679,3 +1679,116 @@ class TestEclipseV2ReadEndpointsBatch4:
         assert mock_get.call_args.args[0] == (
             f"{V2_BASE}/Lookup/SmaAccountTypeRestrictions/Category/IRA"
         )
+
+
+class TestEclipseV2WriteEndpoints:
+    """Verb/URL/body coverage for v2 write methods (SavedView, Notes, Tags).
+
+    Mutating; asserted via mocked requests only (never executed live).
+    """
+
+    # --- SavedView ---
+
+    def test_save_saved_view(self):
+        api = _eclipse_for_set_asides()
+        mock_post = _mock_post({"id": 1})
+        with patch("requests.post", mock_post):
+            api.save_saved_view({"name": "V"})
+        assert mock_post.call_args.args[0] == f"{V2_BASE}/SavedView/SavedViewByIdSave"
+        assert mock_post.call_args.kwargs["json"] == {"name": "V"}
+
+    def test_delete_saved_view(self):
+        api = _eclipse_for_set_asides()
+        mock_del = _mock_post({})
+        with patch("requests.delete", mock_del):
+            api.delete_saved_view(7)
+        assert mock_del.call_args.args[0] == f"{V2_BASE}/SavedView/7"
+
+    def test_delete_saved_views(self):
+        api = _eclipse_for_set_asides()
+        mock_post = _mock_post({})
+        with patch("requests.post", mock_post):
+            api.delete_saved_views([1, 2, 3])
+        assert mock_post.call_args.args[0] == f"{V2_BASE}/SavedView/Delete"
+        assert mock_post.call_args.kwargs["json"] == [1, 2, 3]
+
+    def test_add_saved_view_to_dashboard(self):
+        api = _eclipse_for_set_asides()
+        mock_post = _mock_post({})
+        with patch("requests.post", mock_post):
+            api.add_saved_view_to_dashboard(7, is_firm_action_items=True)
+        assert mock_post.call_args.args[0] == f"{V2_BASE}/SavedView/7/dashboard"
+        assert mock_post.call_args.kwargs["params"] == {"isFirmActionItems": "true"}
+
+    def test_set_default_saved_view(self):
+        api = _eclipse_for_set_asides()
+        mock_post = _mock_post({})
+        with patch("requests.post", mock_post):
+            api.set_default_saved_view(4, 7)
+        assert mock_post.call_args.args[0] == f"{V2_BASE}/SavedView/ViewType/4/DefaultView/7"
+
+    def test_save_saved_views_ranking(self):
+        api = _eclipse_for_set_asides()
+        mock_post = _mock_post({})
+        with patch("requests.post", mock_post):
+            api.save_saved_views_ranking(4, [{"id": 1, "rank": 1}])
+        assert mock_post.call_args.args[0] == f"{V2_BASE}/SavedView/ViewType/4/Rank"
+        assert mock_post.call_args.kwargs["json"] == [{"id": 1, "rank": 1}]
+
+    def test_get_saved_views_for_types(self):
+        api = _eclipse_for_set_asides()
+        mock_post = _mock_post([])
+        with patch("requests.post", mock_post):
+            api.get_saved_views_for_types([1, 2])
+        assert mock_post.call_args.args[0] == f"{V2_BASE}/SavedView/ViewType"
+        assert mock_post.call_args.kwargs["json"] == [1, 2]
+
+    # --- Notes ---
+
+    def test_add_notes(self):
+        api = _eclipse_for_set_asides()
+        mock_post = _mock_post([])
+        with patch("requests.post", mock_post):
+            api.add_notes([{"note": "hi", "relatedId": 1}])
+        assert mock_post.call_args.args[0] == f"{V2_BASE}/Notes/AddList"
+        assert mock_post.call_args.kwargs["json"] == [{"note": "hi", "relatedId": 1}]
+
+    def test_update_notes(self):
+        api = _eclipse_for_set_asides()
+        mock_post = _mock_post([])
+        with patch("requests.post", mock_post):
+            api.update_notes([{"id": 1, "note": "x"}])
+        assert mock_post.call_args.args[0] == f"{V2_BASE}/Notes/UpdateList"
+
+    def test_delete_notes(self):
+        api = _eclipse_for_set_asides()
+        mock_post = _mock_post({})
+        with patch("requests.post", mock_post):
+            api.delete_notes([1, 2])
+        assert mock_post.call_args.args[0] == f"{V2_BASE}/Notes/DeleteList"
+        assert mock_post.call_args.kwargs["json"] == [1, 2]
+
+    def test_update_note(self):
+        api = _eclipse_for_set_asides()
+        mock_put = _mock_post({"id": 9})
+        with patch("requests.put", mock_put):
+            api.update_note(9, {"note": "edit"})
+        assert mock_put.call_args.args[0] == f"{V2_BASE}/Notes/9"
+        assert mock_put.call_args.kwargs["json"] == {"note": "edit"}
+
+    def test_delete_note(self):
+        api = _eclipse_for_set_asides()
+        mock_del = _mock_post({})
+        with patch("requests.delete", mock_del):
+            api.delete_note(9)
+        assert mock_del.call_args.args[0] == f"{V2_BASE}/Notes/9"
+
+    # --- Tags ---
+
+    def test_delete_tag(self):
+        api = _eclipse_for_set_asides()
+        mock_post = _mock_post({})
+        with patch("requests.post", mock_post):
+            api.delete_tag({"id": 3})
+        assert mock_post.call_args.args[0] == f"{V2_BASE}/Tags/delete"
+        assert mock_post.call_args.kwargs["json"] == {"id": 3}
