@@ -2298,3 +2298,245 @@ class TestEclipseV2CrudBatch8:
         assert mock_post.call_args.args[0] == (
             f"{V2_BASE}/Model/Action/TriggerSecuritySetReverseSync"
         )
+
+
+class TestEclipseV2ImportExportBatch9:
+    """Verb/URL/body coverage for v2 import/export/extracts (batch 9).
+
+    Mutating + POST-body endpoints; asserted via mocked requests only.
+    """
+
+    # --- CustomImports reads ---
+
+    def test_custom_import_history(self):
+        api = _eclipse_for_set_asides()
+        mock_get = _mock_get([])
+        with patch("requests.get", mock_get):
+            api.get_custom_import_history()
+        assert mock_get.call_args.args[0] == f"{V2_BASE}/CustomImports/Instances/History"
+
+    def test_custom_import_staged_data(self):
+        api = _eclipse_for_set_asides()
+        mock_get = _mock_get([])
+        with patch("requests.get", mock_get):
+            api.get_custom_import_staged_data(11)
+        assert mock_get.call_args.args[0] == f"{V2_BASE}/CustomImports/Instances/StagedData/11"
+
+    def test_custom_import_templates(self):
+        api = _eclipse_for_set_asides()
+        mock_get = _mock_get([])
+        with patch("requests.get", mock_get):
+            api.get_custom_import_templates()
+        assert mock_get.call_args.args[0] == f"{V2_BASE}/CustomImports/Templates"
+
+    def test_custom_import_template_definition(self):
+        api = _eclipse_for_set_asides()
+        mock_get = _mock_get({})
+        with patch("requests.get", mock_get):
+            api.get_custom_import_template_definition(3)
+        assert mock_get.call_args.args[0] == f"{V2_BASE}/CustomImports/Templates/Definition/3"
+
+    def test_custom_import_template_definition_by_instance(self):
+        api = _eclipse_for_set_asides()
+        mock_get = _mock_get({})
+        with patch("requests.get", mock_get):
+            api.get_custom_import_template_definition_by_instance(11)
+        assert mock_get.call_args.args[0] == (
+            f"{V2_BASE}/CustomImports/Templates/DefinitionByInstanceId/11"
+        )
+
+    # --- CustomImports writes ---
+
+    def test_custom_import_add_row(self):
+        api = _eclipse_for_set_asides()
+        mock_post = _mock_post({})
+        with patch("requests.post", mock_post):
+            api.custom_import_add_row(11, {"col": "v"})
+        assert mock_post.call_args.args[0] == f"{V2_BASE}/CustomImports/Instances/AddRow/11"
+        assert mock_post.call_args.kwargs["json"] == {"col": "v"}
+
+    def test_custom_import_update_row(self):
+        api = _eclipse_for_set_asides()
+        mock_post = _mock_post({})
+        with patch("requests.post", mock_post):
+            api.custom_import_update_row(11, {"col": "v"})
+        assert mock_post.call_args.args[0] == f"{V2_BASE}/CustomImports/Instances/UpdateRow/11"
+
+    def test_custom_import_validate_rows(self):
+        api = _eclipse_for_set_asides()
+        mock_post = _mock_post({})
+        with patch("requests.post", mock_post):
+            api.custom_import_validate_rows(11, [{"r": 1}])
+        assert mock_post.call_args.args[0] == f"{V2_BASE}/CustomImports/Instances/ValidateRows/11"
+
+    def test_custom_import_generate_override(self):
+        api = _eclipse_for_set_asides()
+        mock_post = _mock_post({})
+        with patch("requests.post", mock_post):
+            api.custom_import_generate_override(11)
+        assert mock_post.call_args.args[0] == (
+            f"{V2_BASE}/CustomImports/Instances/GenerateOverride/11"
+        )
+
+    def test_custom_import_upload_file(self):
+        api = _eclipse_for_set_asides()
+        mock_post = _mock_post({})
+        with patch("requests.post", mock_post):
+            api.custom_import_upload_file({"file": "x"})
+        assert mock_post.call_args.args[0] == f"{V2_BASE}/CustomImports/Instances/UploadFile"
+
+    def test_custom_import_reupload_file(self):
+        api = _eclipse_for_set_asides()
+        mock_post = _mock_post({})
+        with patch("requests.post", mock_post):
+            api.custom_import_reupload_file({"file": "x"})
+        assert mock_post.call_args.args[0] == f"{V2_BASE}/CustomImports/Instances/ReuploadFile"
+
+    def test_download_custom_import_template(self):
+        api = _eclipse_for_set_asides()
+        mock_post = _mock_post({})
+        with patch("requests.post", mock_post):
+            api.download_custom_import_template(3)
+        assert mock_post.call_args.args[0] == f"{V2_BASE}/CustomImports/Templates/Download/3"
+
+    def test_set_custom_import_template_favorite(self):
+        api = _eclipse_for_set_asides()
+        mock_post = _mock_post({})
+        with patch("requests.post", mock_post):
+            api.set_custom_import_template_favorite({"templateId": 3})
+        assert mock_post.call_args.args[0] == f"{V2_BASE}/CustomImports/Templates/SetUserFavorite"
+
+    def test_abandon_custom_import(self):
+        api = _eclipse_for_set_asides()
+        mock_put = _mock_post({})
+        with patch("requests.put", mock_put):
+            api.abandon_custom_import(11)
+        assert mock_put.call_args.args[0] == f"{V2_BASE}/CustomImports/Instances/Abandon/11"
+
+    def test_apply_custom_import(self):
+        api = _eclipse_for_set_asides()
+        mock_put = _mock_post({})
+        with patch("requests.put", mock_put):
+            api.apply_custom_import(11)
+        assert mock_put.call_args.args[0] == f"{V2_BASE}/CustomImports/Instances/Apply/11"
+
+    # --- DataImport reads ---
+
+    def test_avg_import_duration(self):
+        api = _eclipse_for_set_asides()
+        mock_get = _mock_get({})
+        with patch("requests.get", mock_get):
+            api.get_avg_import_duration(import_type="Positions", record_count_to_average=100)
+        assert mock_get.call_args.args[0] == f"{V2_BASE}/DataImport/Action/AvgImportDuration"
+        assert mock_get.call_args.kwargs["params"] == {
+            "importType": "Positions",
+            "recordCountToAverage": 100,
+        }
+
+    def test_last_import_status_info(self):
+        api = _eclipse_for_set_asides()
+        mock_get = _mock_get({})
+        with patch("requests.get", mock_get):
+            api.get_last_import_status_info()
+        assert mock_get.call_args.args[0] == f"{V2_BASE}/DataImport/Action/LastImportStatusInfo"
+
+    def test_data_imports_by_requested_by(self):
+        api = _eclipse_for_set_asides()
+        mock_get = _mock_get([])
+        with patch("requests.get", mock_get):
+            api.get_data_imports_by_requested_by(42)
+        assert mock_get.call_args.args[0] == f"{V2_BASE}/DataImport/ByRequestedById/42"
+
+    def test_import_log_history(self):
+        api = _eclipse_for_set_asides()
+        mock_get = _mock_get([])
+        with patch("requests.get", mock_get):
+            api.get_import_log_history(from_date="2026-01-01")
+        assert mock_get.call_args.args[0] == f"{V2_BASE}/DataImport/ImportLogHistory"
+        assert mock_get.call_args.kwargs["params"] == {"fromDate": "2026-01-01"}
+
+    def test_reverse_sync_log_errors(self):
+        api = _eclipse_for_set_asides()
+        mock_get = _mock_get([])
+        with patch("requests.get", mock_get):
+            api.get_reverse_sync_log_errors(7)
+        assert mock_get.call_args.args[0] == f"{V2_BASE}/DataImport/ReverseSyncLogErrors/7"
+
+    # --- DataImport actions / export ---
+
+    def test_request_import(self):
+        api = _eclipse_for_set_asides()
+        mock_post = _mock_post({})
+        with patch("requests.post", mock_post):
+            api.request_import({"type": "Positions"})
+        assert mock_post.call_args.args[0] == f"{V2_BASE}/DataImport/Action/RequestImport"
+
+    def test_sync_accounts(self):
+        api = _eclipse_for_set_asides()
+        mock_post = _mock_post({})
+        with patch("requests.post", mock_post):
+            api.sync_accounts({"ids": [1]})
+        assert mock_post.call_args.args[0] == f"{V2_BASE}/DataImport/Action/SyncAccounts"
+
+    def test_sync_accounts_by_portfolio(self):
+        api = _eclipse_for_set_asides()
+        mock_post = _mock_post({})
+        with patch("requests.post", mock_post):
+            api.sync_accounts_by_portfolio({"portfolioId": 1})
+        assert mock_post.call_args.args[0] == f"{V2_BASE}/DataImport/Action/SyncAccountsByPortfolio"
+
+    def test_resync_import_errored_accounts(self):
+        api = _eclipse_for_set_asides()
+        mock_post = _mock_post({})
+        with patch("requests.post", mock_post):
+            api.resync_import_errored_accounts()
+        assert mock_post.call_args.args[0] == (
+            f"{V2_BASE}/DataImport/Action/ResyncImportErroredAccounts"
+        )
+
+    def test_export_import_history(self):
+        api = _eclipse_for_set_asides()
+        mock_post = _mock_post({})
+        with patch("requests.post", mock_post):
+            api.export_import_history({"range": "ytd"})
+        assert mock_post.call_args.args[0] == f"{V2_BASE}/DataImport/Export/ImportHistory"
+
+    def test_export_reverse_sync_history(self):
+        api = _eclipse_for_set_asides()
+        mock_post = _mock_post({})
+        with patch("requests.post", mock_post):
+            api.export_reverse_sync_history({"range": "ytd"})
+        assert mock_post.call_args.args[0] == f"{V2_BASE}/DataImport/Export/ReverseSyncHistory"
+
+    # --- Extracts (incl. header params) ---
+
+    def test_get_extracts(self):
+        api = _eclipse_for_set_asides()
+        mock_get = _mock_get([])
+        with patch("requests.get", mock_get):
+            api.get_extracts("Performance")
+        assert mock_get.call_args.args[0] == f"{V2_BASE}/Extracts/Performance"
+
+    def test_create_extract_with_when_header(self):
+        api = _eclipse_for_set_asides()
+        mock_post = _mock_post({})
+        with patch("requests.post", mock_post):
+            api.create_extract("Performance", when="2026-06-01")
+        assert mock_post.call_args.args[0] == f"{V2_BASE}/Extracts/Performance"
+        assert mock_post.call_args.kwargs["headers"]["X-ExtractJob-When"] == "2026-06-01"
+
+    def test_delete_extract_with_reason_header(self):
+        api = _eclipse_for_set_asides()
+        mock_del = _mock_post({})
+        with patch("requests.delete", mock_del):
+            api.delete_extract("Performance", reason="cleanup")
+        assert mock_del.call_args.args[0] == f"{V2_BASE}/Extracts/Performance"
+        assert mock_del.call_args.kwargs["headers"]["X-ExtractJob-Reason"] == "cleanup"
+
+    def test_delete_extract_job(self):
+        api = _eclipse_for_set_asides()
+        mock_del = _mock_post({})
+        with patch("requests.delete", mock_del):
+            api.delete_extract_job(55, reason="cleanup")
+        assert mock_del.call_args.args[0] == f"{V2_BASE}/Extracts/job/55"
+        assert mock_del.call_args.kwargs["params"] == {"reason": "cleanup"}
