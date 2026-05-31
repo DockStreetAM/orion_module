@@ -1,4 +1,4 @@
-__version__ = "2.20.0"
+__version__ = "2.21.0"
 
 import logging
 import re
@@ -4243,6 +4243,24 @@ class EclipseV1(EclipseBase):
             raise ValueError("instance_id must be a positive integer")
 
         res = self.api_request(f"{self.base_url}/tradeorder/instances/{instance_id}/tradeLogs")
+        return res.json()
+
+    def get_instance_trades(self, instance_id, status=None):
+        """Get the trades belonging to a trade instance.
+
+        Args:
+            instance_id: Trade instance ID
+            status: Optional status filter, "open" or "closed" (maps to ``status``)
+
+        Returns:
+            list: Trade dicts for the instance
+        """
+        params = {}
+        if status is not None:
+            params["status"] = status
+        res = self.api_request(
+            f"{self.base_url}/tradeorder/instances/{instance_id}/trades", params=params
+        )
         return res.json()
 
     def get_trade_log_detail(self, log_id):
