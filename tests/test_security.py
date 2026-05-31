@@ -368,6 +368,50 @@ class TestAPIErrors:
                 with pytest.raises(OrionAPIError, match="HTML error page"):
                     api.api_request("http://test.com", req_func=mock_req)
 
+    def test_error_with_json_string_body(self):
+        """Error body that is a bare JSON string must not raise AttributeError.
+
+        Regression: some Eclipse v2 endpoints return a plain JSON string on 400
+        (e.g. "Unable to retrieve trade instances"). The error handler used to call
+        .get() on it unconditionally, masking the real HTTP error with an
+        AttributeError. It must surface the string as the message instead.
+        """
+        with patch.object(OrionAPI, "login"):
+            api = OrionAPI(usr="test", pwd="pass")
+
+            mock_response = Mock()
+            mock_response.ok = False
+            mock_response.status_code = 400
+            mock_response.reason = "Bad Request"
+            mock_response.json.return_value = "Unable to retrieve trade instances"
+            mock_req = Mock(return_value=mock_response)
+
+            with (
+                patch.object(api._rate_limiter, "wait"),
+                patch.object(api, "_get_auth_header", return_value={}),
+            ):
+                with pytest.raises(OrionAPIError, match="Unable to retrieve trade instances"):
+                    api.api_request("http://test.com", req_func=mock_req)
+
+    def test_error_with_json_list_body(self):
+        """Error body that is a JSON list must surface as the message, not crash."""
+        with patch.object(OrionAPI, "login"):
+            api = OrionAPI(usr="test", pwd="pass")
+
+            mock_response = Mock()
+            mock_response.ok = False
+            mock_response.status_code = 400
+            mock_response.reason = "Bad Request"
+            mock_response.json.return_value = ["id is not numeric string "]
+            mock_req = Mock(return_value=mock_response)
+
+            with (
+                patch.object(api._rate_limiter, "wait"),
+                patch.object(api, "_get_auth_header", return_value={}),
+            ):
+                with pytest.raises(OrionAPIError, match="id is not numeric string"):
+                    api.api_request("http://test.com", req_func=mock_req)
+
 
 class TestInputValidation:
     """Test input validation for search methods."""
