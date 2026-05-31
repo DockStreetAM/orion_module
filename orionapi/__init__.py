@@ -1,4 +1,4 @@
-__version__ = "2.16.0"
+__version__ = "2.17.0"
 
 import logging
 import re
@@ -5675,6 +5675,122 @@ class EclipseV1(EclipseBase):
         """
         return self.api_request(f"{self.base_url}/security/securities/maintain/{location}").json()
 
+    # --- Coverage batch 16 sweep (v1 account/portfolio/model/security remainder) ---
+
+    def get_account_portfolio_id_by_firm(self, account_id, firm_id):
+        """Get the portfolio ID for an account scoped by firm.
+
+        Args:
+            account_id: Account ID
+            firm_id: Firm ID
+
+        Returns:
+            dict | int: Portfolio ID
+        """
+        return self.api_request(
+            f"{self.base_url}/account/accounts/{account_id}/{firm_id}/portfolioId"
+        ).json()
+
+    def get_security_count(self, security_id, body=None):
+        """Get a usage count for a security (POST-body).
+
+        Args:
+            security_id: Security ID
+            body: Optional criteria DTO (request body)
+
+        Returns:
+            dict | int: Count
+        """
+        return self.api_request(
+            f"{self.base_url}/security/securities/{security_id}/count", requests.post, json=body
+        ).json()
+
+    def create_portfolio_aside_cash(self, portfolio_id, payload):
+        """Create set-aside cash for a portfolio (mutating).
+
+        Args:
+            portfolio_id: Portfolio ID
+            payload: Set-aside DTO (request body)
+        """
+        return self.api_request(
+            f"{self.base_url}/portfolio/portfolios/{portfolio_id}/asideCash",
+            requests.post,
+            json=payload,
+        ).json()
+
+    def get_sleeve_allocations_v1(self, account_id):
+        """Get sleeve allocation details for an account (v1).
+
+        Args:
+            account_id: Account ID
+
+        Returns:
+            list | dict: Sleeve allocations
+        """
+        return self.api_request(
+            f"{self.base_url}/portfolio/sleeves/{account_id}/allocations"
+        ).json()
+
+    def get_model_tolerance_detail(
+        self, portfolio_id, account_id, asset_type=None, is_sleeved_portfolio=None
+    ):
+        """Get model tolerance detail for a portfolio/account by asset type.
+
+        Args:
+            portfolio_id: Portfolio ID
+            account_id: Account ID
+            asset_type: Optional asset type (``assetType``)
+            is_sleeved_portfolio: Optional flag (``isSleevedPortfolio``)
+
+        Returns:
+            dict | list: Model tolerance detail
+        """
+        params = {}
+        if asset_type is not None:
+            params["assetType"] = asset_type
+        if is_sleeved_portfolio is not None:
+            params["isSleevedPortfolio"] = is_sleeved_portfolio
+        return self.api_request(
+            f"{self.base_url}/portfolio/portfolios/{portfolio_id}/modelTolerance/{account_id}",
+            params=params,
+        ).json()
+
+    def delete_submodel(self, submodel_id, model_id=None, model_detail_id=None):
+        """Delete a submodel (mutating).
+
+        Args:
+            submodel_id: Submodel ID
+            model_id: Optional model ID (maps to ``modelId``)
+            model_detail_id: Optional model-detail ID (maps to ``modelDetailId``)
+        """
+        params = {}
+        if model_id is not None:
+            params["modelId"] = model_id
+        if model_detail_id is not None:
+            params["modelDetailId"] = model_detail_id
+        return self.api_request(
+            f"{self.base_url}/modeling/models/submodels/{submodel_id}",
+            requests.delete,
+            params=params,
+        ).json()
+
+    def update_submodel_by_model(self, payload, model_id=None):
+        """Update a submodel in the context of a model (mutating).
+
+        Args:
+            payload: Submodel DTO (request body)
+            model_id: Optional model ID (maps to ``modelId``)
+        """
+        params = {}
+        if model_id is not None:
+            params["modelId"] = model_id
+        return self.api_request(
+            f"{self.base_url}/modeling/models/submodels",
+            requests.put,
+            json=payload,
+            params=params,
+        ).json()
+
 
 class EclipseV2(EclipseBase):
     """Eclipse client targeting the v2 API surface (``/api/v2/...``) only.
@@ -9944,6 +10060,89 @@ class EclipseV2(EclipseBase):
         """
         return self.api_request(
             f"{self.base_url_v2}/Security/SecuritiesPrices", requests.post, json=payload
+        ).json()
+
+    # --- Coverage batch 16 sweep (v2 account/portfolio remainder) ---
+
+    def set_accounts_do_not_trade_all_reverse_sync(self, payload):
+        """Reverse-sync the do-not-trade flag for all accounts (mutating).
+
+        Args:
+            payload: DTO (request body)
+        """
+        return self.api_request(
+            f"{self.base_url_v2}/Account/Accounts/donottradeallaccountsreversesync",
+            requests.post,
+            json=payload,
+        ).json()
+
+    def get_account_excluded_cash_details(self, account_portfolio_id, id_type):
+        """Get model-tolerance excluded-cash details for an account.
+
+        Args:
+            account_portfolio_id: Account or portfolio ID
+            id_type: ID type (e.g. account vs portfolio)
+
+        Returns:
+            dict: Excluded-cash details
+        """
+        return self.api_request(
+            f"{self.base_url_v2}/Account/Accounts/{account_portfolio_id}/{id_type}"
+            f"/modelTolerance/AccountExcludedCashDetails"
+        ).json()
+
+    def get_astro_account_message(self, account_id, batch_name, connect_firm_id=None):
+        """Get the Astro optimization message for an account/batch.
+
+        Args:
+            account_id: Account ID
+            batch_name: Batch name
+            connect_firm_id: Optional Orion Connect firm ID (``connectFirmId``)
+
+        Returns:
+            dict: Optimization message
+        """
+        params = {}
+        if connect_firm_id is not None:
+            params["connectFirmId"] = connect_firm_id
+        return self.api_request(
+            f"{self.base_url_v2}/Account/AstroAccounts/Message/Account/{account_id}"
+            f"/Batch/{batch_name}",
+            params=params,
+        ).json()
+
+    def export_portfolios_grid(self):
+        """Export the portfolios list as Excel grid data (mutating/export)."""
+        return self.api_request(
+            f"{self.base_url_v2}/Portfolio/Portfolios/list/export/excel/griddata", requests.post
+        ).json()
+
+    def patch_portfolio(self, portfolio_id, payload):
+        """Patch a portfolio (partial update, mutating).
+
+        Args:
+            portfolio_id: Portfolio ID
+            payload: Partial portfolio DTO (request body)
+        """
+        return self.api_request(
+            f"{self.base_url_v2}/Portfolio/Portfolios/{portfolio_id}",
+            requests.patch,
+            json=payload,
+        ).json()
+
+    def get_sleeve_strategy_aggregates_by_firm_ids(self, payload):
+        """Get sleeve strategy aggregates for a list of firm IDs (POST-body read).
+
+        Args:
+            payload: List of firm IDs (request body)
+
+        Returns:
+            list: Sleeve-strategy-aggregate dicts
+        """
+        return self.api_request(
+            f"{self.base_url_v2}/Portfolio/Sleeves/SleeveStrategyAggregatesByFirmIds",
+            requests.post,
+            json=payload,
         ).json()
 
 

@@ -1529,3 +1529,19 @@ class TestEclipseCoverageBatch15:
 
     def test_v1_new_account_template(self, eclipse_client):
         assert isinstance(eclipse_client.v1.get_new_account_template(), (list, dict))
+
+
+class TestEclipseCoverageBatch16Sweep:
+    """Live smoke for the verifiable batch-16 sweep read.
+
+    Sleeve allocations are role-gated (SLEEVES); model-tolerance-detail needs
+    isSleevedPortfolio; excluded-cash needs a valid id_type — so those plus all
+    writes are unit-tested only.
+    """
+
+    def test_account_portfolio_id_by_firm(self, eclipse_client):
+        accts = eclipse_client.v1.get_all_accounts()
+        if not accts:
+            pytest.skip("no accounts")
+        result = eclipse_client.v1.get_account_portfolio_id_by_firm(accts[0]["id"], 1)
+        assert isinstance(result, (list, dict, int))
