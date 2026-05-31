@@ -1,4 +1,4 @@
-__version__ = "2.18.0"
+__version__ = "2.19.0"
 
 import logging
 import re
@@ -11,6 +11,8 @@ from urllib.parse import urlencode
 import rapidfuzz
 import requests
 import tabulate
+
+from . import models  # noqa: F401  (re-exported; TypedDicts for v2 responses)
 
 # Trade Instance Type mappings (from Orion API documentation)
 TRADE_INSTANCE_TYPES = {
@@ -6255,7 +6257,7 @@ class EclipseV2(EclipseBase):
 
     # --- Tactical (v2-only): per-portfolio tactical analysis reads ---------------
 
-    def get_tactical_portfolio_summary(self, portfolio_id):
+    def get_tactical_portfolio_summary(self, portfolio_id) -> models.TacticalPortfolioSummary:
         """Get the tactical portfolio summary for a portfolio.
 
         Args:
@@ -6300,7 +6302,7 @@ class EclipseV2(EclipseBase):
         )
         return res.json()
 
-    def get_tactical_tax_lots(self, portfolio_id, account_id=None):
+    def get_tactical_tax_lots(self, portfolio_id, account_id=None) -> list[models.RankedTaxLots]:
         """Get tax-lot data for a portfolio (tactical view).
 
         Args:
@@ -6346,7 +6348,7 @@ class EclipseV2(EclipseBase):
 
     # --- ESG (v2-only) -----------------------------------------------------------
 
-    def get_esg_themes(self):
+    def get_esg_themes(self) -> list[models.EsgThemeDto]:
         """Get the firm-preference ESG themes.
 
         Returns:
@@ -6480,7 +6482,7 @@ class EclipseV2(EclipseBase):
         res = self.api_request(f"{self.base_url_v2}/Dashboard/AccountDashboard")
         return res.json()
 
-    def get_dashboard_fields(self):
+    def get_dashboard_fields(self) -> list[models.DashboardFieldDto]:
         """Get the available fields and categories usable on a dashboard.
 
         Returns:
@@ -7006,7 +7008,7 @@ class EclipseV2(EclipseBase):
 
     # --- Account detail (v2-only reads with no v1 equivalent) --------------------
 
-    def get_account_cash_details(self, account_id):
+    def get_account_cash_details(self, account_id) -> models.AccountCashDetailsDto:
         """Get cash details for an account.
 
         Args:
@@ -7018,7 +7020,7 @@ class EclipseV2(EclipseBase):
         res = self.api_request(f"{self.base_url_v2}/Account/Accounts/{account_id}/CashDetails")
         return res.json()
 
-    def get_account_gain_loss_summary(self, account_id):
+    def get_account_gain_loss_summary(self, account_id) -> models.AccountGainLossSummaryDto:
         """Get the gain/loss summary for an account.
 
         Args:
@@ -10024,7 +10026,7 @@ class EclipseV2(EclipseBase):
 
     # --- Accounts ---
 
-    def get_accounts(self, filter_id=None):
+    def get_accounts(self, filter_id=None) -> models.AccountListDto:
         """Get accounts (v2 list).
 
         Args:
@@ -10038,7 +10040,7 @@ class EclipseV2(EclipseBase):
             params["filterId"] = filter_id
         return self.api_request(f"{self.base_url_v2}/Account/Accounts", params=params).json()
 
-    def get_account(self, account_id):
+    def get_account(self, account_id) -> models.AccountDetailResponseDto:
         """Get an account's detail (v2).
 
         Args:
@@ -10190,7 +10192,7 @@ class EclipseV2(EclipseBase):
 
     # --- Portfolios ---
 
-    def get_portfolio_v2(self, portfolio_id):
+    def get_portfolio_v2(self, portfolio_id) -> models.PortfolioDetails:
         """Get portfolio details (v2).
 
         Args:
