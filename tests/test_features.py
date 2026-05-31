@@ -3952,9 +3952,7 @@ class TestTypedResponseModels:
         import orionapi
         from orionapi import models
 
-        hints = typing.get_type_hints(
-            orionapi.EclipseV2.get_account, globalns=vars(orionapi)
-        )
+        hints = typing.get_type_hints(orionapi.EclipseV2.get_account, globalns=vars(orionapi))
         assert hints["return"] is models.AccountDetailResponseDto
 
     def test_typeddict_is_dict_at_runtime(self):
@@ -3964,3 +3962,16 @@ class TestTypedResponseModels:
         inst = models.EsgThemeDto(id=1, theme="Clean")
         assert isinstance(inst, dict)
         assert inst["theme"] == "Clean"
+
+
+class TestApiReferenceDoc:
+    """The committed API reference (docs/API_REFERENCE.md) stays present + current."""
+
+    def test_reference_exists_and_lists_classes(self):
+        from pathlib import Path
+
+        ref = Path(__file__).resolve().parent.parent / "docs" / "API_REFERENCE.md"
+        assert ref.exists(), "docs/API_REFERENCE.md missing — run scripts/gen_api_reference.py"
+        text = ref.read_text()
+        for cls in ("OrionAPI", "EclipseV1", "EclipseV2", "Eclipse"):
+            assert f"## {cls}" in text
