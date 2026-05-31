@@ -2817,3 +2817,165 @@ class TestEclipseV2OrgRefBatch10:
         with patch("requests.get", mock_get):
             api.get_workflow_mcp_server(3)
         assert mock_get.call_args.args[0] == f"{V2_BASE}/Workflow/mcp-servers/3"
+
+
+class TestEclipseV2BlockMetaRefBatch11:
+    """Verb/URL coverage for v2 trade-block metadata + reference misc (batch 11)."""
+
+    def _g(self, fn, *a, **k):
+        api = _eclipse_for_set_asides()
+        mock = _mock_get([])
+        with patch("requests.get", mock):
+            fn(api, *a, **k)
+        return mock
+
+    def _p(self, verb, fn, *a, **k):
+        api = _eclipse_for_set_asides()
+        mock = _mock_post({})
+        with patch(f"requests.{verb}", mock):
+            fn(api, *a, **k)
+        return mock
+
+    # TradeBlockReasons
+    def test_editable_reasons(self):
+        m = self._g(lambda a: a.get_editable_trade_block_reasons())
+        assert m.call_args.args[0] == f"{V2_BASE}/TradeBlockReasons/Editable"
+
+    def test_reason_role_permissions(self):
+        m = self._g(lambda a: a.get_trade_block_reason_role_permissions(5))
+        assert m.call_args.args[0] == f"{V2_BASE}/TradeBlockReasons/5/RolePermissions"
+
+    def test_reason_permissions_by_role(self):
+        m = self._g(lambda a: a.get_trade_block_reason_permissions_by_role(9))
+        assert m.call_args.args[0] == (
+            f"{V2_BASE}/TradeBlockReasons/TradeBlockReasonPermissionsByRole/9"
+        )
+
+    def test_reason_permissions_by_global_ids(self):
+        m = self._p("post", lambda a: a.get_trade_block_reason_permissions_by_global_ids([1]))
+        assert m.call_args.args[0] == (
+            f"{V2_BASE}/TradeBlockReasons/TradeBlockReasonsPermissionByGlobalIds"
+        )
+
+    def test_add_reason_by_name(self):
+        m = self._p("post", lambda a: a.add_trade_block_reason_by_name({"name": "R"}))
+        assert m.call_args.args[0] == f"{V2_BASE}/TradeBlockReasons/AddByName"
+
+    def test_delete_reason(self):
+        m = self._p("delete", lambda a: a.delete_trade_block_reason(5))
+        assert m.call_args.args[0] == f"{V2_BASE}/TradeBlockReasons/5"
+
+    def test_set_reason_role_permissions(self):
+        m = self._p("put", lambda a: a.set_trade_block_reason_role_permissions(5, {"x": 1}))
+        assert m.call_args.args[0] == f"{V2_BASE}/TradeBlockReasons/5/RolePermissions"
+
+    def test_set_reason_permissions_by_role(self):
+        m = self._p("put", lambda a: a.set_trade_block_reason_permissions_by_role(9, {"x": 1}))
+        assert m.call_args.args[0] == (
+            f"{V2_BASE}/TradeBlockReasons/TradeBlockReasonPermissionsByRole/9"
+        )
+
+    # TradeBlockDetails
+    def test_details_history(self):
+        m = self._g(
+            lambda a: a.get_trade_block_details_history("Account", 5, start_date="2026-01-01")
+        )
+        assert m.call_args.args[0] == f"{V2_BASE}/TradeBlockDetails/History/Account/5"
+        assert m.call_args.kwargs["params"] == {"startDate": "2026-01-01"}
+
+    def test_details_related_entities(self):
+        m = self._g(lambda a: a.get_trade_block_details_related_entities(5, "Account"))
+        assert m.call_args.args[0] == f"{V2_BASE}/TradeBlockDetails/RelatedEntities"
+
+    def test_add_details(self):
+        m = self._p("post", lambda a: a.add_trade_block_details([{"x": 1}]))
+        assert m.call_args.args[0] == f"{V2_BASE}/TradeBlockDetails/AddList"
+
+    def test_update_details(self):
+        m = self._p("post", lambda a: a.update_trade_block_details([{"x": 1}]))
+        assert m.call_args.args[0] == f"{V2_BASE}/TradeBlockDetails/UpdateList"
+
+    def test_delete_details(self):
+        m = self._p("post", lambda a: a.delete_trade_block_details([1]))
+        assert m.call_args.args[0] == f"{V2_BASE}/TradeBlockDetails/DeleteList"
+
+    def test_add_manual_detail(self):
+        m = self._p("post", lambda a: a.add_manual_trade_block_detail("Account", 5, {"x": 1}))
+        assert m.call_args.args[0] == f"{V2_BASE}/TradeBlockDetails/Manual/Account/5"
+
+    def test_add_fixed_income_detail(self):
+        m = self._p("post", lambda a: a.add_fixed_income_trade_block_detail("Account", {"x": 1}))
+        assert m.call_args.args[0] == f"{V2_BASE}/TradeBlockDetails/FixedIncome/Account"
+
+    def test_update_detail(self):
+        m = self._p("put", lambda a: a.update_trade_block_detail(7, {"x": 1}))
+        assert m.call_args.args[0] == f"{V2_BASE}/TradeBlockDetails/7"
+
+    def test_delete_detail(self):
+        m = self._p("delete", lambda a: a.delete_trade_block_detail(7))
+        assert m.call_args.args[0] == f"{V2_BASE}/TradeBlockDetails/7"
+
+    def test_delete_deletable_details(self):
+        m = self._p("delete", lambda a: a.delete_deletable_trade_block_details(5, 2))
+        assert m.call_args.args[0] == f"{V2_BASE}/TradeBlockDetails/DeletableDetails/5/2"
+
+    # SecurityPriceChanges / CompareTool / DataErrors
+    def test_all_price_updates(self):
+        m = self._g(lambda a: a.get_all_price_updates())
+        assert m.call_args.args[0] == f"{V2_BASE}/SecurityPriceChanges/GetAllUpdates"
+
+    def test_todays_price_updates(self):
+        m = self._g(lambda a: a.get_todays_price_updates())
+        assert m.call_args.args[0] == f"{V2_BASE}/SecurityPriceChanges/GetTodaysUpdates"
+
+    def test_price_updates_for_day(self):
+        m = self._p("post", lambda a: a.get_price_updates_for_day({"date": "x"}))
+        assert m.call_args.args[0] == f"{V2_BASE}/SecurityPriceChanges/GetSpecificDayUpdates"
+
+    def test_compare_tool_status(self):
+        m = self._g(lambda a: a.get_compare_tool_status("c1"))
+        assert m.call_args.args[0] == f"{V2_BASE}/CompareTool/Status/c1"
+
+    def test_compare_trades(self):
+        m = self._p("post", lambda a: a.compare_trades({"x": 1}))
+        assert m.call_args.args[0] == f"{V2_BASE}/CompareTool/Trades"
+
+    def test_data_errors(self):
+        m = self._g(lambda a: a.get_all_portfolio_account_errors())
+        assert m.call_args.args[0] == f"{V2_BASE}/DataErrors/GetAllPortfolioAccounts"
+
+    def test_data_errors_count(self):
+        m = self._g(lambda a: a.get_all_portfolio_account_errors_count())
+        assert m.call_args.args[0] == f"{V2_BASE}/DataErrors/GetAllPortfolioAccountsCount"
+
+    # Communities / PreferenceAudit / SecuritySetting / TradeAnalysis
+    def test_community_trade_queue_details(self):
+        m = self._g(lambda a: a.get_community_trade_queue_details(3))
+        assert m.call_args.args[0] == f"{V2_BASE}/Communities/tradeQueueDetails/3"
+
+    def test_validate_community_model_unassign(self):
+        m = self._p(
+            "post", lambda a: a.validate_community_model_unassign({"x": 1}, apply_delete=True)
+        )
+        assert m.call_args.args[0] == f"{V2_BASE}/Communities/ModelUnAssignValidation"
+        assert m.call_args.kwargs["params"] == {"applyDelete": "true"}
+
+    def test_sync_community_model(self):
+        m = self._p("post", lambda a: a.sync_community_model({"x": 1}))
+        assert m.call_args.args[0] == f"{V2_BASE}/Communities/SyncCommunityModel"
+
+    def test_money_market_pref_audit_history(self):
+        m = self._g(lambda a: a.get_money_market_preference_audit_history(start_date="2026-01-01"))
+        assert m.call_args.args[0] == f"{V2_BASE}/PreferenceAuditHistory/MoneyMarket"
+
+    def test_set_security_setting_equivalents(self):
+        m = self._p("post", lambda a: a.set_security_setting_equivalents("Account", {"x": 1}))
+        assert m.call_args.args[0] == f"{V2_BASE}/SecuritySettingPreference/Equivalents/Account"
+
+    def test_upload_security_setting_equivalents(self):
+        m = self._p("post", lambda a: a.upload_security_setting_equivalents({"x": 1}))
+        assert m.call_args.args[0] == f"{V2_BASE}/SecuritySettingPreference/Equivalents/Upload"
+
+    def test_sync_trade_analysis_report(self):
+        m = self._p("post", lambda a: a.sync_trade_analysis_report({"x": 1}))
+        assert m.call_args.args[0] == f"{V2_BASE}/TradeAnalysisReport/SyncTradeAnalysisReport"
