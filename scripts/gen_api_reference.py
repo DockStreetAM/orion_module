@@ -9,7 +9,6 @@ import re
 import orionapi
 
 CLASSES = ["OrionAPI", "EclipseV1", "EclipseV2", "Eclipse"]
-SRC = inspect.getsource(orionapi)
 
 
 def endpoint_for(func):

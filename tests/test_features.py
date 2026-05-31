@@ -3992,3 +3992,23 @@ class TestVersionConsistency:
         assert m.group(1) == orionapi.__version__, (
             f"pyproject {m.group(1)} != __version__ {orionapi.__version__}"
         )
+
+
+class TestEclipseV1InstanceTrades:
+    """v1 get_instance_trades — flips the MCP get_instance_trades off the escape hatch."""
+
+    def test_instance_trades_no_filter(self):
+        api = _eclipse_v1()
+        mock_get = _mock_get([])
+        with patch("requests.get", mock_get):
+            api.get_instance_trades(5165)
+        assert mock_get.call_args.args[0] == f"{V1_BASE}/tradeorder/instances/5165/trades"
+        assert mock_get.call_args.kwargs["params"] == {}
+
+    def test_instance_trades_status_filter(self):
+        api = _eclipse_v1()
+        mock_get = _mock_get([])
+        with patch("requests.get", mock_get):
+            api.get_instance_trades(5165, status="open")
+        assert mock_get.call_args.args[0] == f"{V1_BASE}/tradeorder/instances/5165/trades"
+        assert mock_get.call_args.kwargs["params"] == {"status": "open"}
