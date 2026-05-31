@@ -1146,3 +1146,101 @@ class TestEclipseV2CoverageBatch2:
         if not inst_id:
             pytest.skip("No trade-instance id field found")
         assert isinstance(eclipse_client.v2.get_trading_instance_trades(inst_id), list)
+
+
+class TestEclipseV2CoverageBatch3:
+    """Live smoke tests for v2 account / portfolio / sleeve reads (coverage batch 3).
+
+    Sleeve strategies are role-gated (SLEEVES) and get_preference needs a valid
+    preference name, so those are unit-tested only.
+    """
+
+    def _account_id(self, client):
+        accounts = client.v1.get_all_accounts()
+        if not accounts:
+            pytest.skip("No accounts available")
+        return accounts[0]["id"]
+
+    def _portfolio_id(self, client):
+        portfolios = client.v1.get_all_portfolios(top=1)
+        if not portfolios:
+            pytest.skip("No portfolios available")
+        return portfolios[0]["id"]
+
+    # no-arg
+    def test_accessible_account_count(self, eclipse_client):
+        assert isinstance(eclipse_client.v2.get_accessible_account_count(), int)
+
+    def test_accessible_portfolio_count(self, eclipse_client):
+        assert isinstance(eclipse_client.v2.get_accessible_portfolio_count(), int)
+
+    def test_user_portfolio_ids(self, eclipse_client):
+        assert isinstance(eclipse_client.v2.get_user_portfolio_ids(), list)
+
+    def test_sleeve_contribution_methods(self, eclipse_client):
+        assert isinstance(eclipse_client.v2.get_sleeve_contribution_methods(), list)
+
+    def test_sleeve_distribution_methods(self, eclipse_client):
+        assert isinstance(eclipse_client.v2.get_sleeve_distribution_methods(), list)
+
+    def test_astro_account_filters(self, eclipse_client):
+        assert isinstance(eclipse_client.v2.get_astro_account_filters(), list)
+
+    def test_astro_accounts(self, eclipse_client):
+        assert isinstance(eclipse_client.v2.get_astro_accounts(), list)
+
+    def test_portfolio_search(self, eclipse_client):
+        assert isinstance(eclipse_client.v2.get_portfolio_search(limit=3), list)
+
+    # account-scoped
+    def test_account_cash_details(self, eclipse_client):
+        assert isinstance(
+            eclipse_client.v2.get_account_cash_details(self._account_id(eclipse_client)), dict
+        )
+
+    def test_account_gain_loss_summary(self, eclipse_client):
+        assert isinstance(
+            eclipse_client.v2.get_account_gain_loss_summary(self._account_id(eclipse_client)),
+            dict,
+        )
+
+    def test_account_history(self, eclipse_client):
+        assert isinstance(
+            eclipse_client.v2.get_account_history(self._account_id(eclipse_client)), list
+        )
+
+    def test_account_transactions(self, eclipse_client):
+        assert isinstance(
+            eclipse_client.v2.get_account_transactions(self._account_id(eclipse_client)), list
+        )
+
+    def test_sleeve_allocations(self, eclipse_client):
+        assert isinstance(
+            eclipse_client.v2.get_sleeve_allocations(self._account_id(eclipse_client)), dict
+        )
+
+    # portfolio-scoped
+    def test_portfolio_allocations(self, eclipse_client):
+        assert isinstance(
+            eclipse_client.v2.get_portfolio_allocations(self._portfolio_id(eclipse_client)), dict
+        )
+
+    def test_portfolio_cash_details(self, eclipse_client):
+        assert isinstance(
+            eclipse_client.v2.get_portfolio_cash_details(self._portfolio_id(eclipse_client)), dict
+        )
+
+    def test_portfolio_gain_loss_summary(self, eclipse_client):
+        assert isinstance(
+            eclipse_client.v2.get_portfolio_gain_loss_summary(self._portfolio_id(eclipse_client)),
+            dict,
+        )
+
+    def test_portfolio_mac_history(self, eclipse_client):
+        assert isinstance(
+            eclipse_client.v2.get_portfolio_mac_history(self._portfolio_id(eclipse_client)), dict
+        )
+
+    def test_portfolio_tree(self, eclipse_client):
+        pid = self._portfolio_id(eclipse_client)
+        assert isinstance(eclipse_client.v2.get_portfolio_tree(portfolio_id=pid), dict)
