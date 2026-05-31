@@ -3389,3 +3389,227 @@ class TestEclipseV1WritesBatch14:
     def test_delete_security_set(self):
         m = self._c("delete", lambda a: a.delete_security_set(9))
         assert m.call_args.args[0] == f"{V1_BASE}/security/securityset/9"
+
+
+class TestEclipseV2CoverageBatch15:
+    """v2 Accounts/Portfolios/Models&securities deepening (batch 15)."""
+
+    def _g(self, fn):
+        api = _eclipse_for_set_asides()
+        m = _mock_get([])
+        with patch("requests.get", m):
+            fn(api)
+        return m
+
+    def _w(self, verb, fn):
+        api = _eclipse_for_set_asides()
+        m = _mock_post({})
+        with patch(f"requests.{verb}", m):
+            fn(api)
+        return m
+
+    def test_get_accounts(self):
+        m = self._g(lambda a: a.get_accounts(filter_id=2))
+        assert m.call_args.args[0] == f"{V2_BASE}/Account/Accounts"
+        assert m.call_args.kwargs["params"] == {"filterId": 2}
+
+    def test_get_account(self):
+        m = self._g(lambda a: a.get_account(57))
+        assert m.call_args.args[0] == f"{V2_BASE}/Account/Accounts/57"
+
+    def test_restricted_plan_accounts(self):
+        m = self._g(lambda a: a.get_restricted_plan_accounts(restricted_plan_id=3))
+        assert m.call_args.args[0] == f"{V2_BASE}/Account/Accounts/RestrictedPlan"
+        assert m.call_args.kwargs["params"] == {"restrictedPlanId": 3}
+
+    def test_date_account_set_asides(self):
+        m = self._g(lambda a: a.get_date_account_set_asides(number_of_days=30))
+        assert m.call_args.args[0] == f"{V2_BASE}/Account/Accounts/dateaccountsetasides"
+
+    def test_expired_set_asides(self):
+        m = self._g(lambda a: a.get_expired_set_asides_and_transactions(number_of_days=30))
+        assert m.call_args.args[0] == (
+            f"{V2_BASE}/Account/Accounts/expiredaccountsetasidesandtransactions"
+        )
+
+    def test_unexpired_set_asides(self):
+        m = self._g(lambda a: a.get_unexpired_set_asides_and_transactions(number_of_days=30))
+        assert m.call_args.args[0] == (
+            f"{V2_BASE}/Account/Accounts/unexpiredaccountsetasidesandtransactions"
+        )
+
+    def test_astro_account_log(self):
+        m = self._g(lambda a: a.get_astro_account_log(account_id=5))
+        assert m.call_args.args[0] == f"{V2_BASE}/Account/AstroAccounts/Log"
+
+    def test_astro_saved_investor_prefs(self):
+        m = self._g(lambda a: a.get_astro_account_saved_investor_preferences(5))
+        assert m.call_args.args[0] == (
+            f"{V2_BASE}/Account/AstroAccounts/preference/5/InvestorPreferences"
+        )
+
+    def test_update_astro_fields(self):
+        m = self._w("post", lambda a: a.update_astro_fields())
+        assert m.call_args.args[0] == f"{V2_BASE}/Account/AstroAccounts/UpdateAstroFields"
+
+    def test_update_astro_account_investor_prefs(self):
+        m = self._w("put", lambda a: a.update_astro_account_investor_preferences(5, {"x": 1}))
+        assert m.call_args.args[0] == f"{V2_BASE}/Account/AstroAccounts/InvestorPreferences/5"
+
+    def test_portfolio_v2(self):
+        m = self._g(lambda a: a.get_portfolio_v2(7))
+        assert m.call_args.args[0] == f"{V2_BASE}/Portfolio/Portfolios/7"
+
+    def test_portfolio_summary(self):
+        m = self._g(lambda a: a.get_portfolio_summary(7))
+        assert m.call_args.args[0] == f"{V2_BASE}/Portfolio/Portfolios/summary/7"
+
+    def test_portfolio_accounts_v2(self):
+        m = self._g(lambda a: a.get_portfolio_accounts_v2(7))
+        assert m.call_args.args[0] == f"{V2_BASE}/Portfolio/Portfolios/7/Accounts"
+
+    def test_portfolios_by_group(self):
+        m = self._g(lambda a: a.get_portfolios_by_group(4))
+        assert m.call_args.args[0] == f"{V2_BASE}/Portfolio/Portfolios/ByPortfolioGroup/4"
+
+    def test_portfolio_list(self):
+        m = self._g(lambda a: a.get_portfolio_list(limit=5))
+        assert m.call_args.args[0] == f"{V2_BASE}/Portfolio/Portfolios/GetPortfolioList"
+        assert m.call_args.kwargs["params"] == {"limit": 5}
+
+    def test_portfolio_out_of_tolerance(self):
+        m = self._g(lambda a: a.get_portfolio_out_of_tolerance(5, 9, asset_type="class"))
+        assert m.call_args.args[0] == f"{V2_BASE}/Portfolio/Portfolios/5/OutOfTolerance/9"
+        assert m.call_args.kwargs["params"] == {"assetType": "class"}
+
+    def test_portfolio_allocations_security(self):
+        m = self._g(lambda a: a.get_portfolio_allocations_security(7, assign_by_security=True))
+        assert m.call_args.args[0] == (
+            f"{V2_BASE}/Portfolio/Portfolios/7/PortfolioAllocationsSecurity"
+        )
+        assert m.call_args.kwargs["params"] == {"assignBySecurity": "true"}
+
+    def test_portfolio_substitutions_history(self):
+        m = self._g(lambda a: a.get_portfolio_substitutions_history(7, from_date="2026-01-01"))
+        assert m.call_args.args[0] == (
+            f"{V2_BASE}/Portfolio/Portfolios/7/PortfolioSubstitutionsHistory"
+        )
+
+    def test_portfolio_team_history(self):
+        m = self._g(lambda a: a.get_portfolio_team_history(7))
+        assert m.call_args.args[0] == f"{V2_BASE}/Portfolio/Portfolios/7/TeamHistory"
+
+    def test_sleeve_strategy_aggregates(self):
+        m = self._g(lambda a: a.get_sleeve_strategy_aggregates())
+        assert m.call_args.args[0] == f"{V2_BASE}/Portfolio/Sleeves/SleeveStrategyAggregates"
+
+    def test_assigned_models(self):
+        m = self._w("post", lambda a: a.get_assigned_models({"x": 1}))
+        assert m.call_args.args[0] == f"{V2_BASE}/Modeling/Models/GetAssignedModels"
+
+    def test_stress_test_results(self):
+        m = self._w("post", lambda a: a.get_stress_test_results({"x": 1}))
+        assert m.call_args.args[0] == f"{V2_BASE}/Modeling/Models/StressTestResults"
+
+    def test_securities_by_name(self):
+        m = self._w("post", lambda a: a.get_securities_by_name(["Apple"]))
+        assert m.call_args.args[0] == f"{V2_BASE}/Security/GetSecuritiesByNameAsync"
+
+    def test_securities_by_ticker(self):
+        m = self._w("post", lambda a: a.get_securities_by_ticker(["AAPL"]))
+        assert m.call_args.args[0] == f"{V2_BASE}/Security/GetSecuritiesByTickerAsync"
+
+    def test_securities_by_oc_external_ids(self):
+        m = self._w("post", lambda a: a.get_securities_by_oc_external_ids(["x"]))
+        assert m.call_args.args[0] == (f"{V2_BASE}/Security/GetSecuritiesByOrionConnectExternalIds")
+
+    def test_security_models(self):
+        m = self._w("post", lambda a: a.get_security_models([1]))
+        assert m.call_args.args[0] == f"{V2_BASE}/Security/GetSecurityModels"
+
+    def test_securities_prices(self):
+        m = self._w("post", lambda a: a.get_securities_prices([1]))
+        assert m.call_args.args[0] == f"{V2_BASE}/Security/SecuritiesPrices"
+
+
+class TestEclipseV1CoverageBatch15:
+    """v1 Accounts/Portfolios/Models&sec-sets deepening (batch 15)."""
+
+    def _g(self, fn):
+        api = _eclipse_v1()
+        m = _mock_get([])
+        with patch("requests.get", m):
+            fn(api)
+        return m
+
+    def _w(self, verb, fn):
+        api = _eclipse_v1()
+        m = _mock_post({})
+        with patch(f"requests.{verb}", m):
+            fn(api)
+        return m
+
+    def test_house_account(self):
+        m = self._g(lambda a: a.get_house_account(3))
+        assert m.call_args.args[0] == f"{V1_BASE}/account/accounts/action/houseAccount/3"
+
+    def test_new_account_template(self):
+        m = self._g(lambda a: a.get_new_account_template())
+        assert m.call_args.args[0] == f"{V1_BASE}/account/accounts/new"
+
+    def test_account_set_aside(self):
+        m = self._g(lambda a: a.get_account_set_aside(5, 3))
+        assert m.call_args.args[0] == f"{V1_BASE}/account/accounts/5/asidecash/3"
+
+    def test_accounts_portfolio_ids_detail(self):
+        m = self._w("post", lambda a: a.get_accounts_portfolio_ids_detail([1]))
+        assert m.call_args.args[0] == f"{V1_BASE}/account/accounts/list/portfolioIdsDetail"
+
+    def test_aside_cash_account_types(self):
+        m = self._g(lambda a: a.get_aside_cash_account_types())
+        assert m.call_args.args[0] == f"{V1_BASE}/portfolio/portfolios/asideCashAccountType"
+
+    def test_portfolio_set_aside(self):
+        m = self._g(lambda a: a.get_portfolio_set_aside(7, 3))
+        assert m.call_args.args[0] == f"{V1_BASE}/portfolio/portfolios/7/asideCash/3"
+
+    def test_list_portfolio_accounts_simple(self):
+        m = self._w("post", lambda a: a.list_portfolio_accounts_simple({"f": 1}))
+        assert m.call_args.args[0] == f"{V1_BASE}/portfolio/portfolios/accounts/simple/list"
+
+    def test_portfolio_levels(self):
+        m = self._w("post", lambda a: a.get_portfolio_levels([1]))
+        assert m.call_args.args[0] == f"{V1_BASE}/portfolio/portfolios/levels"
+
+    def test_new_portfolio_template(self):
+        m = self._g(lambda a: a.get_new_portfolio_template())
+        assert m.call_args.args[0] == f"{V1_BASE}/portfolio/portfolios/new"
+
+    def test_portfolios_by_household(self):
+        m = self._g(lambda a: a.get_portfolios_by_household(99))
+        assert m.call_args.args[0] == f"{V1_BASE}/portfolio/portfolios"
+        assert m.call_args.kwargs["params"] == {"householdIds": 99}
+
+    def test_model_detail_portfolio_ids(self):
+        m = self._g(lambda a: a.get_model_detail_portfolio_ids())
+        assert m.call_args.args[0] == f"{V1_BASE}/modeling/models/modelDetails/portfolioId"
+
+    def test_model_import_error_logs(self):
+        m = self._g(lambda a: a.get_model_import_error_logs())
+        assert m.call_args.args[0] == f"{V1_BASE}/modeling/models/upload/modelImportErrorLogs"
+
+    def test_upload_model(self):
+        m = self._w("post", lambda a: a.upload_model({"x": 1}))
+        assert m.call_args.args[0] == f"{V1_BASE}/modeling/models/upload"
+
+    def test_validate_model_upload(self):
+        m = self._w("post", lambda a: a.validate_model_upload({"x": 1}))
+        assert m.call_args.args[0] == f"{V1_BASE}/modeling/models/upload/validate"
+
+    def test_retry_update_other_model(self):
+        m = self._w("post", lambda a: a.retry_update_other_model({"x": 1}))
+        assert m.call_args.args[0] == f"{V1_BASE}/modeling/models/updateOtherModel/retryProcess"
+
+    def test_security_maintain(self):
+        m = self._g(lambda a: a.get_security_maintain("NY"))
+        assert m.call_args.args[0] == f"{V1_BASE}/security/securities/maintain/NY"
