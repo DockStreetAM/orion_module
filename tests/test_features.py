@@ -3241,3 +3241,151 @@ class TestEclipseV1ReadCoverageBatch13:
     def test_security_set_equivalent_types(self):
         m = self._g(lambda a: a.get_security_set_equivalent_types())
         assert m.call_args.args[0] == f"{V1_BASE}/security/securityset/equivalentType"
+
+
+class TestEclipseV1WritesBatch14:
+    """Verb/URL coverage for v1 non-trade writes + POST-body reads (batch 14)."""
+
+    def _c(self, verb, fn):
+        api = _eclipse_v1()
+        mock = _mock_post({})
+        with patch(f"requests.{verb}", mock):
+            fn(api)
+        return mock
+
+    def test_list_accounts_simple_v1(self):
+        m = self._c("post", lambda a: a.list_accounts_simple_v1({"f": 1}))
+        assert m.call_args.args[0] == f"{V1_BASE}/account/accounts/simple/list"
+        assert m.call_args.kwargs["json"] == {"f": 1}
+
+    def test_account_portfolio_ids(self):
+        m = self._c("post", lambda a: a.get_account_portfolio_ids([1, 2]))
+        assert m.call_args.args[0] == f"{V1_BASE}/account/accounts/portfolioIds"
+
+    def test_list_portfolios_simple_v1(self):
+        m = self._c("post", lambda a: a.list_portfolios_simple_v1({"f": 1}))
+        assert m.call_args.args[0] == f"{V1_BASE}/portfolio/portfolios/simple/list"
+
+    def test_list_models_simple_v1(self):
+        m = self._c("post", lambda a: a.list_models_simple_v1())
+        assert m.call_args.args[0] == f"{V1_BASE}/modeling/models/simple/list"
+
+    def test_models_by_model_details(self):
+        m = self._c("post", lambda a: a.get_models_by_model_details({"x": 1}))
+        assert m.call_args.args[0] == f"{V1_BASE}/modeling/models/modelsByModelDetails"
+
+    def test_submodel_securities(self):
+        m = self._c("post", lambda a: a.get_submodel_securities([1]))
+        assert m.call_args.args[0] == f"{V1_BASE}/modeling/models/submodels/securities"
+
+    def test_update_account_aside_cash(self):
+        m = self._c("put", lambda a: a.update_account_aside_cash(5, 3, {"x": 1}))
+        assert m.call_args.args[0] == f"{V1_BASE}/account/accounts/5/asidecash/3"
+
+    def test_delete_account_aside_cash(self):
+        m = self._c("delete", lambda a: a.delete_account_aside_cash(5, 3))
+        assert m.call_args.args[0] == f"{V1_BASE}/account/accounts/5/asidecash/3"
+
+    def test_update_account_sma(self):
+        m = self._c("put", lambda a: a.update_account_sma(5, {"x": 1}))
+        assert m.call_args.args[0] == f"{V1_BASE}/account/accounts/5/sma/"
+
+    def test_create_portfolio(self):
+        m = self._c("post", lambda a: a.create_portfolio({"name": "P"}))
+        assert m.call_args.args[0] == f"{V1_BASE}/portfolio/portfolios/"
+
+    def test_delete_portfolio(self):
+        m = self._c("delete", lambda a: a.delete_portfolio(7))
+        assert m.call_args.args[0] == f"{V1_BASE}/portfolio/portfolios/7"
+
+    def test_add_portfolio_accounts(self):
+        m = self._c("post", lambda a: a.add_portfolio_accounts(7, [1]))
+        assert m.call_args.args[0] == f"{V1_BASE}/portfolio/portfolios/7/accounts"
+
+    def test_update_portfolio_accounts(self):
+        m = self._c("put", lambda a: a.update_portfolio_accounts(7, [1]))
+        assert m.call_args.args[0] == f"{V1_BASE}/portfolio/portfolios/7/accounts"
+
+    def test_set_portfolio_flag(self):
+        m = self._c("post", lambda a: a.set_portfolio_flag({"x": 1}))
+        assert m.call_args.args[0] == f"{V1_BASE}/portfolio/portfolioFlag"
+
+    def test_delete_portfolio_aside_cash(self):
+        m = self._c("delete", lambda a: a.delete_portfolio_aside_cash(7, 3))
+        assert m.call_args.args[0] == f"{V1_BASE}/portfolio/portfolios/7/asideCash/3"
+
+    def test_update_model(self):
+        m = self._c("put", lambda a: a.update_model(5, {"x": 1}))
+        assert m.call_args.args[0] == f"{V1_BASE}/modeling/models/5"
+
+    def test_update_model_detail_element(self):
+        m = self._c("put", lambda a: a.update_model_detail_element(5, 9, {"x": 1}))
+        assert m.call_args.args[0] == f"{V1_BASE}/modeling/models/5/modelDetail/9"
+
+    def test_create_submodel(self):
+        m = self._c("post", lambda a: a.create_submodel({"name": "S"}))
+        assert m.call_args.args[0] == f"{V1_BASE}/modeling/models/submodels"
+
+    def test_add_submodel_detail(self):
+        m = self._c("post", lambda a: a.add_submodel_detail({"x": 1}))
+        assert m.call_args.args[0] == f"{V1_BASE}/modeling/models/submodels/submodeldetail"
+
+    def test_update_submodel(self):
+        m = self._c("put", lambda a: a.update_submodel(8, {"x": 1}))
+        assert m.call_args.args[0] == f"{V1_BASE}/modeling/models/submodels/8"
+
+    def test_set_submodel_favorite(self):
+        m = self._c("put", lambda a: a.set_submodel_favorite(8, {"fav": True}))
+        assert m.call_args.args[0] == f"{V1_BASE}/modeling/models/submodels/favorites/8"
+
+    def test_copy_model(self):
+        m = self._c("post", lambda a: a.copy_model(5, {"name": "X"}))
+        assert m.call_args.args[0] == f"{V1_BASE}/modeling/models/5/copy"
+
+    def test_copy_submodel(self):
+        m = self._c("post", lambda a: a.copy_submodel(8, {"name": "X"}))
+        assert m.call_args.args[0] == f"{V1_BASE}/modeling/models/submodels/8/copy"
+
+    def test_add_model_portfolios(self):
+        m = self._c("post", lambda a: a.add_model_portfolios(5, [1]))
+        assert m.call_args.args[0] == f"{V1_BASE}/modeling/models/5/portfolios"
+
+    def test_add_model_sleeves(self):
+        m = self._c("post", lambda a: a.add_model_sleeves(5, [1]))
+        assert m.call_args.args[0] == f"{V1_BASE}/modeling/models/5/sleeves"
+
+    def test_delete_model_sleeve(self):
+        m = self._c("delete", lambda a: a.delete_model_sleeve(5, 2))
+        assert m.call_args.args[0] == f"{V1_BASE}/modeling/models/5/sleeves/2"
+
+    def test_delete_model_portfolio(self):
+        m = self._c("delete", lambda a: a.delete_model_portfolio(5, 7))
+        assert m.call_args.args[0] == f"{V1_BASE}/modeling/models/5/portfolios/7"
+
+    def test_export_models(self):
+        m = self._c("post", lambda a: a.export_models({"ids": [1]}))
+        assert m.call_args.args[0] == f"{V1_BASE}/modeling/models/export"
+
+    def test_create_security(self):
+        m = self._c("post", lambda a: a.create_security({"symbol": "X"}))
+        assert m.call_args.args[0] == f"{V1_BASE}/security/securities"
+
+    def test_update_security(self):
+        m = self._c("put", lambda a: a.update_security(42, {"x": 1}))
+        assert m.call_args.args[0] == f"{V1_BASE}/security/securities/42"
+
+    def test_delete_security(self):
+        m = self._c("delete", lambda a: a.delete_security(42))
+        assert m.call_args.args[0] == f"{V1_BASE}/security/securities/42"
+
+    def test_add_security_corporate_action(self):
+        m = self._c("post", lambda a: a.add_security_corporate_action(42, {"x": 1}))
+        assert m.call_args.args[0] == f"{V1_BASE}/security/securities/42/corporateAction"
+
+    def test_set_security_set_favorite(self):
+        m = self._c("put", lambda a: a.set_security_set_favorite(9, {"fav": True}))
+        assert m.call_args.args[0] == f"{V1_BASE}/security/securityset/favorites/9"
+
+    def test_delete_security_set(self):
+        m = self._c("delete", lambda a: a.delete_security_set(9))
+        assert m.call_args.args[0] == f"{V1_BASE}/security/securityset/9"
