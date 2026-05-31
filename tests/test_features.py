@@ -1121,3 +1121,186 @@ class TestEclipseUnifierV2Fallback:
         api = Eclipse(eclipse_token="tok")
         # get_account_holdings exists on v1 -> delegated to v1, not v2
         assert api.get_account_holdings.__self__ is api.v1
+
+
+class TestEclipseV2ReadEndpointsBatch2:
+    """URL/params coverage for v2 reads: Trading instances, Optimization, SavedView, Notes."""
+
+    # --- Trading / TradeInstance ---
+
+    def test_trading_instances_filters(self):
+        api = _eclipse_for_set_asides()
+        mock_get = _mock_get([])
+        with patch("requests.get", mock_get):
+            api.get_trading_instances(trade_instance_id=5, is_enabled=True, is_deleted=False)
+        assert mock_get.call_args.args[0] == f"{V2_BASE}/Trading/TradeInstance"
+        assert mock_get.call_args.kwargs["params"] == {
+            "tradeInstanceId": 5,
+            "isEnabled": "true",
+            "isDeleted": "false",
+        }
+
+    def test_trading_instance_trades(self):
+        api = _eclipse_for_set_asides()
+        mock_get = _mock_get([])
+        with patch("requests.get", mock_get):
+            api.get_trading_instance_trades(88)
+        assert mock_get.call_args.args[0] == f"{V2_BASE}/Trading/TradeInstance/88/Trades"
+
+    def test_trading_instances_for_user(self):
+        api = _eclipse_for_set_asides()
+        mock_get = _mock_get([])
+        with patch("requests.get", mock_get):
+            api.get_trading_instances_for_user("2026-01-01", "2026-01-31", offset=0, limit=50)
+        assert mock_get.call_args.args[0] == f"{V2_BASE}/Trading/TradeInstance/ForUser"
+        assert mock_get.call_args.kwargs["params"] == {
+            "startDate": "2026-01-01",
+            "endDate": "2026-01-31",
+            "offset": 0,
+            "limit": 50,
+        }
+
+    def test_trading_instances_by_date_range(self):
+        api = _eclipse_for_set_asides()
+        mock_get = _mock_get([])
+        with patch("requests.get", mock_get):
+            api.get_trading_instances_by_date_range("2026-01-01", "2026-01-31")
+        assert mock_get.call_args.args[0] == f"{V2_BASE}/Trading/TradeInstance/GetByDateRange"
+        assert mock_get.call_args.kwargs["params"] == {
+            "startDate": "2026-01-01",
+            "endDate": "2026-01-31",
+        }
+
+    def test_trading_instances_paginated(self):
+        api = _eclipse_for_set_asides()
+        mock_get = _mock_get({})
+        with patch("requests.get", mock_get):
+            api.get_trading_instances_paginated(portfolio_id=3, skip=0, take=25)
+        assert mock_get.call_args.args[0] == f"{V2_BASE}/Trading/TradeInstance/Paginated"
+        assert mock_get.call_args.kwargs["params"] == {"portfolioId": 3, "skip": 0, "take": 25}
+
+    def test_trading_instances_with_trades(self):
+        api = _eclipse_for_set_asides()
+        mock_get = _mock_get({})
+        with patch("requests.get", mock_get):
+            api.get_trading_instances_with_trades(portfolio_id=3, order_status="Pending")
+        assert mock_get.call_args.args[0] == f"{V2_BASE}/Trading/TradeInstance/WithTrades"
+        assert mock_get.call_args.kwargs["params"] == {"portfolioId": 3, "orderStatus": "Pending"}
+
+    def test_trading_active_batch_jobs(self):
+        api = _eclipse_for_set_asides()
+        mock_get = _mock_get([])
+        with patch("requests.get", mock_get):
+            api.get_trading_active_batch_jobs()
+        assert mock_get.call_args.args[0] == f"{V2_BASE}/Trading/ActiveBatchJobs"
+        assert mock_get.call_args.kwargs["params"] == {}
+
+    # --- Optimization detail ---
+
+    def test_optimization_accounts(self):
+        api = _eclipse_for_set_asides()
+        mock_get = _mock_get([])
+        with patch("requests.get", mock_get):
+            api.get_optimization_accounts("batch-1")
+        assert mock_get.call_args.args[0] == f"{V2_BASE}/Optimization/accounts/batch-1"
+
+    def test_optimization_account_summary(self):
+        api = _eclipse_for_set_asides()
+        mock_get = _mock_get({})
+        with patch("requests.get", mock_get):
+            api.get_optimization_account_summary("batch-1", account_id=9)
+        assert mock_get.call_args.args[0] == f"{V2_BASE}/Optimization/summaries/batch-1"
+        assert mock_get.call_args.kwargs["params"] == {"accountId": 9}
+
+    def test_optimization_batch_account_summaries(self):
+        api = _eclipse_for_set_asides()
+        mock_get = _mock_get([])
+        with patch("requests.get", mock_get):
+            api.get_optimization_batch_account_summaries("batch-1")
+        assert mock_get.call_args.args[0] == f"{V2_BASE}/Optimization/summaries/batch/batch-1"
+
+    def test_optimization_account_messages(self):
+        api = _eclipse_for_set_asides()
+        mock_get = _mock_get([])
+        with patch("requests.get", mock_get):
+            api.get_optimization_account_messages("batch-1", account_id=9)
+        assert mock_get.call_args.args[0] == f"{V2_BASE}/Optimization/summaries/batch-1/messages"
+        assert mock_get.call_args.kwargs["params"] == {"accountId": 9}
+
+    def test_optimization_log(self):
+        api = _eclipse_for_set_asides()
+        mock_get = _mock_get({})
+        with patch("requests.get", mock_get):
+            api.get_optimization_log(connect_account_id=1, batch_name="b", connect_firm_id=2)
+        assert mock_get.call_args.args[0] == f"{V2_BASE}/Optimization/Log"
+        assert mock_get.call_args.kwargs["params"] == {
+            "connectAccountId": 1,
+            "batchName": "b",
+            "connectFirmId": 2,
+        }
+
+    def test_optimization_holdings_target(self):
+        api = _eclipse_for_set_asides()
+        mock_get = _mock_get({})
+        with patch("requests.get", mock_get):
+            api.get_optimization_holdings_target(9, batch_name="b")
+        assert mock_get.call_args.args[0] == f"{V2_BASE}/Optimization/HoldingsTarget/9"
+        assert mock_get.call_args.kwargs["params"] == {"batchName": "b"}
+
+    # --- SavedView ---
+
+    def test_saved_views(self):
+        api = _eclipse_for_set_asides()
+        mock_get = _mock_get([])
+        with patch("requests.get", mock_get):
+            api.get_saved_views(4, name="My View")
+        assert mock_get.call_args.args[0] == f"{V2_BASE}/SavedView/ViewType/4"
+        assert mock_get.call_args.kwargs["params"] == {"name": "My View"}
+
+    def test_saved_views_ranked(self):
+        api = _eclipse_for_set_asides()
+        mock_get = _mock_get([])
+        with patch("requests.get", mock_get):
+            api.get_saved_views_ranked(4, simple_views=True, filter_required=False)
+        assert mock_get.call_args.args[0] == f"{V2_BASE}/SavedView/ViewType/4/Rank"
+        assert mock_get.call_args.kwargs["params"] == {
+            "simpleViews": "true",
+            "filterRequired": "false",
+        }
+
+    def test_execute_saved_view(self):
+        api = _eclipse_for_set_asides()
+        mock_get = _mock_get({})
+        with patch("requests.get", mock_get):
+            api.execute_saved_view(123)
+        assert mock_get.call_args.args[0] == f"{V2_BASE}/SavedView/Execute/123"
+
+    # --- Notes ---
+
+    def test_get_notes(self):
+        api = _eclipse_for_set_asides()
+        mock_get = _mock_get([])
+        with patch("requests.get", mock_get):
+            api.get_notes("Portfolio", 7)
+        assert mock_get.call_args.args[0] == f"{V2_BASE}/Notes"
+        assert mock_get.call_args.kwargs["params"] == {"relatedType": "Portfolio", "relatedId": 7}
+
+    def test_get_notes_history(self):
+        api = _eclipse_for_set_asides()
+        mock_get = _mock_get([])
+        with patch("requests.get", mock_get):
+            api.get_notes_history("Portfolio", 7, from_date="2026-01-01")
+        assert mock_get.call_args.args[0] == f"{V2_BASE}/Notes/History"
+        assert mock_get.call_args.kwargs["params"] == {
+            "relatedType": "Portfolio",
+            "relatedId": 7,
+            "fromDate": "2026-01-01",
+        }
+
+    def test_get_note_related_entities(self):
+        api = _eclipse_for_set_asides()
+        mock_get = _mock_get([])
+        with patch("requests.get", mock_get):
+            api.get_note_related_entities(7, "Portfolio")
+        assert mock_get.call_args.args[0] == f"{V2_BASE}/Notes/RelatedEntities"
+        assert mock_get.call_args.kwargs["params"] == {"entityId": 7, "entityType": "Portfolio"}
