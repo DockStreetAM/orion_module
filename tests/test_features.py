@@ -1792,3 +1792,124 @@ class TestEclipseV2WriteEndpoints:
             api.delete_tag({"id": 3})
         assert mock_post.call_args.args[0] == f"{V2_BASE}/Tags/delete"
         assert mock_post.call_args.kwargs["json"] == {"id": 3}
+
+
+class TestEclipseV2WriteEndpointsBatch6:
+    """Verb/URL/body coverage for v2 ESG / classification / notification writes.
+
+    Mutating; asserted via mocked requests only (never executed live).
+    """
+
+    # --- ESG ---
+
+    def test_create_esg_theme(self):
+        api = _eclipse_for_set_asides()
+        mock_post = _mock_post({"id": 1})
+        with patch("requests.post", mock_post):
+            api.create_esg_theme({"theme": "Clean"})
+        assert mock_post.call_args.args[0] == f"{V2_BASE}/ESG/Themes"
+        assert mock_post.call_args.kwargs["json"] == {"theme": "Clean"}
+
+    def test_update_esg_theme(self):
+        api = _eclipse_for_set_asides()
+        mock_put = _mock_post({"id": 1})
+        with patch("requests.put", mock_put):
+            api.update_esg_theme({"id": 1, "theme": "Clean"})
+        assert mock_put.call_args.args[0] == f"{V2_BASE}/ESG/Themes"
+
+    def test_delete_esg_themes(self):
+        api = _eclipse_for_set_asides()
+        mock_del = _mock_post({})
+        with patch("requests.delete", mock_del):
+            api.delete_esg_themes([1, 2])
+        assert mock_del.call_args.args[0] == f"{V2_BASE}/ESG/Themes"
+        assert mock_del.call_args.kwargs["json"] == [1, 2]
+
+    def test_create_esg_assignments(self):
+        api = _eclipse_for_set_asides()
+        mock_post = _mock_post([])
+        with patch("requests.post", mock_post):
+            api.create_esg_assignments([{"themeId": 1}])
+        assert mock_post.call_args.args[0] == f"{V2_BASE}/ESG/Assignments"
+        assert mock_post.call_args.kwargs["json"] == [{"themeId": 1}]
+
+    def test_update_esg_restrictions_for_portfolio(self):
+        api = _eclipse_for_set_asides()
+        mock_put = _mock_post({})
+        with patch("requests.put", mock_put):
+            api.update_esg_restrictions_for_portfolio({"portfolioId": 7})
+        assert mock_put.call_args.args[0] == f"{V2_BASE}/ESG/ESGRestrictionsForPortfolio"
+        assert mock_put.call_args.kwargs["json"] == {"portfolioId": 7}
+
+    # --- Asset classification ---
+
+    def test_create_asset_classification_group(self):
+        api = _eclipse_for_set_asides()
+        mock_post = _mock_post({"id": 1})
+        with patch("requests.post", mock_post):
+            api.create_asset_classification_group({"name": "G"})
+        assert mock_post.call_args.args[0] == (f"{V2_BASE}/AssetClassification/ClassificationGroup")
+
+    def test_update_asset_classification_group(self):
+        api = _eclipse_for_set_asides()
+        mock_put = _mock_post({"id": 1})
+        with patch("requests.put", mock_put):
+            api.update_asset_classification_group({"id": 1, "name": "G"})
+        assert mock_put.call_args.args[0] == (f"{V2_BASE}/AssetClassification/ClassificationGroup")
+
+    def test_delete_asset_classification_group(self):
+        api = _eclipse_for_set_asides()
+        mock_del = _mock_post({})
+        with patch("requests.delete", mock_del):
+            api.delete_asset_classification_group(5)
+        assert mock_del.call_args.args[0] == (
+            f"{V2_BASE}/AssetClassification/ClassificationGroup/5"
+        )
+
+    def test_classify_securities(self):
+        api = _eclipse_for_set_asides()
+        mock_post = _mock_post({})
+        with patch("requests.post", mock_post):
+            api.classify_securities([{"securityId": 1, "groupId": 2}])
+        assert mock_post.call_args.args[0] == (
+            f"{V2_BASE}/AssetClassification/Security/Classifications"
+        )
+        assert mock_post.call_args.kwargs["json"] == [{"securityId": 1, "groupId": 2}]
+
+    # --- Notifications ---
+
+    def test_create_notification(self):
+        api = _eclipse_for_set_asides()
+        mock_post = _mock_post({"id": 1})
+        with patch("requests.post", mock_post):
+            api.create_notification({"message": "hi"})
+        assert mock_post.call_args.args[0] == (
+            f"{V2_BASE}/Notifications/Notification/CreateNotification"
+        )
+
+    def test_update_notification(self):
+        api = _eclipse_for_set_asides()
+        mock_put = _mock_post({"id": 1})
+        with patch("requests.put", mock_put):
+            api.update_notification({"id": 1, "message": "hi"})
+        assert mock_put.call_args.args[0] == (
+            f"{V2_BASE}/Notifications/Notification/UpdateNotification"
+        )
+
+    def test_send_notification(self):
+        api = _eclipse_for_set_asides()
+        mock_post = _mock_post({})
+        with patch("requests.post", mock_post):
+            api.send_notification({"to": "u"})
+        assert mock_post.call_args.args[0] == (
+            f"{V2_BASE}/Notifications/Notification/SendNotification"
+        )
+
+    def test_send_trading_notification(self):
+        api = _eclipse_for_set_asides()
+        mock_post = _mock_post({})
+        with patch("requests.post", mock_post):
+            api.send_trading_notification({"to": "u"})
+        assert mock_post.call_args.args[0] == (
+            f"{V2_BASE}/Notifications/Notification/SendTradingNotification"
+        )
