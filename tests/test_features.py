@@ -2093,3 +2093,208 @@ class TestEclipseV2ConfigPrefs:
         with patch("requests.post", mock_post):
             api.delete_portfolio_set_aside_cash({"ids": [1]})
         assert mock_post.call_args.args[0] == f"{V2_BASE}/SetAsideCash/DeletePortfolioSetAsideCash"
+
+
+class TestEclipseV2CrudBatch8:
+    """Verb/URL/body coverage for v2 data-management CRUD/actions (batch 8).
+
+    Mutating + POST-body reads; asserted via mocked requests only.
+    """
+
+    # --- Account ---
+
+    def test_list_accounts(self):
+        api = _eclipse_for_set_asides()
+        mock_post = _mock_post([])
+        with patch("requests.post", mock_post):
+            api.list_accounts(body={"f": 1}, filter_id=2, limit=10, offset=0)
+        assert mock_post.call_args.args[0] == f"{V2_BASE}/Account/Accounts/list"
+        assert mock_post.call_args.kwargs["json"] == {"f": 1}
+        assert mock_post.call_args.kwargs["params"] == {"filterId": 2, "limit": 10, "offset": 0}
+
+    def test_update_account_details(self):
+        api = _eclipse_for_set_asides()
+        mock_put = _mock_post({})
+        with patch("requests.put", mock_put):
+            api.update_account_details(57, {"name": "X"}, with_reverse_sync=True)
+        assert mock_put.call_args.args[0] == f"{V2_BASE}/Account/Accounts/57/Details"
+        assert mock_put.call_args.kwargs["json"] == {"name": "X"}
+        assert mock_put.call_args.kwargs["params"] == {"withReverseSync": "true"}
+
+    def test_set_account_trade_block(self):
+        api = _eclipse_for_set_asides()
+        mock_put = _mock_post({})
+        with patch("requests.put", mock_put):
+            api.set_account_trade_block({"accountIds": [1]})
+        assert mock_put.call_args.args[0] == (
+            f"{V2_BASE}/Account/Accounts/action/setAccountTradeBlock"
+        )
+
+    def test_expire_account_set_asides(self):
+        api = _eclipse_for_set_asides()
+        mock_put = _mock_post({})
+        with patch("requests.put", mock_put):
+            api.expire_account_set_asides({"ids": [1]})
+        assert mock_put.call_args.args[0] == f"{V2_BASE}/Account/Accounts/expireAccountSetAsides"
+
+    def test_set_account_tags(self):
+        api = _eclipse_for_set_asides()
+        mock_put = _mock_post({})
+        with patch("requests.put", mock_put):
+            api.set_account_tags({"tags": ["a"]})
+        assert mock_put.call_args.args[0] == f"{V2_BASE}/Account/Accounts/Tags"
+
+    def test_update_restricted_plan(self):
+        api = _eclipse_for_set_asides()
+        mock_put = _mock_post({})
+        with patch("requests.put", mock_put):
+            api.update_restricted_plan(8, {"x": 1})
+        assert mock_put.call_args.args[0] == f"{V2_BASE}/Account/Accounts/RestrictedPlan/8"
+
+    def test_set_accounts_do_not_trade_reverse_sync(self):
+        api = _eclipse_for_set_asides()
+        mock_post = _mock_post({})
+        with patch("requests.post", mock_post):
+            api.set_accounts_do_not_trade_reverse_sync({"ids": [1]})
+        assert mock_post.call_args.args[0] == f"{V2_BASE}/Account/Accounts/donottradereversesync"
+
+    # --- Astro account actions ---
+
+    def test_start_astro_accounts(self):
+        api = _eclipse_for_set_asides()
+        mock_post = _mock_post({})
+        with patch("requests.post", mock_post):
+            api.start_astro_accounts({"accounts": [1]})
+        assert mock_post.call_args.args[0] == f"{V2_BASE}/Account/AstroAccounts/Start"
+
+    def test_astro_status_count(self):
+        api = _eclipse_for_set_asides()
+        mock_post = _mock_post({})
+        with patch("requests.post", mock_post):
+            api.get_astro_accounts_status_count({"x": 1}, unique_batch_identifier="b1")
+        assert mock_post.call_args.args[0] == f"{V2_BASE}/Account/AstroAccounts/Status/Count"
+        assert mock_post.call_args.kwargs["params"] == {"uniqueBatchIdentifier": "b1"}
+
+    def test_astro_status_detail(self):
+        api = _eclipse_for_set_asides()
+        mock_post = _mock_post([])
+        with patch("requests.post", mock_post):
+            api.get_astro_accounts_status_detail({"x": 1})
+        assert mock_post.call_args.args[0] == f"{V2_BASE}/Account/AstroAccounts/Status/Detail"
+
+    def test_withdraw_astro_cash(self):
+        api = _eclipse_for_set_asides()
+        mock_post = _mock_post({})
+        with patch("requests.post", mock_post):
+            api.withdraw_astro_cash({"amount": 100})
+        assert mock_post.call_args.args[0] == f"{V2_BASE}/Account/AstroAccounts/WithdrawCash"
+
+    def test_delete_astro_securities_restrictions(self):
+        api = _eclipse_for_set_asides()
+        mock_post = _mock_post({})
+        with patch("requests.post", mock_post):
+            api.delete_astro_securities_restrictions(57, {"ids": [1]})
+        assert mock_post.call_args.args[0] == (
+            f"{V2_BASE}/Account/AstroAccounts/57/DeleteSecuritiesRestrictions"
+        )
+
+    def test_save_astro_investor_preferences(self):
+        api = _eclipse_for_set_asides()
+        mock_put = _mock_post({})
+        with patch("requests.put", mock_put):
+            api.save_astro_investor_preferences(57, {"pref": 1})
+        assert mock_put.call_args.args[0] == (
+            f"{V2_BASE}/Account/AstroAccounts/preference/SaveInvestorPreferences/57"
+        )
+
+    # --- Portfolio ---
+
+    def test_list_portfolios(self):
+        api = _eclipse_for_set_asides()
+        mock_post = _mock_post([])
+        with patch("requests.post", mock_post):
+            api.list_portfolios(body={"f": 1}, filter_id=2)
+        assert mock_post.call_args.args[0] == f"{V2_BASE}/Portfolio/Portfolios/list"
+        assert mock_post.call_args.kwargs["params"] == {"filterId": 2}
+
+    def test_get_portfolios_by_external_account_ids(self):
+        api = _eclipse_for_set_asides()
+        mock_post = _mock_post([])
+        with patch("requests.post", mock_post):
+            api.get_portfolios_by_external_account_ids([{"firm": 1, "acct": 2}])
+        assert mock_post.call_args.args[0] == (
+            f"{V2_BASE}/Portfolio/Portfolios/PortfolioInfoByExternalAccountIdList"
+        )
+
+    def test_assign_model_to_portfolios(self):
+        api = _eclipse_for_set_asides()
+        mock_put = _mock_post({})
+        with patch("requests.put", mock_put):
+            api.assign_model_to_portfolios({"portfolioIds": [1], "modelId": 5})
+        assert mock_put.call_args.args[0] == f"{V2_BASE}/Portfolio/Portfolios/action/assignModel"
+
+    def test_set_portfolio_trade_block(self):
+        api = _eclipse_for_set_asides()
+        mock_put = _mock_post({})
+        with patch("requests.put", mock_put):
+            api.set_portfolio_trade_block({"portfolioIds": [1]})
+        assert mock_put.call_args.args[0] == (
+            f"{V2_BASE}/Portfolio/Portfolios/action/setPortfolioTradeBlock"
+        )
+
+    def test_reverse_sync_portfolio_assignments(self):
+        api = _eclipse_for_set_asides()
+        mock_post = _mock_post({})
+        with patch("requests.post", mock_post):
+            api.reverse_sync_portfolio_assignments({"ids": [1]})
+        assert mock_post.call_args.args[0] == (
+            f"{V2_BASE}/Portfolio/Portfolios/Action/ReverseSyncPortfolioAssignments"
+        )
+
+    def test_get_sleeve_strategies_by_firm_ids(self):
+        api = _eclipse_for_set_asides()
+        mock_post = _mock_post([])
+        with patch("requests.post", mock_post):
+            api.get_sleeve_strategies_by_firm_ids([1, 2])
+        assert mock_post.call_args.args[0] == (
+            f"{V2_BASE}/Portfolio/Sleeves/SleeveStrategiesByFirmIds"
+        )
+
+    # --- Model ---
+
+    def test_create_model_from_aggs(self):
+        api = _eclipse_for_set_asides()
+        mock_post = _mock_post({"id": 1})
+        with patch("requests.post", mock_post):
+            api.create_model_from_aggs({"name": "M"})
+        assert mock_post.call_args.args[0] == f"{V2_BASE}/Model/CreateFromModelAggs"
+
+    def test_create_sma_model(self):
+        api = _eclipse_for_set_asides()
+        mock_post = _mock_post({"id": 1})
+        with patch("requests.post", mock_post):
+            api.create_sma_model({"name": "M"})
+        assert mock_post.call_args.args[0] == f"{V2_BASE}/Model/SMA"
+
+    def test_create_ticker_based_model(self):
+        api = _eclipse_for_set_asides()
+        mock_post = _mock_post({"id": 1})
+        with patch("requests.post", mock_post):
+            api.create_ticker_based_model({"name": "M"})
+        assert mock_post.call_args.args[0] == f"{V2_BASE}/Model/TickerBasedModel"
+
+    def test_get_community_models_by_list(self):
+        api = _eclipse_for_set_asides()
+        mock_post = _mock_post([])
+        with patch("requests.post", mock_post):
+            api.get_community_models_by_list([1, 2])
+        assert mock_post.call_args.args[0] == f"{V2_BASE}/Model/GetCommunityModelsByList"
+
+    def test_trigger_security_set_reverse_sync(self):
+        api = _eclipse_for_set_asides()
+        mock_post = _mock_post({})
+        with patch("requests.post", mock_post):
+            api.trigger_security_set_reverse_sync({"setId": 1})
+        assert mock_post.call_args.args[0] == (
+            f"{V2_BASE}/Model/Action/TriggerSecuritySetReverseSync"
+        )
