@@ -1,4 +1,4 @@
-__version__ = "2.14.0"
+__version__ = "2.15.0"
 
 import logging
 import re
@@ -5051,6 +5051,444 @@ class EclipseV1(EclipseBase):
             list: Equivalent-type dicts
         """
         return self.api_request(f"{self.base_url}/security/securityset/equivalentType").json()
+
+    # =========================================================================
+    # v1 writes + POST-body list reads (non-trade CRUD). No trade execution or
+    # approval. Mutating endpoints covered by mocked unit tests only.
+    # =========================================================================
+
+    # --- POST-body filtered reads ---
+
+    def list_accounts_simple_v1(self, body=None):
+        """List accounts (simple) via the v1 POST-body endpoint.
+
+        Args:
+            body: Optional filter DTO (request body)
+
+        Returns:
+            list: Account dicts
+        """
+        return self.api_request(
+            f"{self.base_url}/account/accounts/simple/list", requests.post, json=body
+        ).json()
+
+    def get_account_portfolio_ids(self, body):
+        """Get portfolio IDs for a set of accounts (POST-body read).
+
+        Args:
+            body: Account-ID DTO (request body)
+
+        Returns:
+            list | dict: Portfolio IDs
+        """
+        return self.api_request(
+            f"{self.base_url}/account/accounts/portfolioIds", requests.post, json=body
+        ).json()
+
+    def list_portfolios_simple_v1(self, body=None):
+        """List portfolios (simple) via the v1 POST-body endpoint.
+
+        Args:
+            body: Optional filter DTO (request body)
+
+        Returns:
+            list: Portfolio dicts
+        """
+        return self.api_request(
+            f"{self.base_url}/portfolio/portfolios/simple/list", requests.post, json=body
+        ).json()
+
+    def list_models_simple_v1(self, body=None):
+        """List models (simple) via the v1 POST-body endpoint.
+
+        Args:
+            body: Optional filter DTO (request body)
+
+        Returns:
+            list: Model dicts
+        """
+        return self.api_request(
+            f"{self.base_url}/modeling/models/simple/list", requests.post, json=body
+        ).json()
+
+    def get_models_by_model_details(self, body):
+        """Get models by model-detail criteria (POST-body read).
+
+        Args:
+            body: Criteria DTO (request body)
+
+        Returns:
+            list: Model dicts
+        """
+        return self.api_request(
+            f"{self.base_url}/modeling/models/modelsByModelDetails", requests.post, json=body
+        ).json()
+
+    def get_submodel_securities(self, body):
+        """Get securities for submodels (POST-body read).
+
+        Args:
+            body: Submodel-IDs DTO (request body)
+
+        Returns:
+            list: Security dicts
+        """
+        return self.api_request(
+            f"{self.base_url}/modeling/models/submodels/securities", requests.post, json=body
+        ).json()
+
+    # --- Account / portfolio writes ---
+
+    def update_account_aside_cash(self, account_id, aside_cash_id, payload):
+        """Update an account set-aside cash entry (mutating).
+
+        Args:
+            account_id: Internal account ID
+            aside_cash_id: Set-aside-cash ID
+            payload: Set-aside DTO (request body)
+        """
+        return self.api_request(
+            f"{self.base_url}/account/accounts/{account_id}/asidecash/{aside_cash_id}",
+            requests.put,
+            json=payload,
+        ).json()
+
+    def delete_account_aside_cash(self, account_id, aside_cash_id):
+        """Delete an account set-aside cash entry (mutating).
+
+        Args:
+            account_id: Internal account ID
+            aside_cash_id: Set-aside-cash ID
+        """
+        return self.api_request(
+            f"{self.base_url}/account/accounts/{account_id}/asidecash/{aside_cash_id}",
+            requests.delete,
+        ).json()
+
+    def update_account_sma(self, account_id, payload):
+        """Update SMA settings for an account (mutating).
+
+        Args:
+            account_id: Internal account ID
+            payload: SMA DTO (request body)
+        """
+        return self.api_request(
+            f"{self.base_url}/account/accounts/{account_id}/sma/", requests.put, json=payload
+        ).json()
+
+    def create_portfolio(self, payload):
+        """Create a portfolio (mutating).
+
+        Args:
+            payload: Portfolio DTO (request body)
+
+        Returns:
+            dict: Created portfolio
+        """
+        return self.api_request(
+            f"{self.base_url}/portfolio/portfolios/", requests.post, json=payload
+        ).json()
+
+    def delete_portfolio(self, portfolio_id):
+        """Delete a portfolio (mutating).
+
+        Args:
+            portfolio_id: Portfolio ID
+        """
+        return self.api_request(
+            f"{self.base_url}/portfolio/portfolios/{portfolio_id}", requests.delete
+        ).json()
+
+    def add_portfolio_accounts(self, portfolio_id, payload):
+        """Add accounts to a portfolio (mutating).
+
+        Args:
+            portfolio_id: Portfolio ID
+            payload: Accounts DTO (request body)
+        """
+        return self.api_request(
+            f"{self.base_url}/portfolio/portfolios/{portfolio_id}/accounts",
+            requests.post,
+            json=payload,
+        ).json()
+
+    def update_portfolio_accounts(self, portfolio_id, payload):
+        """Update accounts on a portfolio (mutating).
+
+        Args:
+            portfolio_id: Portfolio ID
+            payload: Accounts DTO (request body)
+        """
+        return self.api_request(
+            f"{self.base_url}/portfolio/portfolios/{portfolio_id}/accounts",
+            requests.put,
+            json=payload,
+        ).json()
+
+    def set_portfolio_flag(self, payload):
+        """Set a portfolio flag (mutating).
+
+        Args:
+            payload: Flag DTO (request body)
+        """
+        return self.api_request(
+            f"{self.base_url}/portfolio/portfolioFlag", requests.post, json=payload
+        ).json()
+
+    def delete_portfolio_aside_cash(self, portfolio_id, aside_cash_id):
+        """Delete a portfolio set-aside cash entry (mutating).
+
+        Args:
+            portfolio_id: Portfolio ID
+            aside_cash_id: Set-aside-cash ID
+        """
+        return self.api_request(
+            f"{self.base_url}/portfolio/portfolios/{portfolio_id}/asideCash/{aside_cash_id}",
+            requests.delete,
+        ).json()
+
+    # --- Model / submodel writes ---
+
+    def update_model(self, model_id, payload):
+        """Update a model (mutating).
+
+        Args:
+            model_id: Model ID
+            payload: Model DTO (request body)
+
+        Returns:
+            dict: Updated model
+        """
+        return self.api_request(
+            f"{self.base_url}/modeling/models/{model_id}", requests.put, json=payload
+        ).json()
+
+    def update_model_detail_element(self, model_id, model_detail_id, payload):
+        """Update a single model-detail element (mutating).
+
+        Args:
+            model_id: Model ID
+            model_detail_id: Model-detail ID
+            payload: Model-detail DTO (request body)
+        """
+        return self.api_request(
+            f"{self.base_url}/modeling/models/{model_id}/modelDetail/{model_detail_id}",
+            requests.put,
+            json=payload,
+        ).json()
+
+    def create_submodel(self, payload):
+        """Create a submodel (mutating).
+
+        Args:
+            payload: Submodel DTO (request body)
+
+        Returns:
+            dict: Created submodel
+        """
+        return self.api_request(
+            f"{self.base_url}/modeling/models/submodels", requests.post, json=payload
+        ).json()
+
+    def add_submodel_detail(self, payload):
+        """Add a submodel detail (mutating).
+
+        Args:
+            payload: Submodel-detail DTO (request body)
+        """
+        return self.api_request(
+            f"{self.base_url}/modeling/models/submodels/submodeldetail",
+            requests.post,
+            json=payload,
+        ).json()
+
+    def update_submodel(self, submodel_id, payload):
+        """Update a submodel (mutating).
+
+        Args:
+            submodel_id: Submodel ID
+            payload: Submodel DTO (request body)
+        """
+        return self.api_request(
+            f"{self.base_url}/modeling/models/submodels/{submodel_id}",
+            requests.put,
+            json=payload,
+        ).json()
+
+    def set_submodel_favorite(self, submodel_id, payload):
+        """Set a submodel as favorite (mutating).
+
+        Args:
+            submodel_id: Submodel ID
+            payload: Favorite DTO (request body)
+        """
+        return self.api_request(
+            f"{self.base_url}/modeling/models/submodels/favorites/{submodel_id}",
+            requests.put,
+            json=payload,
+        ).json()
+
+    def copy_model(self, model_id, payload):
+        """Copy a model (mutating).
+
+        Args:
+            model_id: Model ID to copy
+            payload: Copy DTO (request body)
+
+        Returns:
+            dict: Copied model
+        """
+        return self.api_request(
+            f"{self.base_url}/modeling/models/{model_id}/copy", requests.post, json=payload
+        ).json()
+
+    def copy_submodel(self, submodel_id, payload):
+        """Copy a submodel (mutating).
+
+        Args:
+            submodel_id: Submodel ID to copy
+            payload: Copy DTO (request body)
+
+        Returns:
+            dict: Copied submodel
+        """
+        return self.api_request(
+            f"{self.base_url}/modeling/models/submodels/{submodel_id}/copy",
+            requests.post,
+            json=payload,
+        ).json()
+
+    def add_model_portfolios(self, model_id, payload):
+        """Assign portfolios to a model (mutating).
+
+        Args:
+            model_id: Model ID
+            payload: Portfolio-IDs DTO (request body)
+        """
+        return self.api_request(
+            f"{self.base_url}/modeling/models/{model_id}/portfolios",
+            requests.post,
+            json=payload,
+        ).json()
+
+    def add_model_sleeves(self, model_id, payload):
+        """Add sleeves to a model (mutating).
+
+        Args:
+            model_id: Model ID
+            payload: Sleeves DTO (request body)
+        """
+        return self.api_request(
+            f"{self.base_url}/modeling/models/{model_id}/sleeves", requests.post, json=payload
+        ).json()
+
+    def delete_model_sleeve(self, model_id, sleeve_id):
+        """Delete a sleeve from a model (mutating).
+
+        Args:
+            model_id: Model ID
+            sleeve_id: Sleeve ID
+        """
+        return self.api_request(
+            f"{self.base_url}/modeling/models/{model_id}/sleeves/{sleeve_id}", requests.delete
+        ).json()
+
+    def delete_model_portfolio(self, model_id, portfolio_id):
+        """Unassign a portfolio from a model (mutating).
+
+        Args:
+            model_id: Model ID
+            portfolio_id: Portfolio ID
+        """
+        return self.api_request(
+            f"{self.base_url}/modeling/models/{model_id}/portfolios/{portfolio_id}",
+            requests.delete,
+        ).json()
+
+    def export_models(self, payload):
+        """Export models (POST-body).
+
+        Args:
+            payload: Export DTO (request body)
+
+        Returns:
+            dict | list: Export result
+        """
+        return self.api_request(
+            f"{self.base_url}/modeling/models/export", requests.post, json=payload
+        ).json()
+
+    # --- Security writes ---
+
+    def create_security(self, payload):
+        """Create a security (mutating).
+
+        Args:
+            payload: Security DTO (request body)
+
+        Returns:
+            dict: Created security
+        """
+        return self.api_request(
+            f"{self.base_url}/security/securities", requests.post, json=payload
+        ).json()
+
+    def update_security(self, security_id, payload):
+        """Update a security (mutating).
+
+        Args:
+            security_id: Security ID
+            payload: Security DTO (request body)
+        """
+        return self.api_request(
+            f"{self.base_url}/security/securities/{security_id}", requests.put, json=payload
+        ).json()
+
+    def delete_security(self, security_id):
+        """Delete a security (mutating).
+
+        Args:
+            security_id: Security ID
+        """
+        return self.api_request(
+            f"{self.base_url}/security/securities/{security_id}", requests.delete
+        ).json()
+
+    def add_security_corporate_action(self, security_id, payload):
+        """Add a corporate action to a security (mutating).
+
+        Args:
+            security_id: Security ID
+            payload: Corporate-action DTO (request body)
+        """
+        return self.api_request(
+            f"{self.base_url}/security/securities/{security_id}/corporateAction",
+            requests.post,
+            json=payload,
+        ).json()
+
+    def set_security_set_favorite(self, set_id, payload):
+        """Set a security set as favorite (mutating).
+
+        Args:
+            set_id: Security-set ID
+            payload: Favorite DTO (request body)
+        """
+        return self.api_request(
+            f"{self.base_url}/security/securityset/favorites/{set_id}",
+            requests.put,
+            json=payload,
+        ).json()
+
+    def delete_security_set(self, set_id):
+        """Delete a security set (mutating).
+
+        Args:
+            set_id: Security-set ID
+        """
+        return self.api_request(
+            f"{self.base_url}/security/securityset/{set_id}", requests.delete
+        ).json()
 
 
 class EclipseV2(EclipseBase):
