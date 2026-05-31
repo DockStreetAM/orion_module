@@ -1341,3 +1341,68 @@ class TestEclipseV2ConfigPrefs:
             pytest.skip("No portfolios available")
         result = eclipse_client.v2.get_preference_securities("Portfolio", portfolios[0]["id"])
         assert isinstance(result, dict)
+
+
+class TestEclipseV2OrgRefBatch10:
+    """Live smoke tests for v2 org/workflow/reference reads (batch 10).
+
+    security_search needs external firm/account context and admin/custodian
+    detail + writes need known IDs, so those are unit-tested only.
+    """
+
+    def test_firm_types(self, eclipse_client):
+        assert isinstance(eclipse_client.v2.get_firm_types(), list)
+
+    def test_token_environment(self, eclipse_client):
+        assert isinstance(eclipse_client.v2.get_token_environment(), (str, dict))
+
+    def test_token_info(self, eclipse_client):
+        assert isinstance(eclipse_client.v2.get_token_info(), dict)
+
+    def test_execution_destination_types(self, eclipse_client):
+        assert isinstance(eclipse_client.v2.get_execution_destination_types(), list)
+
+    def test_allocation_instructions(self, eclipse_client):
+        assert isinstance(eclipse_client.v2.get_allocation_instructions(), list)
+
+    def test_trade_execution_allocation_types(self, eclipse_client):
+        assert isinstance(eclipse_client.v2.get_trade_execution_allocation_types(), list)
+
+    def test_trade_execution_types(self, eclipse_client):
+        assert isinstance(eclipse_client.v2.get_trade_execution_types(), list)
+
+    def test_product_classes(self, eclipse_client):
+        assert isinstance(eclipse_client.v2.get_product_classes(), list)
+
+    def test_risk_categories(self, eclipse_client):
+        assert isinstance(eclipse_client.v2.get_risk_categories(), list)
+
+    def test_service_teams(self, eclipse_client):
+        assert isinstance(eclipse_client.v2.get_service_teams(), list)
+
+    def test_service_team(self, eclipse_client):
+        assert isinstance(eclipse_client.v2.get_service_team(), dict)
+
+    def test_advisor_number(self, eclipse_client):
+        assert isinstance(eclipse_client.v2.get_advisor_number(), dict)
+
+    def test_get_teams(self, eclipse_client):
+        assert isinstance(eclipse_client.v2.get_teams(), list)
+
+    def test_firm_logo_base64(self, eclipse_client):
+        assert isinstance(eclipse_client.v2.get_firm_logo_base64(), dict)
+
+    def test_account_search(self, eclipse_client):
+        assert isinstance(eclipse_client.v2.account_search("a", limit=3), list)
+
+    def test_global_search(self, eclipse_client):
+        assert isinstance(eclipse_client.v2.global_search(search="a", limit=3), dict)
+
+    def test_workflow_contexts(self, eclipse_client):
+        assert isinstance(eclipse_client.v2.get_workflow_contexts(), list)
+
+    def test_workflow_tools(self, eclipse_client):
+        assert isinstance(eclipse_client.v2.get_workflow_tools(), list)
+
+    def test_workflow_mcp_servers(self, eclipse_client):
+        assert isinstance(eclipse_client.v2.get_workflow_mcp_servers(), list)
