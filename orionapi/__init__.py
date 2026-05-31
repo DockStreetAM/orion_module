@@ -1,4 +1,4 @@
-__version__ = "2.5.0"
+__version__ = "2.6.0"
 
 import logging
 import re
@@ -5876,6 +5876,173 @@ class EclipseV2(EclipseBase):
         if category is not None:
             path += f"/Category/{category}"
         res = self.api_request(f"{self.base_url_v2}{path}")
+        return res.json()
+
+    # =========================================================================
+    # WRITE methods (mutating). Low-blast-radius user/UI state: SavedView, Notes,
+    # Tags. Bodies are passed through as documented DTOs so callers stay faithful
+    # to the Swagger. These are NOT executed in the integration suite.
+    # =========================================================================
+
+    # --- SavedView writes ---
+
+    def save_saved_view(self, view):
+        """Save (create/update) a saved view for a specific view id.
+
+        Args:
+            view: Saved-view DTO (request body)
+
+        Returns:
+            dict: Saved view
+        """
+        res = self.api_request(
+            f"{self.base_url_v2}/SavedView/SavedViewByIdSave", requests.post, json=view
+        )
+        return res.json()
+
+    def delete_saved_view(self, view_id):
+        """Delete a saved view.
+
+        Args:
+            view_id: Saved-view ID
+        """
+        res = self.api_request(f"{self.base_url_v2}/SavedView/{view_id}", requests.delete)
+        return res.json()
+
+    def delete_saved_views(self, view_ids):
+        """Delete an array of saved views.
+
+        Args:
+            view_ids: List of saved-view IDs (request body)
+        """
+        res = self.api_request(f"{self.base_url_v2}/SavedView/Delete", requests.post, json=view_ids)
+        return res.json()
+
+    def add_saved_view_to_dashboard(self, view_id, is_firm_action_items=None):
+        """Add a saved view to the user-level dashboard.
+
+        Args:
+            view_id: Saved-view ID
+            is_firm_action_items: Optional bool (maps to ``isFirmActionItems``)
+
+        Returns:
+            dict: Result
+        """
+        params = {}
+        if is_firm_action_items is not None:
+            params["isFirmActionItems"] = str(is_firm_action_items).lower()
+        res = self.api_request(
+            f"{self.base_url_v2}/SavedView/{view_id}/dashboard", requests.post, params=params
+        )
+        return res.json()
+
+    def set_default_saved_view(self, view_type_id, view_id):
+        """Set a view as the default view for a view type.
+
+        Args:
+            view_type_id: View-type ID
+            view_id: Saved-view ID
+        """
+        res = self.api_request(
+            f"{self.base_url_v2}/SavedView/ViewType/{view_type_id}/DefaultView/{view_id}",
+            requests.post,
+        )
+        return res.json()
+
+    def save_saved_views_ranking(self, view_type_id, views):
+        """Save the ranking/order of saved views for a view type.
+
+        Args:
+            view_type_id: View-type ID
+            views: Ranked saved-view DTOs (request body)
+        """
+        res = self.api_request(
+            f"{self.base_url_v2}/SavedView/ViewType/{view_type_id}/Rank",
+            requests.post,
+            json=views,
+        )
+        return res.json()
+
+    def get_saved_views_for_types(self, view_type_ids):
+        """Get the current user's saved views for an array of view types (POST query).
+
+        Args:
+            view_type_ids: List of view-type IDs (request body)
+
+        Returns:
+            list: Saved-view dicts
+        """
+        res = self.api_request(
+            f"{self.base_url_v2}/SavedView/ViewType", requests.post, json=view_type_ids
+        )
+        return res.json()
+
+    # --- Notes writes ---
+
+    def add_notes(self, notes):
+        """Create notes.
+
+        Args:
+            notes: List of note DTOs (request body)
+
+        Returns:
+            list | dict: Created notes
+        """
+        res = self.api_request(f"{self.base_url_v2}/Notes/AddList", requests.post, json=notes)
+        return res.json()
+
+    def update_notes(self, notes):
+        """Update notes.
+
+        Args:
+            notes: List of note DTOs (request body)
+
+        Returns:
+            list | dict: Updated notes
+        """
+        res = self.api_request(f"{self.base_url_v2}/Notes/UpdateList", requests.post, json=notes)
+        return res.json()
+
+    def delete_notes(self, notes):
+        """Delete notes (batch).
+
+        Args:
+            notes: List of note DTOs / IDs (request body)
+        """
+        res = self.api_request(f"{self.base_url_v2}/Notes/DeleteList", requests.post, json=notes)
+        return res.json()
+
+    def update_note(self, note_id, note):
+        """Update a single note.
+
+        Args:
+            note_id: Note ID
+            note: Note DTO (request body)
+
+        Returns:
+            dict: Updated note
+        """
+        res = self.api_request(f"{self.base_url_v2}/Notes/{note_id}", requests.put, json=note)
+        return res.json()
+
+    def delete_note(self, note_id):
+        """Delete a single note.
+
+        Args:
+            note_id: Note ID
+        """
+        res = self.api_request(f"{self.base_url_v2}/Notes/{note_id}", requests.delete)
+        return res.json()
+
+    # --- Tags writes ---
+
+    def delete_tag(self, tag):
+        """Delete a tag.
+
+        Args:
+            tag: Tag DTO / identifier (request body)
+        """
+        res = self.api_request(f"{self.base_url_v2}/Tags/delete", requests.post, json=tag)
         return res.json()
 
 
