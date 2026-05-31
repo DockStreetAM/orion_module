@@ -1244,3 +1244,80 @@ class TestEclipseV2CoverageBatch3:
     def test_portfolio_tree(self, eclipse_client):
         pid = self._portfolio_id(eclipse_client)
         assert isinstance(eclipse_client.v2.get_portfolio_tree(portfolio_id=pid), dict)
+
+
+class TestEclipseV2CoverageBatch4:
+    """Live smoke tests for v2 model / modeling / security / lookup reads (batch 4)."""
+
+    def _model_id(self, client):
+        models = client.v1.get_all_models(top=5)
+        if not models:
+            pytest.skip("No models available")
+        return models[0]["id"]
+
+    def _security_set_id(self, client):
+        sets = client.v1.get_all_security_sets()
+        if not sets:
+            pytest.skip("No security sets available")
+        return sets[0]["id"]
+
+    # no-arg / firm-level
+    def test_models_v2(self, eclipse_client):
+        assert isinstance(eclipse_client.v2.get_models_v2(search="a"), list)
+
+    def test_model_types_v2(self, eclipse_client):
+        assert isinstance(eclipse_client.v2.get_model_types_v2(), list)
+
+    def test_stress_test_scenarios(self, eclipse_client):
+        assert isinstance(eclipse_client.v2.get_stress_test_scenarios(), list)
+
+    def test_hidden_levers_durations(self, eclipse_client):
+        assert isinstance(eclipse_client.v2.get_hidden_levers_durations(), list)
+
+    def test_sma_account_type_restrictions(self, eclipse_client):
+        assert isinstance(eclipse_client.v2.get_sma_account_type_restrictions(), list)
+
+    def test_get_securities(self, eclipse_client):
+        assert isinstance(eclipse_client.v2.get_securities(), list)
+
+    def test_security_sets_v2(self, eclipse_client):
+        assert isinstance(eclipse_client.v2.get_security_sets_v2(), list)
+
+    def test_astro_models(self, eclipse_client):
+        assert isinstance(eclipse_client.v2.get_astro_models(), list)
+
+    def test_strategist_models(self, eclipse_client):
+        assert isinstance(eclipse_client.v2.get_strategist_models(), list)
+
+    # model-scoped
+    def test_model_levels(self, eclipse_client):
+        assert isinstance(eclipse_client.v2.get_model_levels(self._model_id(eclipse_client)), list)
+
+    def test_model_analysis_v2(self, eclipse_client):
+        assert isinstance(
+            eclipse_client.v2.get_model_analysis_v2(self._model_id(eclipse_client)), dict
+        )
+
+    def test_model_aggregate_analysis(self, eclipse_client):
+        assert isinstance(
+            eclipse_client.v2.get_model_aggregate_analysis(self._model_id(eclipse_client)), dict
+        )
+
+    def test_model_sync_oc_firms(self, eclipse_client):
+        assert isinstance(
+            eclipse_client.v2.get_model_sync_oc_firms(self._model_id(eclipse_client)), list
+        )
+
+    # securityset-scoped
+    def test_security_set_history(self, eclipse_client):
+        assert isinstance(
+            eclipse_client.v2.get_security_set_history(self._security_set_id(eclipse_client)), list
+        )
+
+    def test_security_set_detail_history(self, eclipse_client):
+        assert isinstance(
+            eclipse_client.v2.get_security_set_detail_history(
+                self._security_set_id(eclipse_client)
+            ),
+            dict,
+        )
