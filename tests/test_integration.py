@@ -1321,3 +1321,23 @@ class TestEclipseV2CoverageBatch4:
             ),
             dict,
         )
+
+
+class TestEclipseV2ConfigPrefs:
+    """Live smoke tests for the verifiable config/preference reads (batch 7).
+
+    Money-market / tax-lot preferences need a specific relatedType enum, and
+    configuration / feature-flag reads need known IDs, so those plus all writes
+    are unit-tested only.
+    """
+
+    def test_previous_business_day(self, eclipse_client):
+        result = eclipse_client.v2.get_previous_business_day("2026-05-29")
+        assert isinstance(result, (str, dict))
+
+    def test_preference_securities(self, eclipse_client):
+        portfolios = eclipse_client.v1.get_all_portfolios(top=1)
+        if not portfolios:
+            pytest.skip("No portfolios available")
+        result = eclipse_client.v2.get_preference_securities("Portfolio", portfolios[0]["id"])
+        assert isinstance(result, dict)

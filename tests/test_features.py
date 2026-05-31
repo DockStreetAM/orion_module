@@ -1913,3 +1913,183 @@ class TestEclipseV2WriteEndpointsBatch6:
         assert mock_post.call_args.args[0] == (
             f"{V2_BASE}/Notifications/Notification/SendTradingNotification"
         )
+
+
+class TestEclipseV2ConfigPrefs:
+    """Config & preference reads/writes (batch 7). Writes asserted via mocks only."""
+
+    # --- preference reads ---
+
+    def test_preference_securities(self):
+        api = _eclipse_for_set_asides()
+        mock_get = _mock_get([])
+        with patch("requests.get", mock_get):
+            api.get_preference_securities("Portfolio", 7)
+        assert (
+            mock_get.call_args.args[0] == f"{V2_BASE}/Preference/Preference/Portfolio/Securities/7"
+        )
+
+    def test_tax_lot_depletion_preference(self):
+        api = _eclipse_for_set_asides()
+        mock_get = _mock_get({})
+        with patch("requests.get", mock_get):
+            api.get_tax_lot_depletion_preference("Account", 5, preference_value_id=2)
+        assert mock_get.call_args.args[0] == (
+            f"{V2_BASE}/Preference/Preference/Account/taxLotDepletionMethodPreference/5"
+        )
+        assert mock_get.call_args.kwargs["params"] == {"preferenceValueId": 2}
+
+    def test_tax_lot_depletion_preference_master(self):
+        api = _eclipse_for_set_asides()
+        mock_get = _mock_get({})
+        with patch("requests.get", mock_get):
+            api.get_tax_lot_depletion_preference_master("Account")
+        assert mock_get.call_args.args[0] == (
+            f"{V2_BASE}/Preference/Preference/Account/taxLotDepletionMethodPreference/Master"
+        )
+
+    def test_money_market_allocation_preference(self):
+        api = _eclipse_for_set_asides()
+        mock_get = _mock_get({})
+        with patch("requests.get", mock_get):
+            api.get_money_market_allocation_preference("Portfolio", 7)
+        assert mock_get.call_args.args[0] == (
+            f"{V2_BASE}/Preference/Preference/MoneyMarketPreference/Allocation/Portfolio/7"
+        )
+
+    def test_money_market_allocation_preference_master(self):
+        api = _eclipse_for_set_asides()
+        mock_get = _mock_get({})
+        with patch("requests.get", mock_get):
+            api.get_money_market_allocation_preference_master("Portfolio")
+        assert mock_get.call_args.args[0] == (
+            f"{V2_BASE}/Preference/Preference/MoneyMarketPreference/Allocation/Portfolio/Master"
+        )
+
+    def test_money_market_fund_preference(self):
+        api = _eclipse_for_set_asides()
+        mock_get = _mock_get({})
+        with patch("requests.get", mock_get):
+            api.get_money_market_fund_preference("Account", 5)
+        assert mock_get.call_args.args[0] == (
+            f"{V2_BASE}/Preference/Preference/MoneyMarketPreference/Fund/Account/5"
+        )
+
+    def test_money_market_fund_preference_master(self):
+        api = _eclipse_for_set_asides()
+        mock_get = _mock_get({})
+        with patch("requests.get", mock_get):
+            api.get_money_market_fund_preference_master("Account")
+        assert mock_get.call_args.args[0] == (
+            f"{V2_BASE}/Preference/Preference/MoneyMarketPreference/Fund/Account/Master"
+        )
+
+    def test_money_market_fund_preference_by_security(self):
+        api = _eclipse_for_set_asides()
+        mock_get = _mock_get({})
+        with patch("requests.get", mock_get):
+            api.get_money_market_fund_preference_by_security(42)
+        assert mock_get.call_args.args[0] == (
+            f"{V2_BASE}/Preference/Preference/MoneyMarketPreference/Fund/Security/42"
+        )
+
+    # --- preference writes ---
+
+    def test_set_account_preferences(self):
+        api = _eclipse_for_set_asides()
+        mock_post = _mock_post({})
+        with patch("requests.post", mock_post):
+            api.set_account_preferences({"accountId": 1})
+        assert mock_post.call_args.args[0] == f"{V2_BASE}/Preference/Preference/AccountPreferences"
+        assert mock_post.call_args.kwargs["json"] == {"accountId": 1}
+
+    def test_update_security_preference_batch_job(self):
+        api = _eclipse_for_set_asides()
+        mock_put = _mock_post({})
+        with patch("requests.put", mock_put):
+            api.update_security_preference_batch_job({"jobId": 1})
+        assert mock_put.call_args.args[0] == (
+            f"{V2_BASE}/Preference/Preference/UpdateBatchJobForSecurityPreferenceChange"
+        )
+
+    def test_update_money_market_allocation_preference(self):
+        api = _eclipse_for_set_asides()
+        mock_put = _mock_post({})
+        with patch("requests.put", mock_put):
+            api.update_money_market_allocation_preference({"x": 1})
+        assert mock_put.call_args.args[0] == (
+            f"{V2_BASE}/Preference/Preference/UpdateMoneyMarketAllocationPreference"
+        )
+
+    def test_update_money_market_fund_preference(self):
+        api = _eclipse_for_set_asides()
+        mock_put = _mock_post({})
+        with patch("requests.put", mock_put):
+            api.update_money_market_fund_preference({"x": 1})
+        assert mock_put.call_args.args[0] == (
+            f"{V2_BASE}/Preference/Preference/UpdateMoneyMarketFundPreference"
+        )
+
+    # --- configuration / feature flags / business day ---
+
+    def test_get_configuration(self):
+        api = _eclipse_for_set_asides()
+        mock_get = _mock_get({})
+        with patch("requests.get", mock_get):
+            api.get_configuration(99)
+        assert mock_get.call_args.args[0] == f"{V2_BASE}/Configuration/99"
+
+    def test_delete_configuration(self):
+        api = _eclipse_for_set_asides()
+        mock_del = _mock_post({})
+        with patch("requests.delete", mock_del):
+            api.delete_configuration(99)
+        assert mock_del.call_args.args[0] == f"{V2_BASE}/Configuration/99"
+
+    def test_get_feature_flag(self):
+        api = _eclipse_for_set_asides()
+        mock_get = _mock_get({})
+        with patch("requests.get", mock_get):
+            api.get_feature_flag("NewUI")
+        assert mock_get.call_args.args[0] == f"{V2_BASE}/FeatureFlags/NewUI"
+
+    def test_get_previous_business_day(self):
+        api = _eclipse_for_set_asides()
+        mock_get = _mock_get({})
+        with patch("requests.get", mock_get):
+            api.get_previous_business_day("2026-05-30")
+        assert mock_get.call_args.args[0] == f"{V2_BASE}/BusinessDayRules/PreviousDay"
+        assert mock_get.call_args.kwargs["params"] == {"referenceDate": "2026-05-30"}
+
+    # --- set-aside cash ---
+
+    def test_get_set_aside_expiring_transactions(self):
+        api = _eclipse_for_set_asides()
+        mock_get = _mock_get([])
+        with patch("requests.get", mock_get):
+            api.get_set_aside_expiring_transactions(5, set_aside_type="Account")
+        assert mock_get.call_args.args[0] == (
+            f"{V2_BASE}/SetAsideCash/SetAsideExpiringTransactions/5"
+        )
+        assert mock_get.call_args.kwargs["params"] == {"setAsideType": "Account"}
+
+    def test_billing_set_aside_cash(self):
+        api = _eclipse_for_set_asides()
+        mock_post = _mock_post({})
+        with patch("requests.post", mock_post):
+            api.billing_set_aside_cash({"accountId": 1})
+        assert mock_post.call_args.args[0] == f"{V2_BASE}/SetAsideCash/BillingSetAsideCash"
+
+    def test_delete_account_set_aside_cash(self):
+        api = _eclipse_for_set_asides()
+        mock_post = _mock_post({})
+        with patch("requests.post", mock_post):
+            api.delete_account_set_aside_cash({"ids": [1]})
+        assert mock_post.call_args.args[0] == f"{V2_BASE}/SetAsideCash/DeleteAccountSetAsideCash"
+
+    def test_delete_portfolio_set_aside_cash(self):
+        api = _eclipse_for_set_asides()
+        mock_post = _mock_post({})
+        with patch("requests.post", mock_post):
+            api.delete_portfolio_set_aside_cash({"ids": [1]})
+        assert mock_post.call_args.args[0] == f"{V2_BASE}/SetAsideCash/DeletePortfolioSetAsideCash"
