@@ -1545,3 +1545,29 @@ class TestEclipseCoverageBatch16Sweep:
             pytest.skip("no accounts")
         result = eclipse_client.v1.get_account_portfolio_id_by_firm(accts[0]["id"], 1)
         assert isinstance(result, (list, dict, int))
+
+
+class TestEclipseV1TradeToolRefBatch17:
+    """Live smoke for v1 tradetool reference reads (batch 17).
+
+    Generate/TLH-action and admin-token endpoints are mutating/sensitive, so
+    they are unit-tested only.
+    """
+
+    def test_priority_rankings(self, eclipse_client):
+        assert isinstance(eclipse_client.v1.get_trade_priority_rankings(), list)
+
+    def test_allow_wash_sales(self, eclipse_client):
+        assert isinstance(eclipse_client.v1.get_allow_wash_sales_options(), list)
+
+    def test_allow_short_term_gains(self, eclipse_client):
+        assert isinstance(eclipse_client.v1.get_allow_short_term_gains_options(), list)
+
+    def test_trade_side(self, eclipse_client):
+        assert isinstance(eclipse_client.v1.get_trade_side_options(), list)
+
+    def test_tlh_gainloss_options(self, eclipse_client):
+        assert isinstance(eclipse_client.v1.get_tlh_gainloss_options(), (list, dict))
+
+    def test_tactical_rebalance_cash_protection(self, eclipse_client):
+        assert isinstance(eclipse_client.v1.get_tactical_rebalance_cash_protection(), (list, dict))
