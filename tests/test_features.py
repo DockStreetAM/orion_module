@@ -3928,3 +3928,39 @@ class TestEclipseV1TradeToolAdminBatch17:
     def test_logout(self):
         m = self._v1("get", lambda a: a.logout())
         assert m.call_args.args[0] == f"{V1_BASE}/admin/logout"
+
+
+class TestTypedResponseModels:
+    """The generated TypedDict models + return-type annotations (2.19.0)."""
+
+    def test_models_module_exports_typeddicts(self):
+        from orionapi import models
+
+        # A representative sample of generated response DTOs exist.
+        for name in (
+            "AccountDetailResponseDto",
+            "PortfolioDetails",
+            "AccountCashDetailsDto",
+            "EsgThemeDto",
+            "AccountSetAsideCashResponseDto",
+        ):
+            assert hasattr(models, name), name
+
+    def test_return_annotations_resolve(self):
+        import typing
+
+        import orionapi
+        from orionapi import models
+
+        hints = typing.get_type_hints(
+            orionapi.EclipseV2.get_account, globalns=vars(orionapi)
+        )
+        assert hints["return"] is models.AccountDetailResponseDto
+
+    def test_typeddict_is_dict_at_runtime(self):
+        # TypedDicts are plain dicts at runtime — backward compatible.
+        from orionapi import models
+
+        inst = models.EsgThemeDto(id=1, theme="Clean")
+        assert isinstance(inst, dict)
+        assert inst["theme"] == "Clean"
