@@ -1479,3 +1479,53 @@ class TestEclipseV1ReadCoverageBatch13:
         if not models:
             pytest.skip("No models available")
         assert isinstance(eclipse_client.v1.get_model_security_types(models[0]["id"]), (list, dict))
+
+
+class TestEclipseCoverageBatch15:
+    """Live smoke tests for batch-15 account/portfolio/model/security reads."""
+
+    def _pid(self, c):
+        ps = c.v1.get_all_portfolios(top=1)
+        if not ps:
+            pytest.skip("no portfolios")
+        return ps[0]["id"]
+
+    def test_v2_get_accounts(self, eclipse_client):
+        assert isinstance(eclipse_client.v2.get_accounts(), list)
+
+    def test_v2_get_account(self, eclipse_client):
+        accts = eclipse_client.v1.get_all_accounts()
+        if not accts:
+            pytest.skip("no accounts")
+        assert isinstance(eclipse_client.v2.get_account(accts[0]["id"]), dict)
+
+    def test_v2_portfolio_v2(self, eclipse_client):
+        assert isinstance(eclipse_client.v2.get_portfolio_v2(self._pid(eclipse_client)), dict)
+
+    def test_v2_portfolio_summary(self, eclipse_client):
+        assert isinstance(eclipse_client.v2.get_portfolio_summary(self._pid(eclipse_client)), dict)
+
+    def test_v2_portfolio_accounts_v2(self, eclipse_client):
+        assert isinstance(
+            eclipse_client.v2.get_portfolio_accounts_v2(self._pid(eclipse_client)), list
+        )
+
+    def test_v2_portfolio_team_history(self, eclipse_client):
+        assert isinstance(
+            eclipse_client.v2.get_portfolio_team_history(self._pid(eclipse_client)), list
+        )
+
+    def test_v2_portfolio_list(self, eclipse_client):
+        assert isinstance(eclipse_client.v2.get_portfolio_list(limit=3), list)
+
+    def test_v2_securities_by_ticker(self, eclipse_client):
+        assert isinstance(eclipse_client.v2.get_securities_by_ticker(["AAPL"]), list)
+
+    def test_v1_aside_cash_account_types(self, eclipse_client):
+        assert isinstance(eclipse_client.v1.get_aside_cash_account_types(), list)
+
+    def test_v1_model_detail_portfolio_ids(self, eclipse_client):
+        assert isinstance(eclipse_client.v1.get_model_detail_portfolio_ids(), (list, dict))
+
+    def test_v1_new_account_template(self, eclipse_client):
+        assert isinstance(eclipse_client.v1.get_new_account_template(), (list, dict))

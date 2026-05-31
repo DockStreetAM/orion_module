@@ -1,4 +1,4 @@
-__version__ = "2.15.0"
+__version__ = "2.16.0"
 
 import logging
 import re
@@ -5490,6 +5490,191 @@ class EclipseV1(EclipseBase):
             f"{self.base_url}/security/securityset/{set_id}", requests.delete
         ).json()
 
+    # =========================================================================
+    # Coverage batch 15 (v1): deepen Accounts / Portfolios / Models & sec sets.
+    # =========================================================================
+
+    def get_house_account(self, custodian_id):
+        """Get the house account for a custodian.
+
+        Args:
+            custodian_id: Custodian ID
+
+        Returns:
+            dict: House account
+        """
+        return self.api_request(
+            f"{self.base_url}/account/accounts/action/houseAccount/{custodian_id}"
+        ).json()
+
+    def get_new_account_template(self):
+        """Get a blank/new account template.
+
+        Returns:
+            dict: New-account template
+        """
+        return self.api_request(f"{self.base_url}/account/accounts/new").json()
+
+    def get_account_set_aside(self, account_id, aside_cash_id):
+        """Get a single account set-aside cash entry.
+
+        Args:
+            account_id: Internal account ID
+            aside_cash_id: Set-aside-cash ID
+
+        Returns:
+            dict: Set-aside entry
+        """
+        return self.api_request(
+            f"{self.base_url}/account/accounts/{account_id}/asidecash/{aside_cash_id}"
+        ).json()
+
+    def get_accounts_portfolio_ids_detail(self, body):
+        """Get portfolio-id detail for a set of accounts (POST-body read).
+
+        Args:
+            body: Account-IDs DTO (request body)
+
+        Returns:
+            list | dict: Portfolio-id detail
+        """
+        return self.api_request(
+            f"{self.base_url}/account/accounts/list/portfolioIdsDetail", requests.post, json=body
+        ).json()
+
+    def get_aside_cash_account_types(self):
+        """Get the set-aside-cash account types.
+
+        Returns:
+            list: Account-type dicts
+        """
+        return self.api_request(f"{self.base_url}/portfolio/portfolios/asideCashAccountType").json()
+
+    def get_portfolio_set_aside(self, portfolio_id, aside_cash_id):
+        """Get a single portfolio set-aside cash entry.
+
+        Args:
+            portfolio_id: Portfolio ID
+            aside_cash_id: Set-aside-cash ID
+
+        Returns:
+            dict: Set-aside entry
+        """
+        return self.api_request(
+            f"{self.base_url}/portfolio/portfolios/{portfolio_id}/asideCash/{aside_cash_id}"
+        ).json()
+
+    def list_portfolio_accounts_simple(self, body):
+        """List portfolio accounts (simple) via the v1 POST-body endpoint.
+
+        Args:
+            body: Filter DTO (request body)
+
+        Returns:
+            list: Account dicts
+        """
+        return self.api_request(
+            f"{self.base_url}/portfolio/portfolios/accounts/simple/list", requests.post, json=body
+        ).json()
+
+    def get_portfolio_levels(self, body):
+        """Get portfolio levels (POST-body read).
+
+        Args:
+            body: Portfolio-IDs DTO (request body)
+
+        Returns:
+            list | dict: Portfolio levels
+        """
+        return self.api_request(
+            f"{self.base_url}/portfolio/portfolios/levels", requests.post, json=body
+        ).json()
+
+    def get_new_portfolio_template(self):
+        """Get a blank/new portfolio template.
+
+        Returns:
+            dict: New-portfolio template
+        """
+        return self.api_request(f"{self.base_url}/portfolio/portfolios/new").json()
+
+    def get_portfolios_by_household(self, household_ids):
+        """Get portfolios for the given household IDs.
+
+        Args:
+            household_ids: Household ID(s) (maps to ``householdIds``)
+
+        Returns:
+            list: Portfolio dicts
+        """
+        return self.api_request(
+            f"{self.base_url}/portfolio/portfolios", params={"householdIds": household_ids}
+        ).json()
+
+    def get_model_detail_portfolio_ids(self):
+        """Get model-detail portfolio IDs.
+
+        Returns:
+            list | dict: Portfolio IDs
+        """
+        return self.api_request(f"{self.base_url}/modeling/models/modelDetails/portfolioId").json()
+
+    def get_model_import_error_logs(self):
+        """Get model-import error logs.
+
+        Returns:
+            list: Error-log dicts
+        """
+        return self.api_request(
+            f"{self.base_url}/modeling/models/upload/modelImportErrorLogs"
+        ).json()
+
+    def upload_model(self, payload):
+        """Upload a model file (mutating).
+
+        Args:
+            payload: Upload DTO (request body)
+        """
+        return self.api_request(
+            f"{self.base_url}/modeling/models/upload", requests.post, json=payload
+        ).json()
+
+    def validate_model_upload(self, payload):
+        """Validate a model upload (POST-body).
+
+        Args:
+            payload: Upload DTO (request body)
+
+        Returns:
+            dict: Validation result
+        """
+        return self.api_request(
+            f"{self.base_url}/modeling/models/upload/validate", requests.post, json=payload
+        ).json()
+
+    def retry_update_other_model(self, payload):
+        """Retry the update-other-model process (mutating).
+
+        Args:
+            payload: Retry DTO (request body)
+        """
+        return self.api_request(
+            f"{self.base_url}/modeling/models/updateOtherModel/retryProcess",
+            requests.post,
+            json=payload,
+        ).json()
+
+    def get_security_maintain(self, location):
+        """Get security maintenance data for a location.
+
+        Args:
+            location: Maintenance location
+
+        Returns:
+            list | dict: Maintenance data
+        """
+        return self.api_request(f"{self.base_url}/security/securities/maintain/{location}").json()
+
 
 class EclipseV2(EclipseBase):
     """Eclipse client targeting the v2 API surface (``/api/v2/...``) only.
@@ -9331,6 +9516,435 @@ class EclipseV2(EclipseBase):
             json=payload,
         )
         return res.json()
+
+    # =========================================================================
+    # Coverage batch 15 (v2): deepen Accounts / Portfolios / Models & securities.
+    # =========================================================================
+
+    # --- Accounts ---
+
+    def get_accounts(self, filter_id=None):
+        """Get accounts (v2 list).
+
+        Args:
+            filter_id: Optional filter ID (maps to ``filterId``)
+
+        Returns:
+            list: Account dicts
+        """
+        params = {}
+        if filter_id is not None:
+            params["filterId"] = filter_id
+        return self.api_request(f"{self.base_url_v2}/Account/Accounts", params=params).json()
+
+    def get_account(self, account_id):
+        """Get an account's detail (v2).
+
+        Args:
+            account_id: Account ID
+
+        Returns:
+            dict: Account detail
+        """
+        return self.api_request(f"{self.base_url_v2}/Account/Accounts/{account_id}").json()
+
+    def get_restricted_plan_accounts(self, restricted_plan_id=None, external_plan_id=None):
+        """Get the accounts linked to a restricted plan.
+
+        Args:
+            restricted_plan_id: Optional restricted-plan ID (``restrictedPlanId``)
+            external_plan_id: Optional external plan ID (``externalPlanId``)
+
+        Returns:
+            list: Account dicts
+        """
+        params = {}
+        if restricted_plan_id is not None:
+            params["restrictedPlanId"] = restricted_plan_id
+        if external_plan_id is not None:
+            params["externalPlanId"] = external_plan_id
+        return self.api_request(
+            f"{self.base_url_v2}/Account/Accounts/RestrictedPlan", params=params
+        ).json()
+
+    def get_date_account_set_asides(self, condition=None, number_of_days=None):
+        """Get date-based account set-asides over a range.
+
+        Args:
+            condition: Optional condition (maps to ``condition``)
+            number_of_days: Optional day count (maps to ``numberOfDays``)
+
+        Returns:
+            list: Set-aside dicts
+        """
+        params = {}
+        if condition is not None:
+            params["condition"] = condition
+        if number_of_days is not None:
+            params["numberOfDays"] = number_of_days
+        return self.api_request(
+            f"{self.base_url_v2}/Account/Accounts/dateaccountsetasides", params=params
+        ).json()
+
+    def get_expired_set_asides_and_transactions(self, transactions_types=None, number_of_days=None):
+        """Get expired account set-asides and the transactions that expired them.
+
+        Args:
+            transactions_types: Optional transaction types (``transactionsTypes``)
+            number_of_days: Optional day count (``numberOfDays``)
+
+        Returns:
+            list: Set-aside/transaction dicts
+        """
+        params = {}
+        if transactions_types is not None:
+            params["transactionsTypes"] = transactions_types
+        if number_of_days is not None:
+            params["numberOfDays"] = number_of_days
+        return self.api_request(
+            f"{self.base_url_v2}/Account/Accounts/expiredaccountsetasidesandtransactions",
+            params=params,
+        ).json()
+
+    def get_unexpired_set_asides_and_transactions(
+        self, transactions_types=None, number_of_days=None
+    ):
+        """Get unexpired account set-asides that had transactions.
+
+        Args:
+            transactions_types: Optional transaction types (``transactionsTypes``)
+            number_of_days: Optional day count (``numberOfDays``)
+
+        Returns:
+            list: Set-aside/transaction dicts
+        """
+        params = {}
+        if transactions_types is not None:
+            params["transactionsTypes"] = transactions_types
+        if number_of_days is not None:
+            params["numberOfDays"] = number_of_days
+        return self.api_request(
+            f"{self.base_url_v2}/Account/Accounts/unexpiredaccountsetasidesandtransactions",
+            params=params,
+        ).json()
+
+    def get_astro_account_log(self, account_id=None, batch_name=None, connect_firm_id=None):
+        """Get the Astro account optimization log.
+
+        Args:
+            account_id: Optional account ID (``accountId``)
+            batch_name: Optional batch name (``batchName``)
+            connect_firm_id: Optional Orion Connect firm ID (``connectFirmId``)
+
+        Returns:
+            dict | list: Optimization log
+        """
+        params = {}
+        if account_id is not None:
+            params["accountId"] = account_id
+        if batch_name is not None:
+            params["batchName"] = batch_name
+        if connect_firm_id is not None:
+            params["connectFirmId"] = connect_firm_id
+        return self.api_request(
+            f"{self.base_url_v2}/Account/AstroAccounts/Log", params=params
+        ).json()
+
+    def get_astro_account_saved_investor_preferences(self, account_id):
+        """Get the saved Astro investor preferences for an account.
+
+        Args:
+            account_id: Account ID
+
+        Returns:
+            dict: Investor preferences
+        """
+        return self.api_request(
+            f"{self.base_url_v2}/Account/AstroAccounts/preference/{account_id}/InvestorPreferences"
+        ).json()
+
+    def update_astro_fields(self):
+        """Trigger an Astro-fields update (mutating)."""
+        return self.api_request(
+            f"{self.base_url_v2}/Account/AstroAccounts/UpdateAstroFields", requests.post
+        ).json()
+
+    def update_astro_account_investor_preferences(self, account_id, payload, al_client_id=None):
+        """Update Astro investor preferences for an account (mutating).
+
+        Args:
+            account_id: Account ID
+            payload: Investor-preferences DTO (request body)
+            al_client_id: Optional AL client ID (``alClientId``)
+        """
+        params = {}
+        if al_client_id is not None:
+            params["alClientId"] = al_client_id
+        return self.api_request(
+            f"{self.base_url_v2}/Account/AstroAccounts/InvestorPreferences/{account_id}",
+            requests.put,
+            json=payload,
+            params=params,
+        ).json()
+
+    # --- Portfolios ---
+
+    def get_portfolio_v2(self, portfolio_id):
+        """Get portfolio details (v2).
+
+        Args:
+            portfolio_id: Portfolio ID
+
+        Returns:
+            dict: Portfolio details
+        """
+        return self.api_request(f"{self.base_url_v2}/Portfolio/Portfolios/{portfolio_id}").json()
+
+    def get_portfolio_summary(self, portfolio_id):
+        """Get the portfolio summary (v2 beta).
+
+        Args:
+            portfolio_id: Portfolio ID
+
+        Returns:
+            dict: Portfolio summary
+        """
+        return self.api_request(
+            f"{self.base_url_v2}/Portfolio/Portfolios/summary/{portfolio_id}"
+        ).json()
+
+    def get_portfolio_accounts_v2(self, portfolio_id):
+        """Get a portfolio's accounts (v2).
+
+        Args:
+            portfolio_id: Portfolio ID
+
+        Returns:
+            list: Account dicts
+        """
+        return self.api_request(
+            f"{self.base_url_v2}/Portfolio/Portfolios/{portfolio_id}/Accounts"
+        ).json()
+
+    def get_portfolios_by_group(self, portfolio_group_id):
+        """Get portfolios by portfolio-group ID.
+
+        Args:
+            portfolio_group_id: Portfolio-group ID
+
+        Returns:
+            list: Portfolio dicts
+        """
+        return self.api_request(
+            f"{self.base_url_v2}/Portfolio/Portfolios/ByPortfolioGroup/{portfolio_group_id}"
+        ).json()
+
+    def get_portfolio_list(self, filter=None, limit=None, offset=None):
+        """Get the firm portfolio list (v2).
+
+        Args:
+            filter: Optional filter (maps to ``filter``)
+            limit / offset: Optional paging window
+
+        Returns:
+            list: Portfolio dicts
+        """
+        params = {}
+        if filter is not None:
+            params["filter"] = filter
+        if limit is not None:
+            params["limit"] = limit
+        if offset is not None:
+            params["offset"] = offset
+        return self.api_request(
+            f"{self.base_url_v2}/Portfolio/Portfolios/GetPortfolioList", params=params
+        ).json()
+
+    def get_portfolio_out_of_tolerance(
+        self, model_id, asset_id, asset_type=None, model_element_id=None
+    ):
+        """Get out-of-tolerance portfolios for a model asset.
+
+        Args:
+            model_id: Model ID
+            asset_id: Asset ID
+            asset_type: Optional asset type (``assetType``)
+            model_element_id: Optional model-element ID (``modelElementId``)
+
+        Returns:
+            list: Out-of-tolerance portfolio dicts
+        """
+        params = {}
+        if asset_type is not None:
+            params["assetType"] = asset_type
+        if model_element_id is not None:
+            params["modelElementId"] = model_element_id
+        return self.api_request(
+            f"{self.base_url_v2}/Portfolio/Portfolios/{model_id}/OutOfTolerance/{asset_id}",
+            params=params,
+        ).json()
+
+    def get_portfolio_allocations_security(self, portfolio_id, assign_by_security=None):
+        """Get portfolio allocations by security.
+
+        Args:
+            portfolio_id: Portfolio ID
+            assign_by_security: Optional bool (``assignBySecurity``)
+
+        Returns:
+            list: Allocation-security dicts
+        """
+        params = {}
+        if assign_by_security is not None:
+            params["assignBySecurity"] = str(assign_by_security).lower()
+        return self.api_request(
+            f"{self.base_url_v2}/Portfolio/Portfolios/{portfolio_id}/PortfolioAllocationsSecurity",
+            params=params,
+        ).json()
+
+    def get_portfolio_substitutions_history(self, portfolio_id, from_date=None, to_date=None):
+        """Get a portfolio's substitutions history.
+
+        Args:
+            portfolio_id: Portfolio ID
+            from_date / to_date: Optional ISO date window (``fromDate`` / ``toDate``)
+
+        Returns:
+            list: Substitution-history dicts
+        """
+        params = {}
+        if from_date is not None:
+            params["fromDate"] = from_date
+        if to_date is not None:
+            params["toDate"] = to_date
+        return self.api_request(
+            f"{self.base_url_v2}/Portfolio/Portfolios/{portfolio_id}/PortfolioSubstitutionsHistory",
+            params=params,
+        ).json()
+
+    def get_portfolio_team_history(self, portfolio_id, start_date=None, end_date=None):
+        """Get a portfolio's team history.
+
+        Args:
+            portfolio_id: Portfolio ID
+            start_date / end_date: Optional ISO date window (``startDate`` / ``endDate``)
+
+        Returns:
+            list: Team-history dicts
+        """
+        params = {}
+        if start_date is not None:
+            params["startDate"] = start_date
+        if end_date is not None:
+            params["endDate"] = end_date
+        return self.api_request(
+            f"{self.base_url_v2}/Portfolio/Portfolios/{portfolio_id}/TeamHistory", params=params
+        ).json()
+
+    def get_sleeve_strategy_aggregates(self):
+        """Get all sleeve strategy aggregates.
+
+        Returns:
+            list: Sleeve-strategy-aggregate dicts
+        """
+        return self.api_request(
+            f"{self.base_url_v2}/Portfolio/Sleeves/SleeveStrategyAggregates"
+        ).json()
+
+    # --- Models & securities (POST-body reads) ---
+
+    def get_assigned_models(self, payload):
+        """Get assigned models (POST-body read).
+
+        Args:
+            payload: Criteria DTO (request body)
+
+        Returns:
+            list: Model dicts
+        """
+        return self.api_request(
+            f"{self.base_url_v2}/Modeling/Models/GetAssignedModels", requests.post, json=payload
+        ).json()
+
+    def get_stress_test_results(self, payload):
+        """Get HiddenLevers stress-test results (POST-body read).
+
+        Args:
+            payload: Criteria DTO (request body)
+
+        Returns:
+            dict | list: Stress-test results
+        """
+        return self.api_request(
+            f"{self.base_url_v2}/Modeling/Models/StressTestResults", requests.post, json=payload
+        ).json()
+
+    def get_securities_by_name(self, payload):
+        """Get securities by name (async POST-body read).
+
+        Args:
+            payload: Names DTO (request body)
+
+        Returns:
+            list: Security dicts
+        """
+        return self.api_request(
+            f"{self.base_url_v2}/Security/GetSecuritiesByNameAsync", requests.post, json=payload
+        ).json()
+
+    def get_securities_by_ticker(self, payload):
+        """Get securities by ticker (async POST-body read).
+
+        Args:
+            payload: Tickers DTO (request body)
+
+        Returns:
+            list: Security dicts
+        """
+        return self.api_request(
+            f"{self.base_url_v2}/Security/GetSecuritiesByTickerAsync", requests.post, json=payload
+        ).json()
+
+    def get_securities_by_oc_external_ids(self, payload):
+        """Get securities by Orion Connect external IDs (POST-body read).
+
+        Args:
+            payload: External-IDs DTO (request body)
+
+        Returns:
+            list: Security dicts
+        """
+        return self.api_request(
+            f"{self.base_url_v2}/Security/GetSecuritiesByOrionConnectExternalIds",
+            requests.post,
+            json=payload,
+        ).json()
+
+    def get_security_models(self, payload):
+        """Get the models that use given securities (POST-body read).
+
+        Args:
+            payload: Security-IDs DTO (request body)
+
+        Returns:
+            list: Model dicts
+        """
+        return self.api_request(
+            f"{self.base_url_v2}/Security/GetSecurityModels", requests.post, json=payload
+        ).json()
+
+    def get_securities_prices(self, payload):
+        """Get prices for securities (POST-body read).
+
+        Args:
+            payload: Security-IDs DTO (request body)
+
+        Returns:
+            list: Price dicts
+        """
+        return self.api_request(
+            f"{self.base_url_v2}/Security/SecuritiesPrices", requests.post, json=payload
+        ).json()
 
 
 class Eclipse(EclipseBase):
