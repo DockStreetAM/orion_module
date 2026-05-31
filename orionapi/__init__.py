@@ -1,4 +1,4 @@
-__version__ = "2.9.0"
+__version__ = "2.10.0"
 
 import logging
 import re
@@ -6937,6 +6937,412 @@ class EclipseV2(EclipseBase):
             f"{self.base_url_v2}/Model/Action/TriggerSecuritySetReverseSync",
             requests.post,
             json=payload,
+        )
+        return res.json()
+
+    # =========================================================================
+    # Import / export / extracts (v2). Reads + import-pipeline actions. Mutating
+    # endpoints are covered by mocked unit tests only.
+    # =========================================================================
+
+    # --- CustomImports reads ---
+
+    def get_custom_import_history(self):
+        """Get the custom-import instance history.
+
+        Returns:
+            list: Import-instance dicts
+        """
+        res = self.api_request(f"{self.base_url_v2}/CustomImports/Instances/History")
+        return res.json()
+
+    def get_custom_import_staged_data(self, instance_id):
+        """Get staged data for a custom-import instance.
+
+        Args:
+            instance_id: Import-instance ID
+
+        Returns:
+            list | dict: Staged data
+        """
+        res = self.api_request(
+            f"{self.base_url_v2}/CustomImports/Instances/StagedData/{instance_id}"
+        )
+        return res.json()
+
+    def get_custom_import_templates(self):
+        """Get the custom-import templates.
+
+        Returns:
+            list: Template dicts
+        """
+        res = self.api_request(f"{self.base_url_v2}/CustomImports/Templates")
+        return res.json()
+
+    def get_custom_import_template_definition(self, template_id):
+        """Get a custom-import template definition.
+
+        Args:
+            template_id: Template ID
+
+        Returns:
+            dict: Template definition
+        """
+        res = self.api_request(
+            f"{self.base_url_v2}/CustomImports/Templates/Definition/{template_id}"
+        )
+        return res.json()
+
+    def get_custom_import_template_definition_by_instance(self, instance_id):
+        """Get a custom-import template definition by instance ID.
+
+        Args:
+            instance_id: Import-instance ID
+
+        Returns:
+            dict: Template definition
+        """
+        res = self.api_request(
+            f"{self.base_url_v2}/CustomImports/Templates/DefinitionByInstanceId/{instance_id}"
+        )
+        return res.json()
+
+    # --- CustomImports writes (mutating) ---
+
+    def custom_import_add_row(self, instance_id, row):
+        """Add a row to a custom-import instance (mutating).
+
+        Args:
+            instance_id: Import-instance ID
+            row: Row DTO (request body)
+        """
+        res = self.api_request(
+            f"{self.base_url_v2}/CustomImports/Instances/AddRow/{instance_id}",
+            requests.post,
+            json=row,
+        )
+        return res.json()
+
+    def custom_import_update_row(self, instance_id, row):
+        """Update a row in a custom-import instance (mutating).
+
+        Args:
+            instance_id: Import-instance ID
+            row: Row DTO (request body)
+        """
+        res = self.api_request(
+            f"{self.base_url_v2}/CustomImports/Instances/UpdateRow/{instance_id}",
+            requests.post,
+            json=row,
+        )
+        return res.json()
+
+    def custom_import_validate_rows(self, instance_id, rows):
+        """Validate rows in a custom-import instance.
+
+        Args:
+            instance_id: Import-instance ID
+            rows: Rows DTO (request body)
+
+        Returns:
+            dict: Validation result
+        """
+        res = self.api_request(
+            f"{self.base_url_v2}/CustomImports/Instances/ValidateRows/{instance_id}",
+            requests.post,
+            json=rows,
+        )
+        return res.json()
+
+    def custom_import_generate_override(self, instance_id):
+        """Generate an override for a custom-import instance (mutating).
+
+        Args:
+            instance_id: Import-instance ID
+        """
+        res = self.api_request(
+            f"{self.base_url_v2}/CustomImports/Instances/GenerateOverride/{instance_id}",
+            requests.post,
+        )
+        return res.json()
+
+    def custom_import_upload_file(self, payload):
+        """Upload a custom-import file (mutating).
+
+        Args:
+            payload: Upload DTO (request body)
+        """
+        res = self.api_request(
+            f"{self.base_url_v2}/CustomImports/Instances/UploadFile", requests.post, json=payload
+        )
+        return res.json()
+
+    def custom_import_reupload_file(self, payload):
+        """Re-upload a custom-import file (mutating).
+
+        Args:
+            payload: Upload DTO (request body)
+        """
+        res = self.api_request(
+            f"{self.base_url_v2}/CustomImports/Instances/ReuploadFile", requests.post, json=payload
+        )
+        return res.json()
+
+    def download_custom_import_template(self, template_id):
+        """Download a custom-import template.
+
+        Args:
+            template_id: Template ID
+
+        Returns:
+            dict | list: Template download payload
+        """
+        res = self.api_request(
+            f"{self.base_url_v2}/CustomImports/Templates/Download/{template_id}", requests.post
+        )
+        return res.json()
+
+    def set_custom_import_template_favorite(self, payload):
+        """Set a custom-import template as the user's favorite (mutating).
+
+        Args:
+            payload: Favorite DTO (request body)
+        """
+        res = self.api_request(
+            f"{self.base_url_v2}/CustomImports/Templates/SetUserFavorite",
+            requests.post,
+            json=payload,
+        )
+        return res.json()
+
+    def abandon_custom_import(self, instance_id):
+        """Abandon a custom-import instance (mutating).
+
+        Args:
+            instance_id: Import-instance ID
+        """
+        res = self.api_request(
+            f"{self.base_url_v2}/CustomImports/Instances/Abandon/{instance_id}", requests.put
+        )
+        return res.json()
+
+    def apply_custom_import(self, instance_id):
+        """Apply a custom-import instance (mutating).
+
+        Args:
+            instance_id: Import-instance ID
+        """
+        res = self.api_request(
+            f"{self.base_url_v2}/CustomImports/Instances/Apply/{instance_id}", requests.put
+        )
+        return res.json()
+
+    # --- DataImport reads ---
+
+    def get_avg_import_duration(self, import_type=None, record_count_to_average=None):
+        """Get the average import duration.
+
+        Args:
+            import_type: Optional import type (``importType``)
+            record_count_to_average: Optional record count (``recordCountToAverage``)
+
+        Returns:
+            dict: Average-duration info
+        """
+        params = {}
+        if import_type is not None:
+            params["importType"] = import_type
+        if record_count_to_average is not None:
+            params["recordCountToAverage"] = record_count_to_average
+        res = self.api_request(
+            f"{self.base_url_v2}/DataImport/Action/AvgImportDuration", params=params
+        )
+        return res.json()
+
+    def get_last_import_status_info(self):
+        """Get the last import status info.
+
+        Returns:
+            dict: Last-import status info
+        """
+        res = self.api_request(f"{self.base_url_v2}/DataImport/Action/LastImportStatusInfo")
+        return res.json()
+
+    def get_data_imports_by_requested_by(self, requested_by_id):
+        """Get data imports requested by a given user.
+
+        Args:
+            requested_by_id: User ID
+
+        Returns:
+            list: Import dicts
+        """
+        res = self.api_request(f"{self.base_url_v2}/DataImport/ByRequestedById/{requested_by_id}")
+        return res.json()
+
+    def get_import_log_history(self, from_date=None, to_date=None):
+        """Get the import-log history.
+
+        Args:
+            from_date / to_date: Optional ISO date window (``fromDate`` / ``toDate``)
+
+        Returns:
+            list: Import-log dicts
+        """
+        params = {}
+        if from_date is not None:
+            params["fromDate"] = from_date
+        if to_date is not None:
+            params["toDate"] = to_date
+        res = self.api_request(f"{self.base_url_v2}/DataImport/ImportLogHistory", params=params)
+        return res.json()
+
+    def get_reverse_sync_log_errors(self, import_id):
+        """Get reverse-sync log errors for an import.
+
+        Args:
+            import_id: Import ID
+
+        Returns:
+            list: Error dicts
+        """
+        res = self.api_request(f"{self.base_url_v2}/DataImport/ReverseSyncLogErrors/{import_id}")
+        return res.json()
+
+    # --- DataImport actions / export (mutating) ---
+
+    def request_import(self, payload):
+        """Request a data import (mutating).
+
+        Args:
+            payload: Import-request DTO (request body)
+
+        Returns:
+            dict: Request result
+        """
+        res = self.api_request(
+            f"{self.base_url_v2}/DataImport/Action/RequestImport", requests.post, json=payload
+        )
+        return res.json()
+
+    def sync_accounts(self, payload):
+        """Sync accounts (mutating).
+
+        Args:
+            payload: Sync DTO (request body)
+        """
+        res = self.api_request(
+            f"{self.base_url_v2}/DataImport/Action/SyncAccounts", requests.post, json=payload
+        )
+        return res.json()
+
+    def sync_accounts_by_portfolio(self, payload):
+        """Sync accounts by portfolio (mutating).
+
+        Args:
+            payload: Sync DTO (request body)
+        """
+        res = self.api_request(
+            f"{self.base_url_v2}/DataImport/Action/SyncAccountsByPortfolio",
+            requests.post,
+            json=payload,
+        )
+        return res.json()
+
+    def resync_import_errored_accounts(self):
+        """Resync accounts that errored during import (mutating)."""
+        res = self.api_request(
+            f"{self.base_url_v2}/DataImport/Action/ResyncImportErroredAccounts", requests.post
+        )
+        return res.json()
+
+    def export_import_history(self, payload):
+        """Export import history (POST-body export).
+
+        Args:
+            payload: Export-request DTO (request body)
+
+        Returns:
+            dict | list: Export result
+        """
+        res = self.api_request(
+            f"{self.base_url_v2}/DataImport/Export/ImportHistory", requests.post, json=payload
+        )
+        return res.json()
+
+    def export_reverse_sync_history(self, payload):
+        """Export reverse-sync history (POST-body export).
+
+        Args:
+            payload: Export-request DTO (request body)
+
+        Returns:
+            dict | list: Export result
+        """
+        res = self.api_request(
+            f"{self.base_url_v2}/DataImport/Export/ReverseSyncHistory", requests.post, json=payload
+        )
+        return res.json()
+
+    # --- Extracts ---
+
+    def get_extracts(self, extract_type):
+        """Get extracts of a given type.
+
+        Args:
+            extract_type: Extract type
+
+        Returns:
+            list | dict: Extract data
+        """
+        res = self.api_request(f"{self.base_url_v2}/Extracts/{extract_type}")
+        return res.json()
+
+    def create_extract(self, extract_type, when=None):
+        """Create/schedule an extract job (mutating).
+
+        Args:
+            extract_type: Extract type
+            when: Optional schedule value (sent as the ``X-ExtractJob-When`` header)
+
+        Returns:
+            dict: Extract-job result
+        """
+        headers = {}
+        if when is not None:
+            headers["X-ExtractJob-When"] = when
+        res = self.api_request(
+            f"{self.base_url_v2}/Extracts/{extract_type}", requests.post, headers=headers
+        )
+        return res.json()
+
+    def delete_extract(self, extract_type, reason=None):
+        """Delete extracts of a given type (mutating).
+
+        Args:
+            extract_type: Extract type
+            reason: Optional reason (sent as the ``X-ExtractJob-Reason`` header)
+        """
+        headers = {}
+        if reason is not None:
+            headers["X-ExtractJob-Reason"] = reason
+        res = self.api_request(
+            f"{self.base_url_v2}/Extracts/{extract_type}", requests.delete, headers=headers
+        )
+        return res.json()
+
+    def delete_extract_job(self, job_id, reason=None):
+        """Delete an extract job (mutating).
+
+        Args:
+            job_id: Extract-job ID
+            reason: Optional reason (maps to ``reason``)
+        """
+        params = {}
+        if reason is not None:
+            params["reason"] = reason
+        res = self.api_request(
+            f"{self.base_url_v2}/Extracts/job/{job_id}", requests.delete, params=params
         )
         return res.json()
 
