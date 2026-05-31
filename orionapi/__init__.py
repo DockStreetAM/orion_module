@@ -1,4 +1,4 @@
-__version__ = "2.3.0"
+__version__ = "2.4.0"
 
 import logging
 import re
@@ -5212,6 +5212,388 @@ class EclipseV2(EclipseBase):
         res = self.api_request(
             f"{self.base_url_v2}/Notes/RelatedEntities",
             params={"entityId": entity_id, "entityType": entity_type},
+        )
+        return res.json()
+
+    # --- Account detail (v2-only reads with no v1 equivalent) --------------------
+
+    def get_account_cash_details(self, account_id):
+        """Get cash details for an account.
+
+        Args:
+            account_id: Account ID
+
+        Returns:
+            dict: Cash details
+        """
+        res = self.api_request(f"{self.base_url_v2}/Account/Accounts/{account_id}/CashDetails")
+        return res.json()
+
+    def get_account_gain_loss_summary(self, account_id):
+        """Get the gain/loss summary for an account.
+
+        Args:
+            account_id: Account ID
+
+        Returns:
+            dict: Gain/loss summary
+        """
+        res = self.api_request(f"{self.base_url_v2}/Account/Accounts/{account_id}/GainLossSummary")
+        return res.json()
+
+    def get_account_history(self, account_id, from_date=None, to_date=None):
+        """Get account history.
+
+        Args:
+            account_id: Account ID
+            from_date / to_date: Optional ISO date window (``fromDate`` / ``toDate``)
+
+        Returns:
+            list: Account-history dicts
+        """
+        params = {}
+        if from_date is not None:
+            params["fromDate"] = from_date
+        if to_date is not None:
+            params["toDate"] = to_date
+        res = self.api_request(
+            f"{self.base_url_v2}/Account/Accounts/{account_id}/History", params=params
+        )
+        return res.json()
+
+    def get_account_model_history(self, account_id, from_date=None, to_date=None):
+        """Get an account's model history.
+
+        Args:
+            account_id: Account ID
+            from_date / to_date: Optional ISO date window (``fromDate`` / ``toDate``)
+
+        Returns:
+            list: Model-history dicts
+        """
+        params = {}
+        if from_date is not None:
+            params["fromDate"] = from_date
+        if to_date is not None:
+            params["toDate"] = to_date
+        res = self.api_request(
+            f"{self.base_url_v2}/Account/Accounts/{account_id}/ModelHistory", params=params
+        )
+        return res.json()
+
+    def get_account_transactions(self, account_id, start_date=None, end_date=None):
+        """Get account transactions over a date range.
+
+        Args:
+            account_id: Account ID
+            start_date / end_date: Optional ISO date window (``startDate`` / ``endDate``)
+
+        Returns:
+            list: Transaction dicts
+        """
+        params = {}
+        if start_date is not None:
+            params["startDate"] = start_date
+        if end_date is not None:
+            params["endDate"] = end_date
+        res = self.api_request(
+            f"{self.base_url_v2}/Account/Accounts/{account_id}/Transactions", params=params
+        )
+        return res.json()
+
+    def get_accessible_account_count(self):
+        """Get the count of accounts accessible to the authenticated user.
+
+        Returns:
+            int | dict: Accessible-account count
+        """
+        res = self.api_request(f"{self.base_url_v2}/Account/Accounts/AccessibleCount")
+        return res.json()
+
+    def get_account_by_external(self, external_firm_id, external_account_id):
+        """Get an account by external firm + account ID.
+
+        Args:
+            external_firm_id: External firm ID
+            external_account_id: External account ID
+
+        Returns:
+            dict: Account detail
+        """
+        res = self.api_request(
+            f"{self.base_url_v2}/Account/Accounts/byexternal/"
+            f"{external_firm_id}/{external_account_id}"
+        )
+        return res.json()
+
+    # --- Astro accounts (v2-only) ------------------------------------------------
+
+    def get_astro_accounts(self, filter=None):
+        """Get Astro account values (including alert-determination data).
+
+        Args:
+            filter: Optional filter (maps to ``filter``; see
+                :meth:`get_astro_account_filters`)
+
+        Returns:
+            list: Astro-account dicts
+        """
+        params = {}
+        if filter is not None:
+            params["filter"] = filter
+        res = self.api_request(f"{self.base_url_v2}/Account/AstroAccounts", params=params)
+        return res.json()
+
+    def get_astro_account_filters(self):
+        """Get the filters usable in the Astro-accounts endpoint.
+
+        Returns:
+            list: Filter dicts
+        """
+        res = self.api_request(f"{self.base_url_v2}/Account/AstroAccounts/Filters")
+        return res.json()
+
+    def get_astro_account_securities_restrictions(self, account_id):
+        """Get Astro security restrictions for an account.
+
+        Args:
+            account_id: Account ID
+
+        Returns:
+            list: Security-restriction dicts
+        """
+        res = self.api_request(
+            f"{self.base_url_v2}/Account/AstroAccounts/{account_id}/SecuritiesRestrictions"
+        )
+        return res.json()
+
+    def get_astro_account_investor_preferences(
+        self, account_id, strategy_name=None, al_client_id=None
+    ):
+        """Get Astro investor preferences for an account.
+
+        Args:
+            account_id: Account ID
+            strategy_name: Optional strategy name (``strategyName``)
+            al_client_id: Optional AL client ID (``alClientId``)
+
+        Returns:
+            dict: Investor preferences
+        """
+        params = {}
+        if strategy_name is not None:
+            params["strategyName"] = strategy_name
+        if al_client_id is not None:
+            params["alClientId"] = al_client_id
+        res = self.api_request(
+            f"{self.base_url_v2}/Account/AstroAccounts/{account_id}/InvestorPreferences",
+            params=params,
+        )
+        return res.json()
+
+    # --- Portfolio detail (v2-only reads) ----------------------------------------
+
+    def get_portfolio_allocations(self, portfolio_id):
+        """Get portfolio allocations.
+
+        Args:
+            portfolio_id: Portfolio ID
+
+        Returns:
+            dict: Allocations with ``categories`` / ``classes`` and reserve cash
+        """
+        res = self.api_request(
+            f"{self.base_url_v2}/Portfolio/Portfolios/{portfolio_id}/Allocations"
+        )
+        return res.json()
+
+    def get_portfolio_cash_details(self, portfolio_id):
+        """Get cash details for a portfolio.
+
+        Args:
+            portfolio_id: Portfolio ID
+
+        Returns:
+            dict: Cash details
+        """
+        res = self.api_request(
+            f"{self.base_url_v2}/Portfolio/Portfolios/CashDetails/{portfolio_id}"
+        )
+        return res.json()
+
+    def get_portfolio_gain_loss_summary(self, portfolio_id):
+        """Get the gain/loss summary for a portfolio.
+
+        Args:
+            portfolio_id: Portfolio ID
+
+        Returns:
+            dict: Gain/loss summary
+        """
+        res = self.api_request(
+            f"{self.base_url_v2}/Portfolio/Portfolios/{portfolio_id}/GainLossSummary"
+        )
+        return res.json()
+
+    def get_portfolio_mac_history(self, portfolio_id, from_date=None, to_date=None):
+        """Get portfolio MAC (model-assignment-change) history.
+
+        Args:
+            portfolio_id: Portfolio ID
+            from_date / to_date: Optional ISO date window (``fromDate`` / ``toDate``)
+
+        Returns:
+            dict: MAC history with ``details`` and ``statuses``
+        """
+        params = {}
+        if from_date is not None:
+            params["fromDate"] = from_date
+        if to_date is not None:
+            params["toDate"] = to_date
+        res = self.api_request(
+            f"{self.base_url_v2}/Portfolio/Portfolios/{portfolio_id}/MacHistory", params=params
+        )
+        return res.json()
+
+    def get_portfolio_auto_rebalance_history(self, portfolio_id, start_date=None, end_date=None):
+        """Get auto-rebalance history for a portfolio.
+
+        Args:
+            portfolio_id: Portfolio ID
+            start_date / end_date: Optional ISO date window (``startDate`` / ``endDate``)
+
+        Returns:
+            list: Auto-rebalance-history dicts
+        """
+        params = {}
+        if start_date is not None:
+            params["startDate"] = start_date
+        if end_date is not None:
+            params["endDate"] = end_date
+        res = self.api_request(
+            f"{self.base_url_v2}/Portfolio/Portfolios/{portfolio_id}/AutoRebalanceHistory",
+            params=params,
+        )
+        return res.json()
+
+    def get_portfolio_tree(self, portfolio_id=None, account_id=None):
+        """Get the portfolio/account hierarchy for a portfolio or account.
+
+        Args:
+            portfolio_id: Optional portfolio ID (maps to ``portfolioId``)
+            account_id: Optional account ID (maps to ``accountId``)
+
+        Returns:
+            dict: Portfolio/account tree
+        """
+        params = {}
+        if portfolio_id is not None:
+            params["portfolioId"] = portfolio_id
+        if account_id is not None:
+            params["accountId"] = account_id
+        res = self.api_request(
+            f"{self.base_url_v2}/Portfolio/Portfolios/PortfolioTree", params=params
+        )
+        return res.json()
+
+    def get_portfolio_search(self, search=None, include_value=None, limit=None, offset=None):
+        """Search firm portfolios (v2 paged search).
+
+        Args:
+            search: Optional search string
+            include_value: Optional bool (maps to ``includeValue``)
+            limit / offset: Optional paging window
+
+        Returns:
+            list: Portfolio dicts
+        """
+        params = {}
+        if search is not None:
+            params["search"] = search
+        if include_value is not None:
+            params["includeValue"] = str(include_value).lower()
+        if limit is not None:
+            params["limit"] = limit
+        if offset is not None:
+            params["offset"] = offset
+        res = self.api_request(
+            f"{self.base_url_v2}/Portfolio/Portfolios/GetPortfolioSearch", params=params
+        )
+        return res.json()
+
+    def get_accessible_portfolio_count(self):
+        """Get the count of portfolios accessible to the authenticated user.
+
+        Returns:
+            int | dict: Accessible-portfolio count
+        """
+        res = self.api_request(f"{self.base_url_v2}/Portfolio/Portfolios/AccessibleCount")
+        return res.json()
+
+    def get_user_portfolio_ids(self):
+        """Get the portfolio IDs accessible to the authenticated user.
+
+        Returns:
+            list: Portfolio IDs
+        """
+        res = self.api_request(f"{self.base_url_v2}/Portfolio/Portfolios/GetUserPortfolioIds")
+        return res.json()
+
+    # --- Sleeves (v2-only) -------------------------------------------------------
+
+    def get_sleeve_allocations(self, account_id):
+        """Get sleeve allocation details for an account.
+
+        Args:
+            account_id: Account ID
+
+        Returns:
+            dict: Sleeve allocations with ``categories`` / ``classes`` and reserve cash
+        """
+        res = self.api_request(f"{self.base_url_v2}/Portfolio/Sleeves/{account_id}/Allocations")
+        return res.json()
+
+    def get_sleeve_strategies(self):
+        """Get all sleeve strategies.
+
+        Returns:
+            list: Sleeve-strategy dicts
+        """
+        res = self.api_request(f"{self.base_url_v2}/Portfolio/Sleeves/SleeveStrategies")
+        return res.json()
+
+    def get_sleeve_contribution_methods(self):
+        """Get all sleeve contribution methods.
+
+        Returns:
+            list: Contribution-method dicts
+        """
+        res = self.api_request(f"{self.base_url_v2}/Portfolio/Sleeves/SleeveContributionMethods")
+        return res.json()
+
+    def get_sleeve_distribution_methods(self):
+        """Get all sleeve distribution methods.
+
+        Returns:
+            list: Distribution-method dicts
+        """
+        res = self.api_request(f"{self.base_url_v2}/Portfolio/Sleeves/SleeveDistributionMethods")
+        return res.json()
+
+    # --- Preference (v2-only) ----------------------------------------------------
+
+    def get_preference(self, preference_name):
+        """Get the value of a named preference.
+
+        Args:
+            preference_name: Preference name (maps to ``preferenceName``)
+
+        Returns:
+            dict: Preference value
+        """
+        res = self.api_request(
+            f"{self.base_url_v2}/Preference/Preference/GetPreference",
+            params={"preferenceName": preference_name},
         )
         return res.json()
 
