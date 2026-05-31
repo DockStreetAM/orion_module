@@ -1438,3 +1438,44 @@ class TestEclipseV1ReadCoverageBatch12:
 
     def test_accounts_without_portfolio(self, eclipse_client):
         assert isinstance(eclipse_client.v1.get_accounts_without_portfolio(), list)
+
+
+class TestEclipseV1ReadCoverageBatch13:
+    """Live smoke tests for v1 modeling/security reference reads (batch 13).
+
+    submodels_usage 400s upstream (route collision) and model_can_delete returns
+    422 for in-use models, so those are unit-tested only.
+    """
+
+    def test_model_filter_types(self, eclipse_client):
+        assert isinstance(eclipse_client.v1.get_model_filter_types(), list)
+
+    def test_model_management_styles(self, eclipse_client):
+        assert isinstance(eclipse_client.v1.get_model_management_styles(), list)
+
+    def test_security_statuses(self, eclipse_client):
+        assert isinstance(eclipse_client.v1.get_security_statuses(), list)
+
+    def test_security_types(self, eclipse_client):
+        assert isinstance(eclipse_client.v1.get_security_types(), list)
+
+    def test_corporate_action_types(self, eclipse_client):
+        assert isinstance(eclipse_client.v1.get_corporate_action_types(), list)
+
+    def test_security_set_buy_priority(self, eclipse_client):
+        assert isinstance(eclipse_client.v1.get_security_set_buy_priority(), list)
+
+    def test_security_set_sell_priority(self, eclipse_client):
+        assert isinstance(eclipse_client.v1.get_security_set_sell_priority(), list)
+
+    def test_security_set_equivalent_types(self, eclipse_client):
+        assert isinstance(eclipse_client.v1.get_security_set_equivalent_types(), list)
+
+    def test_model_upload_templates(self, eclipse_client):
+        assert isinstance(eclipse_client.v1.get_model_upload_templates(), (list, dict))
+
+    def test_model_security_types(self, eclipse_client):
+        models = eclipse_client.v1.get_all_models(top=3)
+        if not models:
+            pytest.skip("No models available")
+        assert isinstance(eclipse_client.v1.get_model_security_types(models[0]["id"]), (list, dict))

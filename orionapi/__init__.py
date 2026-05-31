@@ -1,4 +1,4 @@
-__version__ = "2.13.0"
+__version__ = "2.14.0"
 
 import logging
 import re
@@ -4687,6 +4687,370 @@ class EclipseV1(EclipseBase):
             list: Sleeve dicts
         """
         return self.api_request(f"{self.base_url}/portfolio/sleeves").json()
+
+    # --- v1 modeling reads ---
+
+    def get_model_can_delete(self, model_id):
+        """Check whether a model can be deleted.
+
+        Args:
+            model_id: Model ID
+
+        Returns:
+            dict | bool: Can-delete result
+        """
+        return self.api_request(f"{self.base_url}/modeling/models/{model_id}/canDelete").json()
+
+    def get_submodel_can_delete(self, submodel_id, model_id=None, model_detail_id=None):
+        """Check whether a submodel can be deleted.
+
+        Args:
+            submodel_id: Submodel ID
+            model_id: Optional model ID (maps to ``modelId``)
+            model_detail_id: Optional model-detail ID (maps to ``modelDetailId``)
+
+        Returns:
+            dict | bool: Can-delete result
+        """
+        params = {}
+        if model_id is not None:
+            params["modelId"] = model_id
+        if model_detail_id is not None:
+            params["modelDetailId"] = model_detail_id
+        return self.api_request(
+            f"{self.base_url}/modeling/models/submodels/{submodel_id}/canDelete", params=params
+        ).json()
+
+    def get_model_pending_portfolios(self, model_id):
+        """Get pending portfolios for a model.
+
+        Args:
+            model_id: Model ID
+
+        Returns:
+            list | dict: Pending portfolios
+        """
+        return self.api_request(
+            f"{self.base_url}/modeling/models/{model_id}/portfolios/pending"
+        ).json()
+
+    def get_model_pending_sleeve_accounts(self, model_id):
+        """Get pending sleeve accounts for a model.
+
+        Args:
+            model_id: Model ID
+
+        Returns:
+            list | dict: Pending sleeve accounts
+        """
+        return self.api_request(
+            f"{self.base_url}/modeling/models/{model_id}/sleeveaccount/pending"
+        ).json()
+
+    def get_model_sleeves(self, model_id):
+        """Get sleeves for a model.
+
+        Args:
+            model_id: Model ID
+
+        Returns:
+            list: Sleeve dicts
+        """
+        return self.api_request(f"{self.base_url}/modeling/models/{model_id}/sleeves").json()
+
+    def get_submodel(self, submodel_id):
+        """Get a submodel by ID.
+
+        Args:
+            submodel_id: Submodel ID
+
+        Returns:
+            dict: Submodel
+        """
+        return self.api_request(f"{self.base_url}/modeling/models/submodels/{submodel_id}").json()
+
+    def get_model_filter_types(self):
+        """Get model filter types.
+
+        Returns:
+            list: Filter-type dicts
+        """
+        return self.api_request(f"{self.base_url}/modeling/models/filterTypes").json()
+
+    def get_model_management_styles(self):
+        """Get model management styles.
+
+        Returns:
+            list: Management-style dicts
+        """
+        return self.api_request(f"{self.base_url}/modeling/models/managementStyles").json()
+
+    def get_model_security_types(self, model_id):
+        """Get the security types for a model.
+
+        Args:
+            model_id: Model ID
+
+        Returns:
+            list: Security-type dicts
+        """
+        return self.api_request(f"{self.base_url}/modeling/models/{model_id}/securitytypes").json()
+
+    def get_submodels_usage(self):
+        """Get submodel usage.
+
+        .. note::
+            As of 2026-05 this documented endpoint returns
+            ``400 'id is not numeric string'`` on live Eclipse — the server routes
+            the ``usage`` segment into ``/modeling/models/submodels/{id}``. Kept
+            faithful to the documented path; the upstream route appears broken
+            (same class of issue as :meth:`get_security_set_details`).
+
+        Returns:
+            list | dict: Submodel usage
+        """
+        return self.api_request(f"{self.base_url}/modeling/models/submodels/usage").json()
+
+    def get_all_submodels(self, model_type=None):
+        """Get all submodels, optionally filtered by model type.
+
+        Args:
+            model_type: Optional model-type ID (maps to ``modelType``)
+
+        Returns:
+            list: Submodel dicts
+        """
+        params = {}
+        if model_type is not None:
+            params["modelType"] = model_type
+        return self.api_request(
+            f"{self.base_url}/modeling/models/allSubModel", params=params
+        ).json()
+
+    def get_model_teams(self, model_id, is_edit_model=None):
+        """Get the teams for a model.
+
+        Args:
+            model_id: Model ID
+            is_edit_model: Optional bool (maps to ``isEditModel``)
+
+        Returns:
+            list: Team dicts
+        """
+        params = {}
+        if is_edit_model is not None:
+            params["isEditModel"] = str(is_edit_model).lower()
+        return self.api_request(
+            f"{self.base_url}/modeling/models/{model_id}/teams", params=params
+        ).json()
+
+    def get_submodel_teams(self, submodel_id):
+        """Get the teams for a submodel.
+
+        Args:
+            submodel_id: Submodel ID
+
+        Returns:
+            list: Team dicts
+        """
+        return self.api_request(
+            f"{self.base_url}/modeling/models/submodel/{submodel_id}/teams"
+        ).json()
+
+    def get_model_can_rebalance(self, model_id):
+        """Check whether a model can be rebalanced.
+
+        Args:
+            model_id: Model ID
+
+        Returns:
+            dict | bool: Can-rebalance result
+        """
+        return self.api_request(f"{self.base_url}/modeling/models/{model_id}/canRebalance").json()
+
+    def get_model_upload_templates(self):
+        """Get the model-upload templates.
+
+        Returns:
+            list: Template dicts
+        """
+        return self.api_request(f"{self.base_url}/modeling/models/upload/templates").json()
+
+    def get_model_sma_weightings(self, model_id, model_element_id):
+        """Get the SMA weightings for a model element.
+
+        Args:
+            model_id: Model ID
+            model_element_id: Model-element ID
+
+        Returns:
+            list | dict: SMA weightings
+        """
+        return self.api_request(
+            f"{self.base_url}/modeling/models/{model_id}/smaweightings/{model_element_id}"
+        ).json()
+
+    # --- v1 security reads ---
+
+    def get_security_statuses(self):
+        """Get the security statuses.
+
+        Returns:
+            list: Security-status dicts
+        """
+        return self.api_request(f"{self.base_url}/security/securities/securitystatus").json()
+
+    def get_security_types(self):
+        """Get the security types.
+
+        Returns:
+            list: Security-type dicts
+        """
+        return self.api_request(f"{self.base_url}/security/securities/securitytype").json()
+
+    def get_security(self, security_id):
+        """Get a security by ID.
+
+        Args:
+            security_id: Security ID
+
+        Returns:
+            dict: Security
+        """
+        return self.api_request(f"{self.base_url}/security/securities/{security_id}").json()
+
+    def search_orion_securities(self, search, top=20):
+        """Search the Orion security master.
+
+        Args:
+            search: Search string (id or name)
+            top: Max number of results (default 20)
+
+        Returns:
+            list: Security dicts
+        """
+        return self.api_request(
+            f"{self.base_url}/security/securities/orion",
+            params={"search": search, "top": top},
+        ).json()
+
+    def get_security_price(self, security_id):
+        """Get the price for a security.
+
+        Args:
+            security_id: Security ID
+
+        Returns:
+            dict: Price info
+        """
+        return self.api_request(f"{self.base_url}/security/securities/price/{security_id}").json()
+
+    def get_security_corporate_action(self, security_id):
+        """Get corporate actions for a security.
+
+        Args:
+            security_id: Security ID
+
+        Returns:
+            list | dict: Corporate-action info
+        """
+        return self.api_request(
+            f"{self.base_url}/security/securities/{security_id}/corporateAction"
+        ).json()
+
+    def get_corporate_action_types(self):
+        """Get the corporate-action types.
+
+        Returns:
+            list: Corporate-action-type dicts
+        """
+        return self.api_request(f"{self.base_url}/security/securities/corporateActionTypes").json()
+
+    def get_security_min_initial_buy_prefs(self, security_id):
+        """Get the minimum-initial-buy-amount preferences for a security.
+
+        Args:
+            security_id: Security ID
+
+        Returns:
+            list | dict: Preference info
+        """
+        return self.api_request(
+            f"{self.base_url}/security/securities/{security_id}"
+            f"/securityMinimumInitialBuyAmountPreferences"
+        ).json()
+
+    def get_security_priority_prefs(self, security_id, priority=None):
+        """Get the buy/sell priority preferences for a security.
+
+        Args:
+            security_id: Security ID
+            priority: Optional "buy" or "sell" (maps to ``priority``)
+
+        Returns:
+            list | dict: Priority preferences
+        """
+        params = {}
+        if priority is not None:
+            params["priority"] = priority
+        return self.api_request(
+            f"{self.base_url}/security/securities/{security_id}/securityPriorityPreferences",
+            params=params,
+        ).json()
+
+    def get_security_alternate_prefs(self, security_id):
+        """Get the alternate-security preferences for a security.
+
+        Args:
+            security_id: Security ID
+
+        Returns:
+            list | dict: Alternate preferences
+        """
+        return self.api_request(
+            f"{self.base_url}/security/securities/{security_id}/securityAlternatePreferences"
+        ).json()
+
+    def get_security_set_can_delete(self, set_id, ignore_model_id=None):
+        """Check whether a security set can be deleted.
+
+        Args:
+            set_id: Security-set ID
+            ignore_model_id: Optional model ID to ignore (maps to ``ignoreModelId``)
+
+        Returns:
+            dict | bool: Can-delete result
+        """
+        params = {}
+        if ignore_model_id is not None:
+            params["ignoreModelId"] = ignore_model_id
+        return self.api_request(
+            f"{self.base_url}/security/securityset/{set_id}/canDelete", params=params
+        ).json()
+
+    def get_security_set_buy_priority(self):
+        """Get the security-set buy priorities.
+
+        Returns:
+            list: Buy-priority dicts
+        """
+        return self.api_request(f"{self.base_url}/security/securityset/buypriority").json()
+
+    def get_security_set_sell_priority(self):
+        """Get the security-set sell priorities.
+
+        Returns:
+            list: Sell-priority dicts
+        """
+        return self.api_request(f"{self.base_url}/security/securityset/sellpriority").json()
+
+    def get_security_set_equivalent_types(self):
+        """Get the security-set equivalent types.
+
+        Returns:
+            list: Equivalent-type dicts
+        """
+        return self.api_request(f"{self.base_url}/security/securityset/equivalentType").json()
 
 
 class EclipseV2(EclipseBase):

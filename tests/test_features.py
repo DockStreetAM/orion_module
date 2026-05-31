@@ -3098,3 +3098,146 @@ class TestEclipseV1ReadCoverageBatch12:
     def test_sleeves(self):
         m = self._g(lambda a: a.get_sleeves())
         assert m.call_args.args[0] == f"{V1_BASE}/portfolio/sleeves"
+
+
+class TestEclipseV1ReadCoverageBatch13:
+    """URL/params coverage for v1 modeling/security reads (batch 13)."""
+
+    def _g(self, fn):
+        api = _eclipse_v1()
+        mock = _mock_get([])
+        with patch("requests.get", mock):
+            fn(api)
+        return mock
+
+    def test_model_can_delete(self):
+        m = self._g(lambda a: a.get_model_can_delete(5))
+        assert m.call_args.args[0] == f"{V1_BASE}/modeling/models/5/canDelete"
+
+    def test_submodel_can_delete(self):
+        m = self._g(lambda a: a.get_submodel_can_delete(8, model_id=5, model_detail_id=3))
+        assert m.call_args.args[0] == f"{V1_BASE}/modeling/models/submodels/8/canDelete"
+        assert m.call_args.kwargs["params"] == {"modelId": 5, "modelDetailId": 3}
+
+    def test_model_pending_portfolios(self):
+        m = self._g(lambda a: a.get_model_pending_portfolios(5))
+        assert m.call_args.args[0] == f"{V1_BASE}/modeling/models/5/portfolios/pending"
+
+    def test_model_pending_sleeve_accounts(self):
+        m = self._g(lambda a: a.get_model_pending_sleeve_accounts(5))
+        assert m.call_args.args[0] == f"{V1_BASE}/modeling/models/5/sleeveaccount/pending"
+
+    def test_model_sleeves(self):
+        m = self._g(lambda a: a.get_model_sleeves(5))
+        assert m.call_args.args[0] == f"{V1_BASE}/modeling/models/5/sleeves"
+
+    def test_submodel(self):
+        m = self._g(lambda a: a.get_submodel(8))
+        assert m.call_args.args[0] == f"{V1_BASE}/modeling/models/submodels/8"
+
+    def test_model_filter_types(self):
+        m = self._g(lambda a: a.get_model_filter_types())
+        assert m.call_args.args[0] == f"{V1_BASE}/modeling/models/filterTypes"
+
+    def test_model_management_styles(self):
+        m = self._g(lambda a: a.get_model_management_styles())
+        assert m.call_args.args[0] == f"{V1_BASE}/modeling/models/managementStyles"
+
+    def test_model_security_types(self):
+        m = self._g(lambda a: a.get_model_security_types(5))
+        assert m.call_args.args[0] == f"{V1_BASE}/modeling/models/5/securitytypes"
+
+    def test_submodels_usage(self):
+        m = self._g(lambda a: a.get_submodels_usage())
+        assert m.call_args.args[0] == f"{V1_BASE}/modeling/models/submodels/usage"
+
+    def test_all_submodels(self):
+        m = self._g(lambda a: a.get_all_submodels(model_type=2))
+        assert m.call_args.args[0] == f"{V1_BASE}/modeling/models/allSubModel"
+        assert m.call_args.kwargs["params"] == {"modelType": 2}
+
+    def test_model_teams(self):
+        m = self._g(lambda a: a.get_model_teams(5, is_edit_model=True))
+        assert m.call_args.args[0] == f"{V1_BASE}/modeling/models/5/teams"
+        assert m.call_args.kwargs["params"] == {"isEditModel": "true"}
+
+    def test_submodel_teams(self):
+        m = self._g(lambda a: a.get_submodel_teams(8))
+        assert m.call_args.args[0] == f"{V1_BASE}/modeling/models/submodel/8/teams"
+
+    def test_model_can_rebalance(self):
+        m = self._g(lambda a: a.get_model_can_rebalance(5))
+        assert m.call_args.args[0] == f"{V1_BASE}/modeling/models/5/canRebalance"
+
+    def test_model_upload_templates(self):
+        m = self._g(lambda a: a.get_model_upload_templates())
+        assert m.call_args.args[0] == f"{V1_BASE}/modeling/models/upload/templates"
+
+    def test_model_sma_weightings(self):
+        m = self._g(lambda a: a.get_model_sma_weightings(5, 3))
+        assert m.call_args.args[0] == f"{V1_BASE}/modeling/models/5/smaweightings/3"
+
+    def test_security_statuses(self):
+        m = self._g(lambda a: a.get_security_statuses())
+        assert m.call_args.args[0] == f"{V1_BASE}/security/securities/securitystatus"
+
+    def test_security_types(self):
+        m = self._g(lambda a: a.get_security_types())
+        assert m.call_args.args[0] == f"{V1_BASE}/security/securities/securitytype"
+
+    def test_security(self):
+        m = self._g(lambda a: a.get_security(42))
+        assert m.call_args.args[0] == f"{V1_BASE}/security/securities/42"
+
+    def test_search_orion_securities(self):
+        m = self._g(lambda a: a.search_orion_securities("AAPL", top=5))
+        assert m.call_args.args[0] == f"{V1_BASE}/security/securities/orion"
+        assert m.call_args.kwargs["params"] == {"search": "AAPL", "top": 5}
+
+    def test_security_price(self):
+        m = self._g(lambda a: a.get_security_price(42))
+        assert m.call_args.args[0] == f"{V1_BASE}/security/securities/price/42"
+
+    def test_security_corporate_action(self):
+        m = self._g(lambda a: a.get_security_corporate_action(42))
+        assert m.call_args.args[0] == f"{V1_BASE}/security/securities/42/corporateAction"
+
+    def test_corporate_action_types(self):
+        m = self._g(lambda a: a.get_corporate_action_types())
+        assert m.call_args.args[0] == f"{V1_BASE}/security/securities/corporateActionTypes"
+
+    def test_security_min_initial_buy_prefs(self):
+        m = self._g(lambda a: a.get_security_min_initial_buy_prefs(42))
+        assert m.call_args.args[0] == (
+            f"{V1_BASE}/security/securities/42/securityMinimumInitialBuyAmountPreferences"
+        )
+
+    def test_security_priority_prefs(self):
+        m = self._g(lambda a: a.get_security_priority_prefs(42, priority="buy"))
+        assert m.call_args.args[0] == (
+            f"{V1_BASE}/security/securities/42/securityPriorityPreferences"
+        )
+        assert m.call_args.kwargs["params"] == {"priority": "buy"}
+
+    def test_security_alternate_prefs(self):
+        m = self._g(lambda a: a.get_security_alternate_prefs(42))
+        assert m.call_args.args[0] == (
+            f"{V1_BASE}/security/securities/42/securityAlternatePreferences"
+        )
+
+    def test_security_set_can_delete(self):
+        m = self._g(lambda a: a.get_security_set_can_delete(9, ignore_model_id=5))
+        assert m.call_args.args[0] == f"{V1_BASE}/security/securityset/9/canDelete"
+        assert m.call_args.kwargs["params"] == {"ignoreModelId": 5}
+
+    def test_security_set_buy_priority(self):
+        m = self._g(lambda a: a.get_security_set_buy_priority())
+        assert m.call_args.args[0] == f"{V1_BASE}/security/securityset/buypriority"
+
+    def test_security_set_sell_priority(self):
+        m = self._g(lambda a: a.get_security_set_sell_priority())
+        assert m.call_args.args[0] == f"{V1_BASE}/security/securityset/sellpriority"
+
+    def test_security_set_equivalent_types(self):
+        m = self._g(lambda a: a.get_security_set_equivalent_types())
+        assert m.call_args.args[0] == f"{V1_BASE}/security/securityset/equivalentType"
