@@ -4012,3 +4012,48 @@ class TestEclipseV1InstanceTrades:
             api.get_instance_trades(5165, status="open")
         assert mock_get.call_args.args[0] == f"{V1_BASE}/tradeorder/instances/5165/trades"
         assert mock_get.call_args.kwargs["params"] == {"status": "open"}
+
+
+class TestConfigurableTimeout:
+    """api_request timeout defaults to self.timeout, settable in constructors (2.22.0)."""
+
+    def test_default_timeout_is_30(self):
+        api = _eclipse_v1()
+        assert api.timeout == 30
+        mock_get = _mock_get([])
+        with patch("requests.get", mock_get):
+            api.get_account_filters()
+        assert mock_get.call_args.kwargs["timeout"] == 30
+
+    def test_constructor_timeout_propagates_to_requests(self):
+        with patch.object(EclipseV1, "login"):
+            api = EclipseV1(usr="u", pwd="p", timeout=120)
+        api.eclipse_token = "tok"
+        assert api.timeout == 120
+        mock_get = _mock_get([])
+        with patch("requests.get", mock_get):
+            api.get_account_filters()
+        assert mock_get.call_args.kwargs["timeout"] == 120
+
+    def test_per_call_timeout_overrides_instance(self):
+        with patch.object(EclipseV1, "login"):
+            api = EclipseV1(usr="u", pwd="p", timeout=120)
+        api.eclipse_token = "tok"
+        mock_get = _mock_get([])
+        with patch("requests.get", mock_get):
+            # api_request honors an explicit per-call timeout over self.timeout
+            api.api_request(f"{api.base_url}/x", timeout=5)
+        assert mock_get.call_args.kwargs["timeout"] == 5
+
+    def test_orion_constructor_timeout(self):
+        with patch.object(OrionAPI, "login"):
+            api = OrionAPI(usr="u", pwd="p", timeout=90)
+        assert api.timeout == 90
+
+    def test_eclipse_unifier_propagates_timeout_to_subclients(self):
+        from orionapi import Eclipse
+
+        api = Eclipse(eclipse_token="tok", timeout=75)
+        assert api.timeout == 75
+        assert api.v1.timeout == 75
+        assert api.v2.timeout == 75
