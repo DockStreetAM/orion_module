@@ -1,4 +1,4 @@
-__version__ = "2.21.0"
+__version__ = "2.22.0"
 
 import logging
 import re
@@ -187,17 +187,20 @@ class BaseAPI:
 
     base_url = None
 
-    def __init__(self, rate_limit=10, verify_ssl=True, ca_bundle=None):
+    def __init__(self, rate_limit=10, verify_ssl=True, ca_bundle=None, timeout=30):
         """Initialize base API with rate limiting and SSL configuration.
 
         Args:
             rate_limit: Maximum API calls per second (default 10, set to 0 to disable)
             verify_ssl: Verify SSL certificates (default True)
             ca_bundle: Path to custom CA bundle file (optional)
+            timeout: Default per-request timeout in seconds (default 30). Used by
+                :meth:`api_request` when a call doesn't pass its own ``timeout``.
         """
         self._rate_limiter = RateLimiter(calls_per_second=rate_limit)
         self.verify_ssl = verify_ssl
         self.ca_bundle = ca_bundle
+        self.timeout = timeout
         # RLock so subclasses can hold the lock across an internal call
         # path that re-enters auth-header construction.
         self._token_lock = threading.RLock()
@@ -249,7 +252,7 @@ class BaseAPI:
 
         return data
 
-    def api_request(self, url, req_func=None, timeout=30, **kwargs):
+    def api_request(self, url, req_func=None, timeout=None, **kwargs):
         """Make an authenticated API request with error handling.
 
         Args:
@@ -258,7 +261,9 @@ class BaseAPI:
                 Defaults to ``requests.get``. Resolved at call time (not bound as a
                 default argument) so that patching ``requests.get`` in tests takes
                 effect for GET methods.
-            timeout: Request timeout in seconds (default 30)
+            timeout: Per-call request timeout in seconds. When None (default), falls
+                back to the client's ``self.timeout`` (set in the constructor,
+                default 30).
             **kwargs: Additional arguments passed to the request
 
         Returns:
@@ -271,6 +276,8 @@ class BaseAPI:
         """
         if req_func is None:
             req_func = requests.get
+        if timeout is None:
+            timeout = self.timeout
 
         # Apply rate limiting
         self._rate_limiter.wait()
@@ -338,8 +345,12 @@ class OrionAPI(BaseAPI):
         'user@example.com'
     """
 
-    def __init__(self, usr=None, pwd=None, rate_limit=10, verify_ssl=True, ca_bundle=None):
-        super().__init__(rate_limit=rate_limit, verify_ssl=verify_ssl, ca_bundle=ca_bundle)
+    def __init__(
+        self, usr=None, pwd=None, rate_limit=10, verify_ssl=True, ca_bundle=None, timeout=30
+    ):
+        super().__init__(
+            rate_limit=rate_limit, verify_ssl=verify_ssl, ca_bundle=ca_bundle, timeout=timeout
+        )
         self.token = None
         self.base_url = "https://api.orionadvisor.com/api/v1/"
         self._custom_field_cache = {}
@@ -2124,8 +2135,11 @@ class EclipseBase(BaseAPI):
         rate_limit=10,
         verify_ssl=True,
         ca_bundle=None,
+        timeout=30,
     ):
-        super().__init__(rate_limit=rate_limit, verify_ssl=verify_ssl, ca_bundle=ca_bundle)
+        super().__init__(
+            rate_limit=rate_limit, verify_ssl=verify_ssl, ca_bundle=ca_bundle, timeout=timeout
+        )
         self.eclipse_token = None
         self.base_url = "https://api.orioneclipse.com/v1"
         # The v2 surface lives at the host root (/api/v2/...), NOT under /v1.
@@ -10835,6 +10849,7 @@ class Eclipse(EclipseBase):
         rate_limit=10,
         verify_ssl=True,
         ca_bundle=None,
+        timeout=30,
     ):
         super().__init__(
             usr=usr,
@@ -10844,6 +10859,7 @@ class Eclipse(EclipseBase):
             rate_limit=rate_limit,
             verify_ssl=verify_ssl,
             ca_bundle=ca_bundle,
+            timeout=timeout,
         )
         # Share the single authenticated token with both sub-clients (no re-login).
         sub_kwargs = {
@@ -10851,6 +10867,7 @@ class Eclipse(EclipseBase):
             "rate_limit": rate_limit,
             "verify_ssl": verify_ssl,
             "ca_bundle": ca_bundle,
+            "timeout": timeout,
         }
         self.v1 = EclipseV1(**sub_kwargs)
         self.v2 = EclipseV2(**sub_kwargs)
