@@ -1,4 +1,4 @@
-__version__ = "2.22.0"
+__version__ = "2.23.0"
 
 import logging
 import re
@@ -2406,6 +2406,7 @@ class EclipseV1(EclipseBase):
         expire_date=None,
         expire_trans_tol=0,
         expire_trans_type=1,
+        deplete_over_time=False,
         percent_calc_type=0,
         sync=True,
     ):
@@ -2423,6 +2424,9 @@ class EclipseV1(EclipseBase):
             expire_date: Expiration date (if expire_type='Date')
             expire_trans_tol: Transaction tolerance value (default 0)
             expire_trans_type: 1='Distribution / Merge Out', 3='Fee' (default 1)
+            deplete_over_time: Maps to the UI "Deplete Over Time" checkbox
+                (``isDepleteOverTime``). Only meaningful when
+                expire_type='Transaction' (default False)
             percent_calc_type: 0='Use Default/Managed Value', 1='Use Total Value',
                               2='Use Excluded Value' (default 0)
             sync: Wait for analytics to complete (default True)
@@ -2487,6 +2491,7 @@ class EclipseV1(EclipseBase):
                 "expirationValue": expire_value,
                 "toleranceValue": expire_trans_tol,
                 "transactionTypeId": expire_trans_type,
+                "isDepleteOverTime": bool(deplete_over_time),
                 "description": description,
                 "percentCalculationTypeId": percent_calc_type,
             },
@@ -5179,7 +5184,8 @@ class EclipseV1(EclipseBase):
         Args:
             account_id: Internal account ID
             aside_cash_id: Set-aside-cash ID
-            payload: Set-aside DTO (request body)
+            payload: Set-aside DTO (request body). May include ``isDepleteOverTime``
+                (bool), the API equivalent of the UI "Deplete Over Time" checkbox.
         """
         return self.api_request(
             f"{self.base_url}/account/accounts/{account_id}/asidecash/{aside_cash_id}",
@@ -5744,7 +5750,8 @@ class EclipseV1(EclipseBase):
 
         Args:
             portfolio_id: Portfolio ID
-            payload: Set-aside DTO (request body)
+            payload: Set-aside DTO (request body). May include ``isDepleteOverTime``
+                (bool), the API equivalent of the UI "Deplete Over Time" checkbox.
         """
         return self.api_request(
             f"{self.base_url}/portfolio/portfolios/{portfolio_id}/asideCash",
