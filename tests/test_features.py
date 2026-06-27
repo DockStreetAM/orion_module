@@ -334,6 +334,97 @@ class TestCreateSetAsideExtended:
                 # Verify _maybe_wait_for_analytics was called with False
                 mock_wait.assert_called_once_with(False)
 
+    def test_create_set_aside_deplete_over_time_default_false(self):
+        """By default the create body sends isDepleteOverTime=False."""
+        with (
+            patch.object(EclipseV1, "login"),
+            patch.object(EclipseV1, "get_internal_account_id", return_value=123),
+            patch.object(EclipseV1, "_get_auth_header", return_value={}),
+            patch.object(EclipseV1, "_maybe_wait_for_analytics"),
+        ):
+            api = EclipseV1(usr="test", pwd="pass")
+
+            with patch("requests.post") as mock_post:
+                mock_response = Mock()
+                mock_response.ok = True
+                mock_response.json.return_value = {"id": 1}
+                mock_post.return_value = mock_response
+
+                api.create_set_aside(account_number="12345", amount=1000)
+
+                request_json = mock_post.call_args[1]["json"]
+                assert request_json["isDepleteOverTime"] is False
+
+    def test_create_set_aside_deplete_over_time_transaction(self):
+        """deplete_over_time=True with Transaction expiration sets isDepleteOverTime."""
+        with (
+            patch.object(EclipseV1, "login"),
+            patch.object(EclipseV1, "get_internal_account_id", return_value=123),
+            patch.object(EclipseV1, "_get_auth_header", return_value={}),
+            patch.object(EclipseV1, "_maybe_wait_for_analytics"),
+        ):
+            api = EclipseV1(usr="test", pwd="pass")
+
+            with patch("requests.post") as mock_post:
+                mock_response = Mock()
+                mock_response.ok = True
+                mock_response.json.return_value = {"id": 1}
+                mock_post.return_value = mock_response
+
+                api.create_set_aside(
+                    account_number="12345",
+                    amount=1000,
+                    expire_type="Transaction",
+                    expire_trans_type=1,
+                    expire_trans_tol=2,
+                    deplete_over_time=True,
+                )
+
+                request_json = mock_post.call_args[1]["json"]
+                # The UI exposes this checkbox specifically for Transaction expiration.
+                assert request_json["expirationTypeId"] == 2  # Transaction
+                assert request_json["isDepleteOverTime"] is True
+
+
+class TestSetAsideDepleteOverTimePassthrough:
+    """The update / portfolio-create paths pass isDepleteOverTime through unchanged."""
+
+    def test_update_account_aside_cash_carries_deplete_over_time(self):
+        with (
+            patch.object(EclipseV1, "login"),
+            patch.object(EclipseV1, "_get_auth_header", return_value={}),
+        ):
+            api = EclipseV1(usr="test", pwd="pass")
+
+            with patch("requests.put") as mock_put:
+                mock_response = Mock()
+                mock_response.ok = True
+                mock_response.json.return_value = {"id": 1}
+                mock_put.return_value = mock_response
+
+                payload = {"cashAmount": 1000.0, "isDepleteOverTime": True}
+                api.update_account_aside_cash(123, 1, payload)
+
+                assert mock_put.call_args[1]["json"]["isDepleteOverTime"] is True
+
+    def test_create_portfolio_aside_cash_carries_deplete_over_time(self):
+        with (
+            patch.object(EclipseV1, "login"),
+            patch.object(EclipseV1, "_get_auth_header", return_value={}),
+        ):
+            api = EclipseV1(usr="test", pwd="pass")
+
+            with patch("requests.post") as mock_post:
+                mock_response = Mock()
+                mock_response.ok = True
+                mock_response.json.return_value = {"id": 1}
+                mock_post.return_value = mock_response
+
+                payload = {"cashAmount": 1000.0, "isDepleteOverTime": True}
+                api.create_portfolio_aside_cash(456, payload)
+
+                assert mock_post.call_args[1]["json"]["isDepleteOverTime"] is True
+
 
 # A realistic v2 AccountSetAsideCashResponseDto record (from live response).
 SAMPLE_SET_ASIDE = {
@@ -3989,9 +4080,9 @@ class TestVersionConsistency:
         pyproject = (Path(__file__).resolve().parent.parent / "pyproject.toml").read_text()
         m = re.search(r'^version = "([^"]+)"', pyproject, re.M)
         assert m, "version not found in pyproject.toml"
-        assert m.group(1) == orionapi.__version__, (
-            f"pyproject {m.group(1)} != __version__ {orionapi.__version__}"
-        )
+        assert (
+            m.group(1) == orionapi.__version__
+        ), f"pyproject {m.group(1)} != __version__ {orionapi.__version__}"
 
 
 class TestEclipseV1InstanceTrades:
