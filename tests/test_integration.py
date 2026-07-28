@@ -41,8 +41,9 @@ class TestEclipseAPI:
         assert isinstance(models, list)
 
     def test_get_orders(self, eclipse_client):
-        """Test that we can fetch orders."""
-        orders = eclipse_client.get_orders()
+        """Deprecated get_orders still works and warns."""
+        with pytest.warns(DeprecationWarning):
+            orders = eclipse_client.get_orders()
         assert isinstance(orders, list)
 
     def test_get_all_portfolios(self, eclipse_client):
@@ -235,8 +236,9 @@ class TestEclipseAPI:
     # Additional read method tests
 
     def test_get_orders_pending(self, eclipse_client):
-        """Test that we can fetch pending orders."""
-        orders = eclipse_client.get_orders_pending()
+        """Deprecated get_orders_pending still works and warns."""
+        with pytest.warns(DeprecationWarning):
+            orders = eclipse_client.get_orders_pending()
         assert isinstance(orders, list)
 
     def test_get_all_account_details(self, eclipse_client):
@@ -392,13 +394,33 @@ MSFT      3       8        15
 
     def test_get_trade_status(self, eclipse_client):
         """Test fetching trade status."""
-        orders = eclipse_client.get_orders()
+        orders = eclipse_client.get_trades(is_pending=False)
         if not orders:
             pytest.skip("No orders available")
 
         trade_id = orders[0]["id"]
         status = eclipse_client.get_trade_status(trade_id)
         assert isinstance(status, dict)
+
+    def test_validate_trade(self, eclipse_client):
+        """validate_trade is a read-only pre-flight; it must not create anything.
+
+        create_trade itself is never exercised live — it has no view-only mode.
+        """
+        orders = eclipse_client.get_trades(is_pending=False)
+        if not orders:
+            pytest.skip("No orders available")
+
+        order = orders[0]
+        result = eclipse_client.validate_trade(
+            action_id=1,
+            account_id=order["account"]["id"],
+            security_id=order["security"]["id"],
+            dollar_amount=100,
+        )
+        assert isinstance(result, dict)
+        assert "tradeAmount" in result
+        assert "cashValuePostTrade" in result
 
     def test_get_trade_instance(self, eclipse_client):
         """Test fetching trade instance details."""
@@ -935,8 +957,22 @@ class TestEclipse21Endpoints:
     def test_get_all_portfolios_top(self, eclipse_client):
         assert isinstance(eclipse_client.get_all_portfolios(top=3), list)
 
-    def test_get_trades_top(self, eclipse_client):
-        assert isinstance(eclipse_client.get_trades(top=3), list)
+    def test_get_trades_filters(self, eclipse_client):
+        """The documented /tradeorder/trades filters actually narrow the result set.
+
+        ``top`` is deliberately not tested here: Eclipse ignores ``$top`` on this
+        endpoint (see :meth:`EclipseV1.get_trades`).
+        """
+        trades = eclipse_client.get_trades()
+        assert isinstance(trades, list)
+        # blockId for a block that cannot exist filters everything out, proving the
+        # param is honoured rather than silently dropped.
+        assert eclipse_client.get_trades(block_id=999999) == []
+        account_ids = {t["account"]["id"] for t in trades if t.get("account")}
+        if account_ids:
+            one = next(iter(account_ids))
+            filtered = eclipse_client.get_trades(account_ids=[one])
+            assert {t["account"]["id"] for t in filtered if t.get("account")} == {one}
 
     def test_get_trade_instances_raw(self, eclipse_client):
         from datetime import datetime, timedelta

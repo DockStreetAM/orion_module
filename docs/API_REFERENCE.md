@@ -1,4 +1,4 @@
-# orionapi API Reference (v2.20.0)
+# orionapi API Reference (v2.24.0)
 
 Auto-generated from docstrings by `scripts/gen_api_reference.py`. Eclipse methods note their underlying endpoint.
 
@@ -91,7 +91,7 @@ Client for the Orion Advisor API.
 
 Eclipse client targeting the v1 API surface (``/v1/...``) only.
 
-**220 methods.**
+**223 methods.**
 
 | Method | Endpoint | Description |
 |---|---|---|
@@ -114,11 +114,12 @@ Eclipse client targeting the v1 API surface (``/v1/...``) only.
 | `create_portfolio_aside_cash(portfolio_id, payload)` | `POST /portfolio/portfolios/{portfolio_id}/asideCash` | Create set-aside cash for a portfolio (mutating). |
 | `create_security(payload)` | `POST /security/securities` | Create a security (mutating). |
 | `create_security_set(name, securities, description=None, tolerance_type='ABSOLUTE', tolerance_type_value=0)` | `POST /security/securityset` | Create a new security set. |
-| `create_set_aside(account_number, amount, min_amount=0.0, max_amount=0.0, description=None, cash_type='$', start_date=None, expire_type='None', expire_date=None, expire_trans_tol=0, expire_trans_type=1, percent_calc_type=0, sync=True)` | `POST /account/accounts/{account_id}/asidecash` | Create a set-aside cash reservation for an account. |
+| `create_set_aside(account_number, amount, min_amount=0.0, max_amount=0.0, description=None, cash_type='$', start_date=None, expire_type='None', expire_date=None, expire_trans_tol=0, expire_trans_type=1, deplete_over_time=False, percent_calc_type=0, sync=True)` | `POST /account/accounts/{account_id}/asidecash` | Create a set-aside cash reservation for an account. |
 | `create_submodel(payload)` | `POST /modeling/models/submodels` | Create a submodel (mutating). |
 | `create_tlh_trade(payload)` | `POST /tradetool/taxLossHarvesting/action/createTLHTrade` | Create a tax-loss-harvesting trade. |
 | `create_tlh_trade_batch(payload)` | `POST /tradetool/taxLossHarvesting/action/createTLHTradeBatchId` | Create a tax-loss-harvesting trade by batch ID. |
 | `create_tlh_trade_generic(payload)` | `POST /tradetool/taxLossHarvesting/action/createTrade` | Create a tax-loss-harvesting trade (generic createTrade). |
+| `create_trade(action_id, trade_tool_selection, trade_instance_type, trade_instance_sub_type, account_id=None, portfolio_id=None, security_id=None, dollar_amount=None, quantity=None, percentage=None, sync=True)` | `POST /tradeorder/trades` | Generate trade orders (``POST /tradeorder/trades``). |
 | `delete_account_aside_cash(account_id, aside_cash_id)` | `DELETE /account/accounts/{account_id}/asidecash/{aside_cash_id}` | Delete an account set-aside cash entry (mutating). |
 | `delete_model(model_id)` | `DELETE /modeling/models/{model_id}` | Delete a model (soft delete). |
 | `delete_model_portfolio(model_id, portfolio_id)` | `DELETE /modeling/models/{model_id}/portfolios/{portfolio_id}` | Unassign a portfolio from a model (mutating). |
@@ -180,6 +181,7 @@ Eclipse client targeting the v1 API surface (``/v1/...``) only.
 | `get_holding_filters()` | `GET /holding/holdings/holdingfilters` | Get the available holding filters. |
 | `get_holding_transactions(holding_id)` | `GET /holding/holdings/{holding_id}/transactions` | Get transactions for a holding. |
 | `get_house_account(custodian_id)` | `GET /account/accounts/action/houseAccount/{custodian_id}` | Get the house account for a custodian. |
+| `get_instance_trades(instance_id, status=None)` | `GET /tradeorder/instances/{instance_id}/trades` | Get the trades belonging to a trade instance. |
 | `get_model(id)` | `GET /modeling/models/{id}` | Get details for a specific model. |
 | `get_model_allocations(id, aggregate=True)` | `GET /modeling/models/{id}/allocations` | Get allocations for a model. |
 | `get_model_analysis(model_id, asset_type='securityset')` | `GET /modeling/models/{model_id}/modelAnalysis` | Get model analysis for a model. |
@@ -206,8 +208,8 @@ Eclipse client targeting the v1 API surface (``/v1/...``) only.
 | `get_models_by_model_details(body)` | `POST /modeling/models/modelsByModelDetails` | Get models by model-detail criteria (POST-body read). |
 | `get_new_account_template()` | `GET /account/accounts/new` | Get a blank/new account template. |
 | `get_new_portfolio_template()` | `GET /portfolio/portfolios/new` | Get a blank/new portfolio template. |
-| `get_orders()` | `GET /tradeorder/trades` | Get all completed (non-pending) trade orders. |
-| `get_orders_pending()` | `GET /tradeorder/trades` | Get all pending trade orders. |
+| `get_orders()` |  | Deprecated alias of ``get_trades(is_pending=False)``. |
+| `get_orders_pending()` |  | Deprecated alias of ``get_trades(is_pending=True)``. |
 | `get_out_of_tolerance_accounts(model_id, asset_id, asset_type='class')` | `GET /account/accounts/{model_id}/outOfTolerance/{asset_id}` | Get accounts out of tolerance for a model asset. |
 | `get_portfolio(portfolio_id)` | `GET /portfolio/portfolios/{portfolio_id}` | Get portfolio details by ID. |
 | `get_portfolio_account_count()` | `GET /account/accounts/portfolioAccountCount` | Get the portfolio/account count. |
@@ -269,7 +271,7 @@ Eclipse client targeting the v1 API surface (``/v1/...``) only.
 | `get_trade_priority_rankings()` | `GET /tradetool/priorityrankings` | Get the available trade priority rankings. |
 | `get_trade_side_options()` | `GET /tradetool/tradeside` | Get the trade-side options. |
 | `get_trade_status(trade_id)` | `GET /tradeorder/trades/{trade_id}` | Get status and details for a specific trade. |
-| `get_trades(portfolio_id=None, top=None, is_pending=None)` | `GET /tradeorder/trades` | Get trade orders with optional portfolio / paging / pending filters. |
+| `get_trades(portfolio_id=None, top=None, is_pending=None, block_id=None, filter_id=None, account_ids=None)` | `GET /tradeorder/trades` | Get trade orders with optional portfolio / block / filter / pending filters. |
 | `list_accounts_simple_v1(body=None)` | `POST /account/accounts/simple/list` | List accounts (simple) via the v1 POST-body endpoint. |
 | `list_models_simple_v1(body=None)` | `POST /modeling/models/simple/list` | List models (simple) via the v1 POST-body endpoint. |
 | `list_portfolio_accounts_simple(body)` | `POST /portfolio/portfolios/accounts/simple/list` | List portfolio accounts (simple) via the v1 POST-body endpoint. |
@@ -314,6 +316,7 @@ Eclipse client targeting the v1 API surface (``/v1/...``) only.
 | `validate_buy_preferred_tlh_securities(payload)` | `POST /tradetool/taxLossHarvesting/action/validateBuyPreferredTHSecurities` | Validate buy-preferred tax-loss-harvesting securities (POST-body). |
 | `validate_model_upload(payload)` | `POST /modeling/models/upload/validate` | Validate a model upload (POST-body). |
 | `validate_tlh_securities(payload)` | `POST /tradetool/taxLossHarvesting/action/validateTLHSecurities` | Validate tax-loss-harvesting securities (POST-body). |
+| `validate_trade(action_id, account_id=None, portfolio_id=None, security_id=None, dollar_amount=None, quantity=None, percentage=None, is_auto_allocate=None)` | `POST /tradeorder/trades/validate` | Validate a trade before creating it (``POST /tradeorder/trades/validate``). |
 | `wait_for_analytics(poll_interval=1, timeout=300)` |  | Wait for analytics to complete. |
 
 ## EclipseV2
