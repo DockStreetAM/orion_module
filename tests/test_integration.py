@@ -422,6 +422,34 @@ MSFT      3       8        15
         assert "tradeAmount" in result
         assert "cashValuePostTrade" in result
 
+    def test_v2_validate_trades_handles_sells(self, eclipse_client):
+        """v2 validates SELLs, which the v1 endpoint 500s on.
+
+        Read-only. create_trades is never exercised live.
+        """
+        orders = eclipse_client.get_trades(is_pending=False)
+        if not orders:
+            pytest.skip("No orders available")
+
+        o = orders[0]
+        acct, sec = o["account"]["id"], o["security"]["id"]
+        pf = (o.get("portfolio") or {}).get("id")
+        if not pf:
+            pytest.skip("No portfolio on the sample order")
+
+        sell = eclipse_client.build_trade(
+            account_id=acct, portfolio_id=pf, security_id=sec, action=2, shares=1
+        )
+        rows = eclipse_client.validate_trades([sell])
+        assert isinstance(rows, list)
+        # A non-empty response is the point: portfolioId omitted would give 200 [].
+        assert rows, "v2 validate returned no rows — check portfolioId"
+        assert all(r.get("action") == "SELL" for r in rows)
+
+    def test_v2_validate_trades_requires_portfolio_id(self, eclipse_client):
+        with pytest.raises(ValueError, match="missing portfolioId"):
+            eclipse_client.validate_trades([{"accountId": 1, "securityId": 1, "action": 2}])
+
     def test_get_trade_instance(self, eclipse_client):
         """Test fetching trade instance details."""
         # Try to get a recent instance - we know instance 4891 exists from testing

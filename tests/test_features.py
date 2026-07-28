@@ -1161,6 +1161,126 @@ class TestEclipseV1TradeGenPreview:
 V2_BASE = "https://api.orioneclipse.com/api/v2"
 
 
+class TestEclipseV2TradeOrderTrades:
+    """v2 batch create/validate — the working path for sells (v1 500s on every sell)."""
+
+    def _trade(self, **overrides):
+        kwargs = {
+            "account_id": 244,
+            "portfolio_id": 84,
+            "security_id": 73,
+            "action": 2,
+            "shares": 1,
+        }
+        kwargs.update(overrides)
+        return EclipseV2.build_trade(**kwargs)
+
+    # --- build_trade ---
+
+    def test_build_trade_shapes_v2_keys(self):
+        assert self._trade() == {
+            "accountId": 244,
+            "portfolioId": 84,
+            "securityId": 73,
+            "action": 2,
+            "tradeShares": 1,
+        }
+
+    def test_build_trade_amount_and_percent_keys(self):
+        assert self._trade(shares=None, amount=1000)["tradeAmount"] == 1000
+        assert self._trade(shares=None, percent=10)["tradePercent"] == 10
+
+    def test_build_trade_extra_passthrough(self):
+        assert self._trade(taxLotId=99)["taxLotId"] == 99
+
+    @pytest.mark.parametrize(
+        ("overrides", "match"),
+        [
+            ({"portfolio_id": None}, "portfolio_id is required"),
+            ({"action": 9}, "action must be"),
+            ({"shares": None}, "exactly one of shares"),
+            ({"amount": 500}, "exactly one of shares"),  # shares AND amount
+        ],
+    )
+    def test_build_trade_validation(self, overrides, match):
+        with pytest.raises(ValueError, match=match):
+            self._trade(**overrides)
+
+    # --- validate_trades ---
+
+    def test_validate_trades_url_and_body(self):
+        api = _eclipse_for_set_asides()
+        mock_post = _mock_post([{"isValid": True, "tradeAmount": 394.198}])
+        with patch("requests.post", mock_post):
+            result = api.validate_trades([self._trade()])
+        assert mock_post.call_args.args[0] == f"{V2_BASE}/TradeOrder/Trades/Action/Validate"
+        assert mock_post.call_args.kwargs["json"] == {
+            "application": 1,
+            "trades": [self._trade()],
+            "tradeToolSelection": 2,
+            "tradeInstanceType": 5,
+            "tradeInstanceSubType": 11,
+        }
+        assert result[0]["isValid"] is True
+
+    def test_validate_trades_instance_notes_only_when_set(self):
+        api = _eclipse_for_set_asides()
+        mock_post = _mock_post([])
+        with patch("requests.post", mock_post):
+            api.validate_trades([self._trade()], instance_notes="why")
+        assert mock_post.call_args.kwargs["json"]["instanceNotes"] == "why"
+
+    def test_validate_trades_rejects_missing_portfolio_id(self):
+        """Without portfolioId the API returns 200 [] — fail loudly instead."""
+        api = _eclipse_for_set_asides()
+        raw = {"accountId": 244, "securityId": 73, "action": 2, "tradeShares": 1}
+        with patch("requests.post") as mock_post:
+            with pytest.raises(ValueError, match="missing portfolioId"):
+                api.validate_trades([raw])
+        mock_post.assert_not_called()
+
+    def test_validate_trades_rejects_empty_list(self):
+        api = _eclipse_for_set_asides()
+        with pytest.raises(ValueError, match="non-empty"):
+            api.validate_trades([])
+
+    # --- create_trades ---
+
+    def test_create_trades_url_and_body(self):
+        api = _eclipse_for_set_asides()
+        mock_post = _mock_post([{"id": 1}])
+        with patch("requests.post", mock_post):
+            api.create_trades([self._trade()], instance_notes="batch")
+        assert mock_post.call_args.args[0] == f"{V2_BASE}/TradeOrder/Trades"
+        body = mock_post.call_args.kwargs["json"]
+        assert body["trades"] == [self._trade()]
+        assert body["instanceNotes"] == "batch"
+        # v2 has no isSendImmediately field at all
+        assert "isSendImmediately" not in body
+
+    @pytest.mark.parametrize("banned", ["approvalStatus", "orderStatus"])
+    def test_create_trades_rejects_approval_and_status(self, banned):
+        """Create-and-approve in one call stays impossible."""
+        api = _eclipse_for_set_asides()
+        with patch("requests.post") as mock_post:
+            with pytest.raises(ValueError, match=banned):
+                api.create_trades([self._trade(**{banned: 3})])
+        mock_post.assert_not_called()
+
+    def test_validate_trades_allows_approval_status(self):
+        """The guard is create-only; validate writes nothing."""
+        api = _eclipse_for_set_asides()
+        mock_post = _mock_post([])
+        with patch("requests.post", mock_post):
+            api.validate_trades([self._trade(approvalStatus=3)])
+        assert mock_post.call_args.kwargs["json"]["trades"][0]["approvalStatus"] == 3
+
+    def test_v2_batch_methods_not_shadowed_on_unifier(self):
+        """Plural names keep them reachable past the v1-first __getattr__."""
+        assert not hasattr(EclipseV1, "create_trades")
+        assert not hasattr(EclipseV1, "validate_trades")
+
+
 class TestEclipseV2ReadEndpoints:
     """URL/params coverage for the v2-only read methods (coverage batch 1).
 
