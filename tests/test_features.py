@@ -3,6 +3,7 @@
 Tests for medium-priority features identified in coverage analysis.
 """
 
+import inspect
 import time
 from unittest.mock import Mock, patch
 
@@ -786,12 +787,207 @@ class TestEclipseV1NewGetEndpoints:
         api = _eclipse_v1()
         mock_get = _mock_get([])
         with patch("requests.get", mock_get):
-            api.get_trades(portfolio_id=5, top=10, is_pending=True)
+            api.get_trades(portfolio_id=5, is_pending=True)
         assert mock_get.call_args.kwargs["params"] == {
             "portfolioId": 5,
-            "$top": 10,
             "isPending": "true",
         }
+
+    def test_get_trades_top_is_deprecated_and_not_sent(self):
+        """Eclipse silently drops $top on this endpoint, so we no longer send it."""
+        api = _eclipse_v1()
+        mock_get = _mock_get([])
+        with patch("requests.get", mock_get), pytest.warns(DeprecationWarning, match="ignored"):
+            api.get_trades(top=10)
+        assert "$top" not in mock_get.call_args.kwargs["params"]
+        assert mock_get.call_args.kwargs["params"] == {}
+
+    def test_get_trades_block_filter_account_params(self):
+        api = _eclipse_v1()
+        mock_get = _mock_get([])
+        with patch("requests.get", mock_get):
+            api.get_trades(block_id=42, filter_id=7, account_ids=[1, 2])
+        assert mock_get.call_args.args[0] == f"{V1_BASE}/tradeorder/trades"
+        assert mock_get.call_args.kwargs["params"] == {
+            "blockId": 42,
+            "filterId": 7,
+            "accountIds": "1,2",
+        }
+
+    def test_get_trades_account_ids_string_passthrough(self):
+        api = _eclipse_v1()
+        mock_get = _mock_get([])
+        with patch("requests.get", mock_get):
+            api.get_trades(account_ids="1,2,3")
+        assert mock_get.call_args.kwargs["params"] == {"accountIds": "1,2,3"}
+
+
+class TestEclipseV1DeprecatedOrderAccessors:
+    """get_orders / get_orders_pending now delegate to get_trades with a warning."""
+
+    def test_get_orders_warns_and_delegates(self):
+        api = _eclipse_v1()
+        mock_get = _mock_get([])
+        with patch("requests.get", mock_get), pytest.warns(DeprecationWarning):
+            api.get_orders()
+        assert mock_get.call_args.args[0] == f"{V1_BASE}/tradeorder/trades"
+        assert mock_get.call_args.kwargs["params"] == {"isPending": "false"}
+
+    def test_get_orders_pending_warns_and_delegates(self):
+        api = _eclipse_v1()
+        mock_get = _mock_get([])
+        with patch("requests.get", mock_get), pytest.warns(DeprecationWarning):
+            api.get_orders_pending()
+        assert mock_get.call_args.args[0] == f"{V1_BASE}/tradeorder/trades"
+        assert mock_get.call_args.kwargs["params"] == {"isPending": "true"}
+
+
+class TestEclipseV1CreateTrade:
+    """POST /tradeorder/trades and /tradeorder/trades/validate.
+
+    Mocked only — this endpoint has no view-only mode and is never run live.
+    """
+
+    def _create(self, api, **overrides):
+        kwargs = {
+            "action_id": 1,
+            "trade_tool_selection": 2,
+            "trade_instance_type": 5,
+            "trade_instance_sub_type": 11,
+            "account_id": 9006,
+            "portfolio_id": 15,
+            "security_id": 14630,
+            "dollar_amount": 3000,
+        }
+        kwargs.update(overrides)
+        return api.create_trade(**kwargs)
+
+    def test_buy_body_and_url(self):
+        api = _eclipse_v1()
+        mock_post = _mock_post({"message": "Trade generated successfully"})
+        with (
+            patch("requests.post", mock_post),
+            patch.object(EclipseV1, "_maybe_wait_for_analytics"),
+        ):
+            result = self._create(api)
+        assert mock_post.call_args.args[0] == f"{V1_BASE}/tradeorder/trades"
+        assert mock_post.call_args.kwargs["json"] == {
+            "accountId": 9006,
+            "portfolioId": 15,
+            "actionId": 1,
+            "securityId": 14630,
+            "dollarAmount": 3000,
+            "quantity": 0,
+            "percentage": 0,
+            "isSendImmediately": False,
+            "tradeToolSelection": 2,
+            "tradeInstanceType": 5,
+            "tradeInstanceSubType": 11,
+        }
+        assert result == {"message": "Trade generated successfully"}
+
+    def test_is_send_immediately_always_false(self):
+        """The create/execute split must not regress."""
+        assert "is_send_immediately" not in inspect.signature(EclipseV1.create_trade).parameters
+        api = _eclipse_v1()
+        mock_post = _mock_post({})
+        with (
+            patch("requests.post", mock_post),
+            patch.object(EclipseV1, "_maybe_wait_for_analytics"),
+        ):
+            self._create(api, action_id=2, quantity=10, dollar_amount=None)
+        assert mock_post.call_args.kwargs["json"]["isSendImmediately"] is False
+
+    def test_journal_sends_nulls_for_unset_amounts(self):
+        api = _eclipse_v1()
+        mock_post = _mock_post({"instanceId": 1106})
+        with (
+            patch("requests.post", mock_post),
+            patch.object(EclipseV1, "_maybe_wait_for_analytics"),
+        ):
+            api.create_trade(
+                action_id=3,
+                trade_tool_selection=1,
+                trade_instance_type=6,
+                trade_instance_sub_type=14,
+                portfolio_id=12,
+            )
+        assert mock_post.call_args.kwargs["json"] == {
+            "accountId": None,
+            "portfolioId": 12,
+            "actionId": 3,
+            "securityId": None,
+            "dollarAmount": None,
+            "quantity": None,
+            "percentage": None,
+            "isSendImmediately": False,
+            "tradeToolSelection": 1,
+            "tradeInstanceType": 6,
+            "tradeInstanceSubType": 14,
+        }
+
+    def test_sync_defaults_true(self):
+        api = _eclipse_v1()
+        with (
+            patch("requests.post", _mock_post({})),
+            patch.object(EclipseV1, "_maybe_wait_for_analytics") as mock_wait,
+        ):
+            self._create(api)
+        mock_wait.assert_called_once_with(True)
+
+    def test_sync_false_passed_through(self):
+        api = _eclipse_v1()
+        with (
+            patch("requests.post", _mock_post({})),
+            patch.object(EclipseV1, "_maybe_wait_for_analytics") as mock_wait,
+        ):
+            self._create(api, sync=False)
+        mock_wait.assert_called_once_with(False)
+
+    @pytest.mark.parametrize(
+        ("overrides", "match"),
+        [
+            ({"action_id": 9}, "action_id must be"),
+            ({"trade_tool_selection": 11}, "trade_tool_selection must be"),
+            ({"trade_instance_type": 99}, "trade_instance_type must be"),
+            ({"trade_instance_sub_type": 99}, "trade_instance_sub_type must be"),
+            ({"trade_instance_type": 4}, "Option Trading is not supported"),
+            ({"trade_instance_sub_type": 9}, "Option Trading is not supported"),
+            ({"account_id": None, "portfolio_id": None}, "account_id or portfolio_id"),
+            ({"security_id": None}, "security_id is required"),
+            ({"dollar_amount": None}, "exactly one of dollar_amount"),  # no amount
+            ({"quantity": 10}, "exactly one of dollar_amount"),  # two amounts
+        ],
+    )
+    def test_validation_errors(self, overrides, match):
+        api = _eclipse_v1()
+        with patch("requests.post") as mock_post:
+            with pytest.raises(ValueError, match=match):
+                self._create(api, **overrides)
+        mock_post.assert_not_called()
+
+    def test_validate_trade_url_and_body(self):
+        api = _eclipse_v1()
+        mock_post = _mock_post({"message": "Trade validate successfully", "tradeAmount": 122})
+        with patch("requests.post", mock_post):
+            result = api.validate_trade(
+                action_id=1, account_id=9006, security_id=14630, dollar_amount=3000
+            )
+        assert mock_post.call_args.args[0] == f"{V1_BASE}/tradeorder/trades/validate"
+        assert mock_post.call_args.kwargs["json"] == {
+            "actionId": 1,
+            "accountId": 9006,
+            "securityId": 14630,
+            "dollarAmount": 3000,
+        }
+        assert result["tradeAmount"] == 122
+
+    def test_validate_trade_omits_none_keys(self):
+        api = _eclipse_v1()
+        mock_post = _mock_post({})
+        with patch("requests.post", mock_post):
+            api.validate_trade(action_id=2, portfolio_id=15)
+        assert mock_post.call_args.kwargs["json"] == {"actionId": 2, "portfolioId": 15}
 
 
 class TestEclipseV1ParamAdditions:
