@@ -1,4 +1,4 @@
-__version__ = "2.23.0"
+__version__ = "2.24.0"
 
 import logging
 import re
@@ -2748,33 +2748,68 @@ class EclipseV1(EclipseBase):
             self.wait_for_analytics()
 
     def get_orders(self):
-        """Get all completed (non-pending) trade orders.
+        """Deprecated alias of ``get_trades(is_pending=False)``.
+
+        Both hit the same ``/tradeorder/trades`` endpoint; :meth:`get_trades` is the
+        superset and also exposes the portfolio, block, filter and account filters.
+        Emits a ``DeprecationWarning`` and will be removed in a future major release.
 
         Returns:
             list: List of completed trade order dicts
         """
-        return self.api_request(f"{self.base_url}/tradeorder/trades?isPending=false").json()
+        warnings.warn(
+            "get_orders is deprecated; use get_trades(is_pending=False).",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return self.get_trades(is_pending=False)
 
     def get_orders_pending(self):
-        """Get all pending trade orders.
+        """Deprecated alias of ``get_trades(is_pending=True)``.
+
+        Both hit the same ``/tradeorder/trades`` endpoint; :meth:`get_trades` is the
+        superset and also exposes the portfolio, block, filter and account filters.
+        Emits a ``DeprecationWarning`` and will be removed in a future major release.
 
         Returns:
             list: List of pending trade order dicts
         """
-        return self.api_request(f"{self.base_url}/tradeorder/trades?isPending=true").json()
+        warnings.warn(
+            "get_orders_pending is deprecated; use get_trades(is_pending=True).",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return self.get_trades(is_pending=True)
 
-    def get_trades(self, portfolio_id=None, top=None, is_pending=None):
-        """Get trade orders with optional portfolio / paging / pending filters.
+    def get_trades(
+        self,
+        portfolio_id=None,
+        top=None,
+        is_pending=None,
+        block_id=None,
+        filter_id=None,
+        account_ids=None,
+    ):
+        """Get trade orders with optional portfolio / block / filter / pending filters.
 
-        Hits the same ``/tradeorder/trades`` endpoint as :meth:`get_orders` /
-        :meth:`get_orders_pending`, but lets the caller filter by portfolio and cap
-        the result count.
+        The canonical accessor for ``GET /tradeorder/trades``. Supersedes the
+        deprecated :meth:`get_orders` / :meth:`get_orders_pending`, which only
+        varied ``is_pending``.
 
         Args:
             portfolio_id: Optional portfolio ID filter (maps to ``portfolioId``)
-            top: Optional max number of results (maps to ``$top``)
+            top: Deprecated and ignored. ``$top`` is not a documented param on this
+                endpoint, and Eclipse silently drops unknown query params rather
+                than erroring — live-verified 2026-07-28: with 10 trades in the
+                tenant, ``$top=3`` still returned all 10. Slice the result instead.
             is_pending: Optional bool; when set, filter by pending status
                 (maps to ``isPending``)
+            block_id: Optional trade block ID filter (maps to ``blockId``)
+            filter_id: Optional trade filter type ID (maps to ``filterId``); see
+                the ``/tradeorder/trades/filterTypes`` endpoint for valid values
+            account_ids: Optional account ID filter (maps to ``accountIds``);
+                accepts a list/tuple of IDs, which is joined to a comma-separated
+                string, or a pre-formatted string
 
         Returns:
             list: Trade order dicts
@@ -2783,11 +2818,188 @@ class EclipseV1(EclipseBase):
         if portfolio_id is not None:
             params["portfolioId"] = portfolio_id
         if top is not None:
-            params["$top"] = top
+            warnings.warn(
+                "get_trades(top=...) is ignored by Eclipse: $top is not a supported "
+                "param on /tradeorder/trades and the server silently drops it. "
+                "Slice the returned list instead. This parameter will be removed in "
+                "a future major release.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
         if is_pending is not None:
             params["isPending"] = str(is_pending).lower()
+        if block_id is not None:
+            params["blockId"] = block_id
+        if filter_id is not None:
+            params["filterId"] = filter_id
+        if account_ids is not None:
+            if isinstance(account_ids, (list, tuple)):
+                account_ids = ",".join(str(a) for a in account_ids)
+            params["accountIds"] = account_ids
         res = self.api_request(f"{self.base_url}/tradeorder/trades", params=params)
         return res.json()
+
+    def validate_trade(
+        self,
+        action_id,
+        account_id=None,
+        portfolio_id=None,
+        security_id=None,
+        dollar_amount=None,
+        quantity=None,
+        percentage=None,
+        is_auto_allocate=None,
+    ):
+        """Validate a trade before creating it (``POST /tradeorder/trades/validate``).
+
+        Writes nothing. Use this as the pre-flight check for :meth:`create_trade`,
+        which has no preview / view-only mode of its own.
+
+        Args:
+            action_id: 1=Buy, 2=Sell, 3=Journal In, 4=Journal Out
+            account_id: Optional account ID
+            portfolio_id: Optional portfolio ID
+            security_id: Optional security ID
+            dollar_amount: Optional dollar amount to buy/sell
+            quantity: Optional number of shares to buy/sell
+            percentage: Optional percent of the position to buy/sell
+            is_auto_allocate: Optional bool (maps to ``isAutoAllocate``)
+
+        Returns:
+            dict: ``message``, ``tradeAmount``, ``cashValuePostTrade`` and a
+            ``warningMessage`` list (e.g. warnings about overspending cash)
+        """
+        payload = {
+            "actionId": action_id,
+            "accountId": account_id,
+            "portfolioId": portfolio_id,
+            "securityId": security_id,
+            "dollarAmount": dollar_amount,
+            "quantity": quantity,
+            "percentage": percentage,
+            "isAutoAllocate": is_auto_allocate,
+        }
+        payload = {k: v for k, v in payload.items() if v is not None}
+
+        res = self.api_request(
+            f"{self.base_url}/tradeorder/trades/validate", requests.post, json=payload
+        )
+        return res.json()
+
+    def create_trade(
+        self,
+        action_id,
+        trade_tool_selection,
+        trade_instance_type,
+        trade_instance_sub_type,
+        account_id=None,
+        portfolio_id=None,
+        security_id=None,
+        dollar_amount=None,
+        quantity=None,
+        percentage=None,
+        sync=True,
+    ):
+        """Generate trade orders (``POST /tradeorder/trades``).
+
+        The generic per-trade creator behind Eclipse's Quick Trade / journal flows,
+        as opposed to the ``/tradetool/`` generators (:meth:`cash_needs_trade`,
+        :meth:`rebalance_trade`, ...) which operate on whole portfolios.
+
+        .. warning::
+            This endpoint has **no view-only mode** — it always writes. Call
+            :meth:`validate_trade` first to preview the trade amount, the resulting
+            cash balance and any warnings.
+
+            Trades are always created as pending orders: the wrapper hardcodes
+            ``isSendImmediately: false`` and deliberately does not expose it, so a
+            single call can never both create and execute a trade. Review and
+            execute the resulting orders in Eclipse.
+
+        Args:
+            action_id: 1=Buy, 2=Sell, 3=Journal In, 4=Journal Out. (The Eclipse
+                docs list both journal directions as ``3``; ``4`` is accepted on
+                the assumption that Journal Out is ``4``.)
+            trade_tool_selection: 1=Portfolio, 2=Account, 3=Model,
+                4=Account Trade Group, 5=Sleeve Portfolio, 6=Excel Import,
+                7=Portfolio Trade Group, 8=Security Import, 9=Individual Sleeve,
+                10=Tactical Tool
+            trade_instance_type: Trade instance type ID; see
+                :data:`TRADE_INSTANCE_TYPES`
+            trade_instance_sub_type: Trade instance sub-type ID; see
+                :data:`TRADE_INSTANCE_SUBTYPES`
+            account_id: Account ID (required unless ``portfolio_id`` is given)
+            portfolio_id: Portfolio ID (required unless ``account_id`` is given)
+            security_id: Security ID; required for buys and sells
+            dollar_amount: Dollar amount to buy/sell
+            quantity: Number of shares to buy/sell
+            percentage: Percent of the position to buy/sell
+            sync: Wait for analytics to complete (default True)
+
+        Returns:
+            dict: Either ``{"message": ...}`` or ``{"issues": [...],
+            "success": [...], "instanceId": ...}``
+
+        Raises:
+            ValueError: If the enum values are unknown, option trading is
+                requested (unsupported by Eclipse), neither an account nor a
+                portfolio is given, or a buy/sell does not specify exactly one of
+                ``dollar_amount`` / ``quantity`` / ``percentage``.
+        """
+        if action_id not in (1, 2, 3, 4):
+            raise ValueError(
+                "action_id must be 1 (Buy), 2 (Sell), 3 (Journal In) or 4 (Journal Out)"
+            )
+        if trade_tool_selection not in range(1, 11):
+            raise ValueError("trade_tool_selection must be an integer between 1 and 10")
+        if trade_instance_type not in TRADE_INSTANCE_TYPES:
+            raise ValueError(
+                f"trade_instance_type must be one of {sorted(TRADE_INSTANCE_TYPES)}, "
+                f"got {trade_instance_type!r}"
+            )
+        if trade_instance_sub_type not in TRADE_INSTANCE_SUBTYPES:
+            raise ValueError(
+                f"trade_instance_sub_type must be one of {sorted(TRADE_INSTANCE_SUBTYPES)}, "
+                f"got {trade_instance_sub_type!r}"
+            )
+        # Eclipse documents option trading as "not supported" on this endpoint.
+        if trade_instance_type == 4 or trade_instance_sub_type == 9:
+            raise ValueError("Option Trading is not supported by the /tradeorder/trades endpoint")
+        if account_id is None and portfolio_id is None:
+            raise ValueError("at least one of account_id or portfolio_id is required")
+
+        is_buy_or_sell = action_id in (1, 2)
+        if is_buy_or_sell:
+            if security_id is None:
+                raise ValueError("security_id is required for buys and sells")
+            amounts = [a for a in (dollar_amount, quantity, percentage) if a]
+            if len(amounts) != 1:
+                raise ValueError(
+                    "exactly one of dollar_amount, quantity or percentage must be set "
+                    "for buys and sells"
+                )
+
+        # Buys/sells send 0 for the unused amount fields; journals send null.
+        unset = 0 if is_buy_or_sell else None
+        payload = {
+            "accountId": account_id,
+            "portfolioId": portfolio_id,
+            "actionId": action_id,
+            "securityId": security_id,
+            "dollarAmount": dollar_amount if dollar_amount is not None else unset,
+            "quantity": quantity if quantity is not None else unset,
+            "percentage": percentage if percentage is not None else unset,
+            # Never expose this: creating and executing a trade must stay separate.
+            "isSendImmediately": False,
+            "tradeToolSelection": trade_tool_selection,
+            "tradeInstanceType": trade_instance_type,
+            "tradeInstanceSubType": trade_instance_sub_type,
+        }
+
+        res = self.api_request(f"{self.base_url}/tradeorder/trades", requests.post, json=payload)
+        result = res.json()
+        self._maybe_wait_for_analytics(sync)
+        return result
 
     def cash_needs_trade(
         self,
