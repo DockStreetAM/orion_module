@@ -1,4 +1,4 @@
-# orionapi API Reference (v2.25.0)
+# orionapi API Reference (v2.26.0)
 
 Auto-generated from docstrings by `scripts/gen_api_reference.py`. Eclipse methods note their underlying endpoint.
 
@@ -352,7 +352,7 @@ Eclipse client targeting the v2 API surface (``/api/v2/...``) only.
 | `create_notification(notification)` | `POST /api/v2/Notifications/Notification/CreateNotification` | Create a notification. |
 | `create_sma_model(payload)` | `POST /api/v2/Model/SMA` | Create an SMA model (mutating). |
 | `create_ticker_based_model(payload)` | `POST /api/v2/Model/TickerBasedModel` | Create a ticker-based model (mutating). |
-| `create_trades(trades, application=1, trade_tool_selection=2, trade_instance_type=5, trade_instance_sub_type=11, instance_notes=None)` | `POST /api/v2/TradeOrder/Trades` | Create a batch of trade orders (``POST /TradeOrder/Trades``). |
+| `create_trades(trades, application=11, trade_tool_selection=2, trade_instance_type=5, trade_instance_sub_type=11, instance_notes=None)` | `POST /api/v2/TradeOrder/Trades` | Create a batch of trade orders (``POST /TradeOrder/Trades``). |
 | `create_workflow_context(context)` | `POST /api/v2/Workflow/contexts` | Create a workflow context (mutating). |
 | `custom_import_add_row(instance_id, row)` | `POST /api/v2/CustomImports/Instances/AddRow/{instance_id}` | Add a row to a custom-import instance (mutating). |
 | `custom_import_generate_override(instance_id)` | `POST /api/v2/CustomImports/Instances/GenerateOverride/{instance_id}` | Generate an override for a custom-import instance (mutating). |
@@ -635,7 +635,7 @@ Eclipse client targeting the v2 API surface (``/api/v2/...``) only.
 | `update_workflow_context(context_id, context)` | `PUT /api/v2/Workflow/contexts/{context_id}` | Update a workflow context (mutating). |
 | `upload_security_setting_equivalents(payload)` | `POST /api/v2/SecuritySettingPreference/Equivalents/Upload` | Upload security-setting equivalents (mutating). |
 | `validate_community_model_unassign(payload, apply_delete=None)` | `POST /api/v2/Communities/ModelUnAssignValidation` | Validate (and optionally apply) a community-model unassign (mutating when applied). |
-| `validate_trades(trades, application=1, trade_tool_selection=2, trade_instance_type=5, trade_instance_sub_type=11, instance_notes=None)` | `POST /api/v2/TradeOrder/Trades/Action/Validate` | Validate a batch of trades (``POST /TradeOrder/Trades/Action/Validate``). |
+| `validate_trades(trades, application=11, trade_tool_selection=2, trade_instance_type=5, trade_instance_sub_type=11, instance_notes=None)` | `POST /api/v2/TradeOrder/Trades/Action/Validate` | Validate a batch of trades (``POST /TradeOrder/Trades/Action/Validate``). |
 | `withdraw_astro_cash(payload)` | `POST /api/v2/Account/AstroAccounts/WithdrawCash` | Withdraw cash via Astro (mutating). |
 
 ## Eclipse
