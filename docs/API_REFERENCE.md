@@ -1,4 +1,4 @@
-# orionapi API Reference (v2.26.0)
+# orionapi API Reference (v2.27.0)
 
 Auto-generated from docstrings by `scripts/gen_api_reference.py`. Eclipse methods note their underlying endpoint.
 
@@ -8,7 +8,7 @@ Classes: `OrionAPI` (Orion Advisor), `EclipseV1` / `EclipseV2` (explicit Eclipse
 
 Client for the Orion Advisor API.
 
-**74 methods.**
+**75 methods.**
 
 | Method | Endpoint | Description |
 |---|---|---|
@@ -79,6 +79,7 @@ Client for the Orion Advisor API.
 | `search_registrations(search_term, top=20, is_active=True)` | `GET /Portfolio/Registrations/Simple/Search` | Search for registrations by name. |
 | `send_electronic_statements(batch_id, entity_ids=None)` | `POST /Reporting/Batch/{batch_id}/Entities/Action/SendElectronicStatement` | Send electronic statements (email) for a report batch. |
 | `split_registration(registration_id)` | `PUT /Portfolio/Registrations/{registration_id}/Action/Split` | Split a registration so each active non-sleeved account gets its own registration. |
+| `sync_cash_to_eclipse(account)` | `POST /Billing/SyncCashtoEclipse` | Export one cash funding row to Eclipse as a cash set-aside. |
 | `undo_account_conversion(account_id)` | `DELETE /Portfolio/Accounts/{account_id}/Action/UndoConversion` | Undo an account conversion. |
 | `update_bill_item_adjustments(bill_account_item_id, adjustments, create_payable_adj=None)` | `PUT /Billing/BillGenerator/BillAccountItems/BillAccountAdj/edit/{bill_account_item_id}` | Add, update, or delete adjustments on a bill account item. |
 | `update_client(client_id, data)` | `PUT /Portfolio/Clients/{client_id}` | Update a household/client. |
