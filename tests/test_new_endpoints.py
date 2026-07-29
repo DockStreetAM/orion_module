@@ -6,6 +6,7 @@ Tests for OrionAPI and EclipseV1 methods added in v1.4.0.
 from unittest.mock import Mock, patch
 
 import pytest
+import requests
 
 from orionapi import EclipseV1, OrionAPI, OrionAPIError
 
@@ -1060,6 +1061,78 @@ class TestOrionBillingOperations:
             api.generate_cash_funding(instance_ids=[])
         with pytest.raises(ValueError, match="instance_ids must be a non-empty list"):
             api.generate_cash_funding(instance_ids="bad")
+
+    # --- Cash Funding -> Eclipse set-aside export ---
+
+    CASH_FUNDING_ROW = {
+        "id": 74,
+        "registrationName": "David H Bruce 1980",
+        "registrationId": 74,
+        "fundFamily": "Schwab",
+        "productName": "Cash and Equivalents",
+        "moneyMarketBalance": 11920.78,
+        "balanceDue": 4763.0,
+        "difference": 7157.78,
+        "payMethod": "Direct",
+        "instanceType": "Forecast",
+        "clientId": 61,
+        "clientLastName": "Bruce",
+        "clientName": "David & Krista Bruce",
+        "accountType": "Trust",
+        "accountNumber": "27163812",
+        "managementStyle": "Managed Account",
+        "accountIsActive": True,
+        "representativeName": "Daniel Ogden",
+        "feeReqSrc": "Cash account",
+    }
+
+    def test_sync_cash_to_eclipse(self):
+        """Test exporting a cash funding row to Eclipse as a set-aside."""
+        api = self._make_api()
+        with patch.object(api, "api_request") as mock:
+            mock.return_value = Mock(
+                json=Mock(return_value={"id": 1801, "accountId": 74, "cashAmount": 4763.0})
+            )
+            result = api.sync_cash_to_eclipse(self.CASH_FUNDING_ROW)
+            assert result["cashAmount"] == 4763.0
+
+            call_url = mock.call_args[0][0]
+            assert call_url.endswith("/Billing/SyncCashtoEclipse")
+            assert mock.call_args[0][1] is requests.post
+
+            body = mock.call_args[1]["json"]
+            # The grid's "id" becomes the DTO's "accountId"
+            assert body["accountId"] == 74
+            assert "id" not in body
+            assert body["balanceDue"] == 4763.0
+            assert body["accountNumber"] == "27163812"
+            assert body["feeReqSrc"] == "Cash account"
+
+    def test_sync_cash_to_eclipse_accepts_account_id(self):
+        """Test a dict already keyed accountId passes through."""
+        api = self._make_api()
+        with patch.object(api, "api_request") as mock:
+            mock.return_value = Mock(json=Mock(return_value={}))
+            api.sync_cash_to_eclipse({"accountId": 99, "balanceDue": 10.0})
+            body = mock.call_args[1]["json"]
+            assert body == {"accountId": 99, "balanceDue": 10.0}
+
+    def test_sync_cash_to_eclipse_drops_unknown_fields(self):
+        """Test extra grid columns are not sent in the request body."""
+        api = self._make_api()
+        with patch.object(api, "api_request") as mock:
+            mock.return_value = Mock(json=Mock(return_value={}))
+            row = dict(self.CASH_FUNDING_ROW, someNewColumn="ignore me")
+            api.sync_cash_to_eclipse(row)
+            assert "someNewColumn" not in mock.call_args[1]["json"]
+
+    def test_sync_cash_to_eclipse_invalid(self):
+        """Test sync_cash_to_eclipse with an invalid account."""
+        api = self._make_api()
+        with pytest.raises(ValueError, match="account must be a cash funding row dict"):
+            api.sync_cash_to_eclipse("bad")
+        with pytest.raises(ValueError, match="account must have an 'id'"):
+            api.sync_cash_to_eclipse({"balanceDue": 500.0})
 
     # --- Bill Management ---
 
