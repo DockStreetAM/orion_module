@@ -1,4 +1,4 @@
-__version__ = "2.24.0"
+__version__ = "2.25.0"
 
 import logging
 import re
@@ -2855,6 +2855,12 @@ class EclipseV1(EclipseBase):
         Writes nothing. Use this as the pre-flight check for :meth:`create_trade`,
         which has no preview / view-only mode of its own.
 
+        .. warning::
+            **Sells are broken upstream on this endpoint.** ``action_id=2`` returns
+            HTTP 500 while a byte-identical buy succeeds — the same defect that
+            affects :meth:`create_trade`. Use :meth:`EclipseV2.validate_trades` for
+            sells.
+
         Args:
             action_id: 1=Buy, 2=Sell, 3=Journal In, 4=Journal Out
             account_id: Optional account ID
@@ -2905,6 +2911,14 @@ class EclipseV1(EclipseBase):
         The generic per-trade creator behind Eclipse's Quick Trade / journal flows,
         as opposed to the ``/tradetool/`` generators (:meth:`cash_needs_trade`,
         :meth:`rebalance_trade`, ...) which operate on whole portfolios.
+
+        .. warning::
+            **Sells are broken upstream on this endpoint.** Every request with
+            ``action_id=2`` returns HTTP 500 ("Your request can not be processed at
+            the moment, please verify parameters") while a byte-identical buy
+            succeeds. Verified 2026-07-28 across 5 held securities, all three amount
+            modes and every documented body shape; reported to Orion. Use
+            :meth:`EclipseV2.create_trades` for sells.
 
         .. warning::
             This endpoint has **no view-only mode** — it always writes. Call
@@ -7044,6 +7058,227 @@ class EclipseV2(EclipseBase):
         if end_date is not None:
             params["endDate"] = end_date
         res = self.api_request(f"{self.base_url_v2}/Trading/ActiveBatchJobs", params=params)
+        return res.json()
+
+    # --- TradeOrder / Trades (v2): batch create + validate -----------------------
+    # The v2 counterparts of EclipseV1.create_trade / validate_trade. Named in the
+    # plural because v2 takes a *list* of trades in one wrapper -- which also keeps
+    # them distinct from the v1 singular methods on the Eclipse unifier, whose
+    # __getattr__ resolves v1 first.
+    #
+    # Prefer these over the v1 pair for SELLS: the v1 endpoints return HTTP 500 for
+    # every sell (see EclipseV1.create_trade's docstring). Live-verified 2026-07-28:
+    # v2 validates sells correctly, returning isValid/tradeAmount/tradeShares.
+
+    @staticmethod
+    def build_trade(
+        account_id,
+        portfolio_id,
+        security_id,
+        action,
+        shares=None,
+        amount=None,
+        percent=None,
+        **extra,
+    ):
+        """Build one entry for the ``trades`` list of :meth:`validate_trades` /
+        :meth:`create_trades`.
+
+        Saves the caller from having to know the v2 ``ValidateTradeDto`` key names.
+
+        Args:
+            account_id: Account ID (``accountId``)
+            portfolio_id: Portfolio ID (``portfolioId``). **Required** -- see the
+                warning on :meth:`validate_trades`; omitting it makes the API
+                silently return an empty list.
+            security_id: Security ID (``securityId``)
+            action: 1=Buy, 2=Sell, 3=Journal In, 4=Journal Out (``action``)
+            shares: Number of shares (``tradeShares``)
+            amount: Dollar amount (``tradeAmount``)
+            percent: Percent of the position (``tradePercent``)
+            **extra: Any other ``ValidateTradeDto`` field, passed through verbatim
+
+        Returns:
+            dict: A single trade entry
+
+        Raises:
+            ValueError: If ``portfolio_id`` is missing, ``action`` is out of range,
+                or not exactly one of ``shares`` / ``amount`` / ``percent`` is set.
+        """
+        if portfolio_id is None:
+            raise ValueError(
+                "portfolio_id is required; without portfolioId the v2 trade endpoints "
+                "return an empty list instead of validating"
+            )
+        if action not in (1, 2, 3, 4):
+            raise ValueError("action must be 1 (Buy), 2 (Sell), 3 (Journal In) or 4 (Journal Out)")
+        sizes = [s for s in (shares, amount, percent) if s]
+        if len(sizes) != 1:
+            raise ValueError("exactly one of shares, amount or percent must be set")
+
+        trade = {
+            "accountId": account_id,
+            "portfolioId": portfolio_id,
+            "securityId": security_id,
+            "action": action,
+        }
+        if shares is not None:
+            trade["tradeShares"] = shares
+        if amount is not None:
+            trade["tradeAmount"] = amount
+        if percent is not None:
+            trade["tradePercent"] = percent
+        trade.update(extra)
+        return trade
+
+    def _trade_wrapper(
+        self,
+        trades,
+        application,
+        trade_tool_selection,
+        trade_instance_type,
+        trade_instance_sub_type,
+        instance_notes,
+    ):
+        """Build and sanity-check the ``ValidateTradeWrapperDto`` body."""
+        if not trades:
+            raise ValueError("trades must be a non-empty list of trade dicts")
+        for i, t in enumerate(trades):
+            if t.get("portfolioId") is None:
+                raise ValueError(
+                    f"trades[{i}] is missing portfolioId; without it the v2 trade "
+                    "endpoints silently return an empty list instead of validating. "
+                    "Use build_trade() to construct entries."
+                )
+        body = {
+            "application": application,
+            "trades": trades,
+            "tradeToolSelection": trade_tool_selection,
+            "tradeInstanceType": trade_instance_type,
+            "tradeInstanceSubType": trade_instance_sub_type,
+        }
+        if instance_notes is not None:
+            body["instanceNotes"] = instance_notes
+        return body
+
+    def validate_trades(
+        self,
+        trades,
+        application=1,
+        trade_tool_selection=2,
+        trade_instance_type=5,
+        trade_instance_sub_type=11,
+        instance_notes=None,
+    ):
+        """Validate a batch of trades (``POST /TradeOrder/Trades/Action/Validate``).
+
+        Writes nothing. The v2 counterpart of :meth:`EclipseV1.validate_trade`, and
+        the one to use for **sells** -- the v1 endpoint 500s on every sell.
+
+        .. warning::
+            Every entry in ``trades`` must carry ``portfolioId``. Without it the API
+            returns ``200 []`` -- an empty list, not an error -- so an unvalidated
+            batch looks indistinguishable from a clean one. This method raises
+            ``ValueError`` rather than let that pass silently.
+
+        Note:
+            The response is not 1:1 with the input. Eclipse expands each requested
+            trade across the underlying tax lots / sleeve accounts, so one entry can
+            come back as several rows (live-verified: a 99,999-share sell returned 4).
+
+        Args:
+            trades: List of trade dicts; build them with :meth:`build_trade`
+            application: ``TradingApplication`` enum (default 1, live-verified)
+            trade_tool_selection: 1=Portfolio, 2=Account, 3=Model, ... (default 2)
+            trade_instance_type: See :data:`TRADE_INSTANCE_TYPES` (default 5, Quick Trade)
+            trade_instance_sub_type: See :data:`TRADE_INSTANCE_SUBTYPES`
+                (default 11, Quick Trade)
+            instance_notes: Optional notes for the trade instance
+
+        Returns:
+            list: Validated trade dicts with ``isValid``, ``tradeAmount``,
+            ``tradeShares``, ``tradePercent``, ``warningMessage``,
+            ``zeroTradeReasons`` and gain/loss detail
+
+        Raises:
+            ValueError: If ``trades`` is empty or any entry lacks ``portfolioId``
+        """
+        body = self._trade_wrapper(
+            trades,
+            application,
+            trade_tool_selection,
+            trade_instance_type,
+            trade_instance_sub_type,
+            instance_notes,
+        )
+        res = self.api_request(
+            f"{self.base_url_v2}/TradeOrder/Trades/Action/Validate", requests.post, json=body
+        )
+        return res.json()
+
+    def create_trades(
+        self,
+        trades,
+        application=1,
+        trade_tool_selection=2,
+        trade_instance_type=5,
+        trade_instance_sub_type=11,
+        instance_notes=None,
+    ):
+        """Create a batch of trade orders (``POST /TradeOrder/Trades``).
+
+        The v2 counterpart of :meth:`EclipseV1.create_trade`, and the one to use for
+        **sells** -- the v1 endpoint 500s on every sell.
+
+        .. warning::
+            This writes. Call :meth:`validate_trades` first and check ``isValid`` /
+            ``warningMessage`` on every returned row; the same ``portfolioId``
+            requirement applies here.
+
+            Unlike the v1 endpoint there is no ``isSendImmediately`` field on this
+            surface at all, so created orders are always staged as pending. Setting
+            ``approvalStatus`` or ``orderStatus`` on a trade entry is rejected: that
+            would amount to creating and approving in one call, which this wrapper
+            deliberately does not allow. Review and execute in Eclipse.
+
+        Note:
+            No ``sync`` parameter: the analytics-wait helpers live on
+            :class:`EclipseV1`. Call ``Eclipse().v1.wait_for_analytics()`` if you
+            need to block until analytics settle.
+
+        Args:
+            trades: List of trade dicts; build them with :meth:`build_trade`
+            application: ``TradingApplication`` enum (default 1, live-verified)
+            trade_tool_selection: 1=Portfolio, 2=Account, 3=Model, ... (default 2)
+            trade_instance_type: See :data:`TRADE_INSTANCE_TYPES` (default 5, Quick Trade)
+            trade_instance_sub_type: See :data:`TRADE_INSTANCE_SUBTYPES`
+                (default 11, Quick Trade)
+            instance_notes: Optional notes for the trade instance
+
+        Returns:
+            list: The created trade dicts
+
+        Raises:
+            ValueError: If ``trades`` is empty, any entry lacks ``portfolioId``, or
+                any entry sets ``approvalStatus`` / ``orderStatus``
+        """
+        for i, t in enumerate(trades or []):
+            for banned in ("approvalStatus", "orderStatus"):
+                if t.get(banned) is not None:
+                    raise ValueError(
+                        f"trades[{i}] sets {banned}; creating and approving/executing a "
+                        "trade in one call is not supported by this wrapper. Create the "
+                        "orders here, then action them in Eclipse."
+                    )
+        body = self._trade_wrapper(
+            trades,
+            application,
+            trade_tool_selection,
+            trade_instance_type,
+            trade_instance_sub_type,
+            instance_notes,
+        )
+        res = self.api_request(f"{self.base_url_v2}/TradeOrder/Trades", requests.post, json=body)
         return res.json()
 
     # --- Optimization (v2-only): per-batch / per-account detail reads ------------
