@@ -1,4 +1,4 @@
-__version__ = "2.25.0"
+__version__ = "2.26.0"
 
 import logging
 import re
@@ -54,6 +54,39 @@ TRADE_INSTANCE_SUBTYPES = {
     21: "Money Market Rebalance",
     22: "Liquidate",
 }
+
+# TradingApplication mappings for the v2 /TradeOrder/Trades endpoints.
+# Not published in the Swagger (which lists the ints with no names) -- recovered
+# 2026-07-28 from the API's own rejection messages ("Trade Application <Name> is
+# not supported."). Only MANUAL_TRADE (11) actually creates trade orders; see
+# EclipseV2.create_trades.
+TRADING_APPLICATIONS = {
+    0: "BuySell",
+    1: "CashNeeds",
+    2: "GlobalTrades",
+    3: "ProrateCash",
+    4: "RaiseCash",
+    5: "Rebalance",
+    6: "SpendCash",
+    7: "(unnamed)",
+    8: "TaxLossHarvesting",
+    9: "TickerSwap",
+    10: "TradeToTargetPercent",
+    11: "ManualTrade",
+    12: "TacticalTrades",
+    13: "PartialShare",
+    14: "(unnamed, accepted but creates nothing)",
+    15: "TradeImport",
+    16: "RaiseCashByFund",
+    17: "OptionTrades",
+    18: "OutsourcedTradeExecution",
+}
+
+# The only TradingApplication value that creates trade orders on
+# POST /api/v2/TradeOrder/Trades. Every other value except 14 returns
+# 400 "Trade Application <Name> is not supported."; 14 returns 200 with an
+# empty ``tradeId`` list and creates nothing. Live-verified 2026-07-28.
+TRADING_APPLICATION_MANUAL = 11
 
 # Set-Aside Cash Constants (from Eclipse API)
 CASH_TYPE_DOLLAR = 1
@@ -2855,11 +2888,13 @@ class EclipseV1(EclipseBase):
         Writes nothing. Use this as the pre-flight check for :meth:`create_trade`,
         which has no preview / view-only mode of its own.
 
-        .. warning::
-            **Sells are broken upstream on this endpoint.** ``action_id=2`` returns
-            HTTP 500 while a byte-identical buy succeeds — the same defect that
-            affects :meth:`create_trade`. Use :meth:`EclipseV2.validate_trades` for
-            sells.
+        .. deprecated:: 2.26.0
+            Use :meth:`EclipseV2.validate_trades` instead; this emits a
+            ``DeprecationWarning``. ``action_id=2`` returns HTTP 500 while a
+            byte-identical buy succeeds — the same upstream defect that affects
+            :meth:`create_trade`. Pairing this with the deprecated
+            :meth:`create_trade` also means validating and creating on the same
+            unreliable surface.
 
         Args:
             action_id: 1=Buy, 2=Sell, 3=Journal In, 4=Journal Out
@@ -2875,6 +2910,12 @@ class EclipseV1(EclipseBase):
             dict: ``message``, ``tradeAmount``, ``cashValuePostTrade`` and a
             ``warningMessage`` list (e.g. warnings about overspending cash)
         """
+        warnings.warn(
+            "EclipseV1.validate_trade is deprecated: the endpoint 500s on every sell. "
+            "Use EclipseV2.validate_trades (Eclipse().validate_trades).",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         payload = {
             "actionId": action_id,
             "accountId": account_id,
@@ -2908,17 +2949,29 @@ class EclipseV1(EclipseBase):
     ):
         """Generate trade orders (``POST /tradeorder/trades``).
 
+        .. deprecated:: 2.26.0
+            Use :meth:`EclipseV2.create_trades` instead; this emits a
+            ``DeprecationWarning``. The endpoint is unreliable in two independent
+            ways -- only ``dollar_amount`` buys actually work. All live-verified
+            2026-07-28 and reported to Orion:
+
+            ===================  ===============================================
+            Input                Result
+            ===================  ===============================================
+            ``action_id=2``      HTTP 500 for **every** sell, across 5 securities,
+                                 all amount modes and every documented body shape
+            ``quantity=N``       HTTP 200 ``"No Trade is generated."`` -- creates
+                                 nothing; this wrapper now rejects it up front
+            ``percentage=N``     May create a zero-quantity, *disabled* order
+            ``dollar_amount=N``  Works
+            ===================  ===============================================
+
+            :meth:`EclipseV2.create_trades` handles buys *and* sells and honours
+            share count and dollar amount exactly.
+
         The generic per-trade creator behind Eclipse's Quick Trade / journal flows,
         as opposed to the ``/tradetool/`` generators (:meth:`cash_needs_trade`,
         :meth:`rebalance_trade`, ...) which operate on whole portfolios.
-
-        .. warning::
-            **Sells are broken upstream on this endpoint.** Every request with
-            ``action_id=2`` returns HTTP 500 ("Your request can not be processed at
-            the moment, please verify parameters") while a byte-identical buy
-            succeeds. Verified 2026-07-28 across 5 held securities, all three amount
-            modes and every documented body shape; reported to Orion. Use
-            :meth:`EclipseV2.create_trades` for sells.
 
         .. warning::
             This endpoint has **no view-only mode** — it always writes. Call
@@ -2957,9 +3010,25 @@ class EclipseV1(EclipseBase):
         Raises:
             ValueError: If the enum values are unknown, option trading is
                 requested (unsupported by Eclipse), neither an account nor a
-                portfolio is given, or a buy/sell does not specify exactly one of
+                portfolio is given, ``quantity`` is used (silently discarded
+                upstream), or a buy/sell does not specify exactly one of
                 ``dollar_amount`` / ``quantity`` / ``percentage``.
+            OrionAPIError: If Eclipse reports ``"No Trade is generated."`` -- a
+                200 response that created nothing.
         """
+        warnings.warn(
+            "EclipseV1.create_trade is deprecated: the endpoint 500s on every sell and "
+            "silently discards share-quantity buys. Use EclipseV2.create_trades "
+            "(Eclipse().create_trades), which handles both and honours shares/amount.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        if quantity is not None:
+            raise ValueError(
+                "quantity is silently ignored by this endpoint -- it returns 200 with "
+                '"No Trade is generated." and creates nothing. Use dollar_amount here, '
+                "or EclipseV2.create_trades(build_trade(..., shares=N)) for share counts."
+            )
         if action_id not in (1, 2, 3, 4):
             raise ValueError(
                 "action_id must be 1 (Buy), 2 (Sell), 3 (Journal In) or 4 (Journal Out)"
@@ -3012,6 +3081,13 @@ class EclipseV1(EclipseBase):
 
         res = self.api_request(f"{self.base_url}/tradeorder/trades", requests.post, json=payload)
         result = res.json()
+        # A 200 carrying this message means nothing was created. Do not let a
+        # silent no-op look like a successful write.
+        if isinstance(result, dict) and result.get("message") == "No Trade is generated.":
+            raise OrionAPIError(
+                "Eclipse returned 'No Trade is generated.' — the request succeeded but "
+                "created no trade orders. Use EclipseV2.create_trades instead."
+            )
         self._maybe_wait_for_analytics(sync)
         return result
 
@@ -7086,6 +7162,24 @@ class EclipseV2(EclipseBase):
 
         Saves the caller from having to know the v2 ``ValidateTradeDto`` key names.
 
+        Exactly one of ``shares`` / ``amount`` / ``percent`` sets the trade size:
+
+        =========  ===================  =================================================
+        Parameter  Sent as              Meaning
+        =========  ===================  =================================================
+        ``shares`` ``tradeShares``      **Share count.** A whole or fractional number of
+                                        shares. Honoured exactly -- live-verified
+                                        ``shares=1`` produced an order of qty 1.0.
+        ``amount`` ``tradeAmount``      **Dollar amount.** Eclipse divides by the current
+                                        price and books the resulting (fractional) share
+                                        count -- ``amount=500`` on a $393 stock produced
+                                        qty 1.2711.
+        ``percent`` ``tradePercent``    Percent of the *existing position*. Only
+                                        meaningful for sells/trims, and a percent that
+                                        rounds to <1 share can yield a zero-quantity,
+                                        disabled order. Prefer ``shares`` or ``amount``.
+        =========  ===================  =================================================
+
         Args:
             account_id: Account ID (``accountId``)
             portfolio_id: Portfolio ID (``portfolioId``). **Required** -- see the
@@ -7093,9 +7187,9 @@ class EclipseV2(EclipseBase):
                 silently return an empty list.
             security_id: Security ID (``securityId``)
             action: 1=Buy, 2=Sell, 3=Journal In, 4=Journal Out (``action``)
-            shares: Number of shares (``tradeShares``)
-            amount: Dollar amount (``tradeAmount``)
-            percent: Percent of the position (``tradePercent``)
+            shares: Number of shares to buy/sell (``tradeShares``) -- preferred
+            amount: Dollar amount to buy/sell (``tradeAmount``) -- preferred
+            percent: Percent of the position (``tradePercent``); see caveat above
             **extra: Any other ``ValidateTradeDto`` field, passed through verbatim
 
         Returns:
@@ -7104,6 +7198,12 @@ class EclipseV2(EclipseBase):
         Raises:
             ValueError: If ``portfolio_id`` is missing, ``action`` is out of range,
                 or not exactly one of ``shares`` / ``amount`` / ``percent`` is set.
+
+        Example:
+            >>> e.build_trade(account_id=686, portfolio_id=209, security_id=73,
+            ...               action=1, shares=1)
+            {'accountId': 686, 'portfolioId': 209, 'securityId': 73,
+             'action': 1, 'tradeShares': 1}
         """
         if portfolio_id is None:
             raise ValueError(
@@ -7164,7 +7264,7 @@ class EclipseV2(EclipseBase):
     def validate_trades(
         self,
         trades,
-        application=1,
+        application=TRADING_APPLICATION_MANUAL,
         trade_tool_selection=2,
         trade_instance_type=5,
         trade_instance_sub_type=11,
@@ -7187,8 +7287,14 @@ class EclipseV2(EclipseBase):
             come back as several rows (live-verified: a 99,999-share sell returned 4).
 
         Args:
-            trades: List of trade dicts; build them with :meth:`build_trade`
-            application: ``TradingApplication`` enum (default 1, live-verified)
+            trades: List of trade dicts; build them with :meth:`build_trade`.
+                Size each with ``shares`` (share count) or ``amount`` (dollars) --
+                see :meth:`build_trade` for the full parameter table.
+            application: ``TradingApplication`` -- see :data:`TRADING_APPLICATIONS`.
+                Defaults to 11 (ManualTrade), the only value that creates orders on
+                :meth:`create_trades`. This endpoint tolerates other values, but
+                keeping the two in step avoids validating under one application and
+                creating under another.
             trade_tool_selection: 1=Portfolio, 2=Account, 3=Model, ... (default 2)
             trade_instance_type: See :data:`TRADE_INSTANCE_TYPES` (default 5, Quick Trade)
             trade_instance_sub_type: See :data:`TRADE_INSTANCE_SUBTYPES`
@@ -7219,7 +7325,7 @@ class EclipseV2(EclipseBase):
     def create_trades(
         self,
         trades,
-        application=1,
+        application=TRADING_APPLICATION_MANUAL,
         trade_tool_selection=2,
         trade_instance_type=5,
         trade_instance_sub_type=11,
@@ -7227,8 +7333,14 @@ class EclipseV2(EclipseBase):
     ):
         """Create a batch of trade orders (``POST /TradeOrder/Trades``).
 
-        The v2 counterpart of :meth:`EclipseV1.create_trade`, and the one to use for
-        **sells** -- the v1 endpoint 500s on every sell.
+        **The recommended way to create trades.** Prefer this over
+        :meth:`EclipseV1.create_trade`, which is deprecated: v1 500s on every sell
+        and silently discards share-count buys.
+
+        Size each trade with **``shares`` (share count)** or **``amount``
+        (dollars)** via :meth:`build_trade` -- both are honoured exactly here.
+        Live-verified 2026-07-28: ``shares=1`` created an order of qty 1.0, and
+        ``amount=500`` on a $393 stock created qty 1.2711.
 
         .. warning::
             This writes. Call :meth:`validate_trades` first and check ``isValid`` /
@@ -7247,8 +7359,15 @@ class EclipseV2(EclipseBase):
             need to block until analytics settle.
 
         Args:
-            trades: List of trade dicts; build them with :meth:`build_trade`
-            application: ``TradingApplication`` enum (default 1, live-verified)
+            trades: List of trade dicts; build them with :meth:`build_trade`.
+                Size each with ``shares`` (share count) or ``amount`` (dollars);
+                see :meth:`build_trade` for the full parameter table.
+            application: ``TradingApplication`` -- see :data:`TRADING_APPLICATIONS`.
+                **Only 11 (ManualTrade) creates orders**, and it is the default.
+                Every other value except 14 returns 400 "Trade Application <Name>
+                is not supported."; 14 returns 200 with an empty ``tradeId`` list
+                and creates nothing, so it is rejected here rather than allowed to
+                look like a success.
             trade_tool_selection: 1=Portfolio, 2=Account, 3=Model, ... (default 2)
             trade_instance_type: See :data:`TRADE_INSTANCE_TYPES` (default 5, Quick Trade)
             trade_instance_sub_type: See :data:`TRADE_INSTANCE_SUBTYPES`
@@ -7256,12 +7375,29 @@ class EclipseV2(EclipseBase):
             instance_notes: Optional notes for the trade instance
 
         Returns:
-            list: The created trade dicts
+            dict: ``instanceId``, ``tradeId`` (the created trade order IDs),
+            ``trades`` and ``excludeTrades``
 
         Raises:
-            ValueError: If ``trades`` is empty, any entry lacks ``portfolioId``, or
-                any entry sets ``approvalStatus`` / ``orderStatus``
+            ValueError: If ``trades`` is empty, any entry lacks ``portfolioId``, any
+                entry sets ``approvalStatus`` / ``orderStatus``, or ``application``
+                is one that cannot create orders.
+
+        Example:
+            >>> t = e.build_trade(account_id=686, portfolio_id=209, security_id=73,
+            ...                   action=2, shares=1)          # SELL 1 share
+            >>> [r["isValid"] for r in e.validate_trades([t])]
+            [True]
+            >>> e.create_trades([t])["tradeId"]
+            [72495]
         """
+        if application != TRADING_APPLICATION_MANUAL:
+            name = TRADING_APPLICATIONS.get(application, "unknown")
+            raise ValueError(
+                f"application={application} ({name}) does not create trade orders on "
+                f"this endpoint; only {TRADING_APPLICATION_MANUAL} (ManualTrade) does. "
+                "Other values return 400, and 14 returns 200 while creating nothing."
+            )
         for i, t in enumerate(trades or []):
             for banned in ("approvalStatus", "orderStatus"):
                 if t.get(banned) is not None:

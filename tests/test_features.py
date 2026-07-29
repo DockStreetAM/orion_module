@@ -5,11 +5,12 @@ Tests for medium-priority features identified in coverage analysis.
 
 import inspect
 import time
+import warnings
 from unittest.mock import Mock, patch
 
 import pytest
 
-from orionapi import EclipseAPI, EclipseV1, EclipseV2, OrionAPI
+from orionapi import EclipseAPI, EclipseV1, EclipseV2, OrionAPI, OrionAPIError
 
 
 class TestOrionUpdateOperations:
@@ -860,7 +861,9 @@ class TestEclipseV1CreateTrade:
             "dollar_amount": 3000,
         }
         kwargs.update(overrides)
-        return api.create_trade(**kwargs)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", DeprecationWarning)
+            return api.create_trade(**kwargs)
 
     def test_buy_body_and_url(self):
         api = _eclipse_v1()
@@ -895,7 +898,7 @@ class TestEclipseV1CreateTrade:
             patch("requests.post", mock_post),
             patch.object(EclipseV1, "_maybe_wait_for_analytics"),
         ):
-            self._create(api, action_id=2, quantity=10, dollar_amount=None)
+            self._create(api, action_id=2, dollar_amount=1000)
         assert mock_post.call_args.kwargs["json"]["isSendImmediately"] is False
 
     def test_journal_sends_nulls_for_unset_amounts(self):
@@ -956,7 +959,8 @@ class TestEclipseV1CreateTrade:
             ({"account_id": None, "portfolio_id": None}, "account_id or portfolio_id"),
             ({"security_id": None}, "security_id is required"),
             ({"dollar_amount": None}, "exactly one of dollar_amount"),  # no amount
-            ({"quantity": 10}, "exactly one of dollar_amount"),  # two amounts
+            ({"quantity": 10}, "quantity is silently ignored"),  # upstream no-op
+            ({"dollar_amount": None, "percentage": 5, "quantity": 1}, "quantity is silently"),
         ],
     )
     def test_validation_errors(self, overrides, match):
@@ -969,7 +973,8 @@ class TestEclipseV1CreateTrade:
     def test_validate_trade_url_and_body(self):
         api = _eclipse_v1()
         mock_post = _mock_post({"message": "Trade validate successfully", "tradeAmount": 122})
-        with patch("requests.post", mock_post):
+        with patch("requests.post", mock_post), warnings.catch_warnings():
+            warnings.simplefilter("ignore", DeprecationWarning)
             result = api.validate_trade(
                 action_id=1, account_id=9006, security_id=14630, dollar_amount=3000
             )
@@ -985,9 +990,55 @@ class TestEclipseV1CreateTrade:
     def test_validate_trade_omits_none_keys(self):
         api = _eclipse_v1()
         mock_post = _mock_post({})
-        with patch("requests.post", mock_post):
+        with patch("requests.post", mock_post), warnings.catch_warnings():
+            warnings.simplefilter("ignore", DeprecationWarning)
             api.validate_trade(action_id=2, portfolio_id=15)
         assert mock_post.call_args.kwargs["json"] == {"actionId": 2, "portfolioId": 15}
+
+    # --- 2.26.0: deprecation + silent-no-op guards ---
+
+    def test_create_trade_warns_deprecated(self):
+        api = _eclipse_v1()
+        with (
+            patch("requests.post", _mock_post({"instanceId": 1})),
+            patch.object(EclipseV1, "_maybe_wait_for_analytics"),
+            pytest.warns(DeprecationWarning, match="EclipseV2.create_trades"),
+        ):
+            api.create_trade(
+                action_id=1,
+                trade_tool_selection=2,
+                trade_instance_type=5,
+                trade_instance_sub_type=11,
+                account_id=1,
+                security_id=2,
+                dollar_amount=500,
+            )
+
+    def test_validate_trade_warns_deprecated(self):
+        api = _eclipse_v1()
+        with (
+            patch("requests.post", _mock_post({})),
+            pytest.warns(DeprecationWarning, match="EclipseV2.validate_trades"),
+        ):
+            api.validate_trade(action_id=1, account_id=1)
+
+    def test_create_trade_rejects_quantity_before_calling(self):
+        """Upstream returns 200 'No Trade is generated.' for quantity — refuse it."""
+        api = _eclipse_v1()
+        with patch("requests.post") as mock_post:
+            with pytest.raises(ValueError, match="quantity is silently ignored"):
+                self._create(api, dollar_amount=None, quantity=5)
+        mock_post.assert_not_called()
+
+    def test_create_trade_raises_on_no_trade_generated(self):
+        """A 200 that created nothing must not look like a successful write."""
+        api = _eclipse_v1()
+        with (
+            patch("requests.post", _mock_post({"message": "No Trade is generated."})),
+            patch.object(EclipseV1, "_maybe_wait_for_analytics"),
+        ):
+            with pytest.raises(OrionAPIError, match="No Trade is generated"):
+                self._create(api)
 
 
 class TestEclipseV1ParamAdditions:
@@ -1215,7 +1266,7 @@ class TestEclipseV2TradeOrderTrades:
             result = api.validate_trades([self._trade()])
         assert mock_post.call_args.args[0] == f"{V2_BASE}/TradeOrder/Trades/Action/Validate"
         assert mock_post.call_args.kwargs["json"] == {
-            "application": 1,
+            "application": 11,  # ManualTrade — the only value that creates orders
             "trades": [self._trade()],
             "tradeToolSelection": 2,
             "tradeInstanceType": 5,
@@ -1279,6 +1330,31 @@ class TestEclipseV2TradeOrderTrades:
         """Plural names keep them reachable past the v1-first __getattr__."""
         assert not hasattr(EclipseV1, "create_trades")
         assert not hasattr(EclipseV1, "validate_trades")
+
+    # --- 2.26.0: TradingApplication ---
+
+    def test_create_trades_defaults_to_manual_trade(self):
+        api = _eclipse_for_set_asides()
+        mock_post = _mock_post({"instanceId": 1, "tradeId": [9]})
+        with patch("requests.post", mock_post):
+            api.create_trades([self._trade()])
+        assert mock_post.call_args.kwargs["json"]["application"] == 11
+
+    @pytest.mark.parametrize("app", [1, 14, 0, 5])
+    def test_create_trades_rejects_non_creating_applications(self, app):
+        """1/0/5 return 400 upstream; 14 returns 200 and creates nothing."""
+        api = _eclipse_for_set_asides()
+        with patch("requests.post") as mock_post:
+            with pytest.raises(ValueError, match="does not create trade orders"):
+                api.create_trades([self._trade()], application=app)
+        mock_post.assert_not_called()
+
+    def test_trading_applications_map(self):
+        from orionapi import TRADING_APPLICATION_MANUAL, TRADING_APPLICATIONS
+
+        assert TRADING_APPLICATION_MANUAL == 11
+        assert TRADING_APPLICATIONS[1] == "CashNeeds"
+        assert TRADING_APPLICATIONS[11] == "ManualTrade"
 
 
 class TestEclipseV2ReadEndpoints:

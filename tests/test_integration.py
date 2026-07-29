@@ -402,25 +402,39 @@ MSFT      3       8        15
         status = eclipse_client.get_trade_status(trade_id)
         assert isinstance(status, dict)
 
-    def test_validate_trade(self, eclipse_client):
-        """validate_trade is a read-only pre-flight; it must not create anything.
+    def test_validate_trade_deprecated_still_works_for_buys(self, eclipse_client):
+        """The deprecated v1 pre-flight still prices BUYS (sells 500 upstream).
 
-        create_trade itself is never exercised live — it has no view-only mode.
+        Read-only. v1 create_trade is never exercised live.
         """
         orders = eclipse_client.get_trades(is_pending=False)
         if not orders:
             pytest.skip("No orders available")
 
         order = orders[0]
-        result = eclipse_client.validate_trade(
-            action_id=1,
-            account_id=order["account"]["id"],
-            security_id=order["security"]["id"],
-            dollar_amount=100,
-        )
+        with pytest.warns(DeprecationWarning):
+            result = eclipse_client.validate_trade(
+                action_id=1,
+                account_id=order["account"]["id"],
+                security_id=order["security"]["id"],
+                dollar_amount=100,
+            )
         assert isinstance(result, dict)
         assert "tradeAmount" in result
         assert "cashValuePostTrade" in result
+
+    def test_v1_create_trade_rejects_quantity(self, eclipse_client):
+        """Guard fires before any network call, so this is safe to run live."""
+        with pytest.raises(ValueError, match="quantity is silently ignored"):
+            eclipse_client.create_trade(
+                action_id=1,
+                trade_tool_selection=2,
+                trade_instance_type=5,
+                trade_instance_sub_type=11,
+                account_id=1,
+                security_id=1,
+                quantity=1,
+            )
 
     def test_v2_validate_trades_handles_sells(self, eclipse_client):
         """v2 validates SELLs, which the v1 endpoint 500s on.
