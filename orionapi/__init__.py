@@ -1655,10 +1655,13 @@ class OrionAPI(BaseAPI):
         if not isinstance(take, int) or take < 1:
             raise ValueError("take must be a positive integer")
 
+        # forecast is a boolean: Orion's own docs claim "1 = Forecast Bill,
+        # 0 = Live Bill", but the endpoint 400s on 0/1 and only accepts
+        # true/false.
         params = {
             "startDate": start_date,
             "endDate": end_date,
-            "forecast": 1 if is_forecast else 0,
+            "forecast": "true" if is_forecast else "false",
             "take": take,
         }
         if skip > 0:

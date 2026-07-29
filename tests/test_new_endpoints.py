@@ -990,7 +990,7 @@ class TestOrionBillingOperations:
             call_url = mock.call_args[0][0]
             assert "startDate=2026-01-01" in call_url
             assert "endDate=2026-03-31" in call_url
-            assert "forecast=0" in call_url
+            assert "forecast=false" in call_url
             assert "take=10000" in call_url
 
     def test_get_cash_funding_forecast(self):
@@ -1000,7 +1000,7 @@ class TestOrionBillingOperations:
             mock.return_value = Mock(json=Mock(return_value=[]))
             api.get_cash_funding(start_date="2026-01-01", end_date="2026-03-31", is_forecast=True)
             call_url = mock.call_args[0][0]
-            assert "forecast=1" in call_url
+            assert "forecast=true" in call_url
 
     def test_get_cash_funding_with_skip(self):
         """Test getting cash funding data with skip."""
