@@ -1,4 +1,4 @@
-__version__ = "2.26.0"
+__version__ = "2.27.0"
 
 import logging
 import re
@@ -158,6 +158,31 @@ BILLING_BILL_TYPES = [
     "Performance",
     "AdvanceCreditDebit",
 ]
+
+# Fields of the Orion API ReceiveableSummaryDto, the body of
+# POST /Billing/SyncCashtoEclipse. Identical to the CashFundingGridDto rows
+# returned by get_cash_funding(), except the grid's "id" is "accountId" here.
+RECEIVABLE_SUMMARY_FIELDS = (
+    "accountId",
+    "registrationName",
+    "registrationId",
+    "fundFamily",
+    "productName",
+    "moneyMarketBalance",
+    "balanceDue",
+    "difference",
+    "payMethod",
+    "clientId",
+    "clientLastName",
+    "clientName",
+    "accountType",
+    "accountNumber",
+    "managementStyle",
+    "accountIsActive",
+    "representativeName",
+    "feeReqSrc",
+    "instanceType",
+)
 
 
 class OrionAPIError(Exception):
@@ -1700,6 +1725,42 @@ class OrionAPI(BaseAPI):
             params, doseq=True
         )
         res = self.api_request(url, requests.post)
+        return res.json()
+
+    def sync_cash_to_eclipse(self, account):
+        """Export one cash funding row to Eclipse as a cash set-aside.
+
+        This is the API equivalent of the Cash Funding grid's export action:
+        Orion creates (or updates) a set-aside in Eclipse for the account's
+        balance due, so the fee cash is reserved from trading.
+
+        Orion documents this as a draft endpoint that takes a single account
+        per call, so exporting a whole report means looping over the rows of
+        get_cash_funding().
+
+        Args:
+            account: A cash funding row as returned by get_cash_funding().
+                The row's ``id`` is the Orion account ID and is sent as
+                ``accountId``. A dict already keyed ``accountId`` is also
+                accepted. Keys outside ReceiveableSummaryDto are dropped.
+
+        Returns:
+            dict: The created/updated Eclipse set-aside
+                (EclipseCashFundingResponse) with id, accountId, cashAmount,
+                cashAmountTypeId, description, expirationTypeId, etc.
+        """
+        if not isinstance(account, dict):
+            raise ValueError("account must be a cash funding row dict")
+
+        account_id = account.get("accountId", account.get("id"))
+        if account_id is None:
+            raise ValueError("account must have an 'id' (or 'accountId') field")
+
+        payload = {k: account[k] for k in RECEIVABLE_SUMMARY_FIELDS if k in account}
+        payload["accountId"] = account_id
+
+        url = f"{self.base_url}/Billing/SyncCashtoEclipse"
+        res = self.api_request(url, requests.post, json=payload)
         return res.json()
 
     # -------------------------------------------------------------------------
