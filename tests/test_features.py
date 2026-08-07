@@ -10,7 +10,15 @@ from unittest.mock import Mock, patch
 
 import pytest
 
-from orionapi import EclipseAPI, EclipseV1, EclipseV2, OrionAPI, OrionAPIError
+from orionapi import (
+    AmbiguousAccountError,
+    EclipseAPI,
+    EclipseV1,
+    EclipseV2,
+    NotFoundError,
+    OrionAPI,
+    OrionAPIError,
+)
 
 
 class TestOrionUpdateOperations:
@@ -4540,3 +4548,158 @@ class TestConfigurableTimeout:
         assert api.timeout == 75
         assert api.v1.timeout == 75
         assert api.v2.timeout == 75
+
+
+class TestGetInternalAccountIdResolution:
+    """Tiered resolution in get_internal_account_id (2.28.0 hardening)."""
+
+    @staticmethod
+    def _api_with_results(results):
+        api = _eclipse_v1()
+        return api, patch.object(api, "search_accounts", return_value=results)
+
+    def test_exact_internal_id_beats_fuzzy(self):
+        """A result whose id equals the search wins over earlier fuzzy hits."""
+        api, ctx = self._api_with_results(
+            [
+                {"id": 1114, "name": "Bole Trust", "accountNumber": "08197200"},
+                {"id": 819, "name": "Rose Roth", "accountNumber": "44443921"},
+            ]
+        )
+        with ctx:
+            assert api.get_internal_account_id(819) == 819
+
+    def test_exact_account_number_beats_fuzzy(self):
+        api, ctx = self._api_with_results(
+            [
+                {"id": 1, "name": "A", "accountNumber": "123456789"},
+                {"id": 2, "name": "B", "accountNumber": "12345"},
+            ]
+        )
+        with ctx:
+            assert api.get_internal_account_id("12345") == 2
+
+    def test_single_fuzzy_candidate_returned(self):
+        api, ctx = self._api_with_results([{"id": 7, "name": "Only", "accountNumber": "999"}])
+        with ctx:
+            assert api.get_internal_account_id("Only") == 7
+
+    def test_multiple_fuzzy_candidates_raise(self):
+        api, ctx = self._api_with_results(
+            [
+                {"id": 1, "name": "Smith IRA", "accountNumber": "111"},
+                {"id": 2, "name": "Smith Roth", "accountNumber": "222"},
+            ]
+        )
+        with ctx:
+            with pytest.raises(AmbiguousAccountError, match="matched 2 accounts"):
+                api.get_internal_account_id("Smith")
+
+    def test_fuzzy_true_restores_first_match(self):
+        api, ctx = self._api_with_results(
+            [
+                {"id": 1, "name": "Smith IRA", "accountNumber": "111"},
+                {"id": 2, "name": "Smith Roth", "accountNumber": "222"},
+            ]
+        )
+        with ctx:
+            assert api.get_internal_account_id("Smith", fuzzy=True) == 1
+
+    def test_exact_id_vs_exact_number_conflict_raises(self):
+        """id 819 on one account, accountNumber '819' on another: never guess."""
+        api, ctx = self._api_with_results(
+            [
+                {"id": 819, "name": "Rose Roth", "accountNumber": "44443921"},
+                {"id": 55, "name": "Old Custodial", "accountNumber": "819"},
+            ]
+        )
+        with ctx:
+            with pytest.raises(AmbiguousAccountError, match="exactly matches"):
+                api.get_internal_account_id(819)
+
+    def test_no_results_still_not_found(self):
+        api, ctx = self._api_with_results([])
+        with ctx:
+            with pytest.raises(NotFoundError):
+                api.get_internal_account_id("nope")
+
+
+class TestInternalAccountIdKeyword:
+    """internal_account_id= bypasses search resolution on scoped methods."""
+
+    def test_v2_get_set_asides_uses_id_verbatim_no_search(self):
+        api = _eclipse_for_set_asides()
+        with patch.object(api, "get_internal_account_id") as mock_resolve:
+            mock_post = _mock_post([dict(SAMPLE_SET_ASIDE)])
+            with patch("requests.post", mock_post):
+                api.get_set_asides(internal_account_id=819)
+        mock_resolve.assert_not_called()
+        assert mock_post.call_args.kwargs["json"] == [819]
+
+    def test_v2_get_set_asides_both_params_raise(self):
+        api = _eclipse_for_set_asides()
+        with pytest.raises(ValueError, match="not both"):
+            api.get_set_asides(account_id="819", internal_account_id=819)
+
+    def test_v2_legacy_search_path_unchanged(self):
+        api = _eclipse_for_set_asides()
+        with patch.object(api, "get_internal_account_id", return_value=123) as mock_resolve:
+            mock_post = _mock_post([dict(SAMPLE_SET_ASIDE)])
+            with patch("requests.post", mock_post):
+                api.get_set_asides("08197200")
+        mock_resolve.assert_called_once_with("08197200")
+        assert mock_post.call_args.kwargs["json"] == [123]
+
+    def test_v1_get_set_asides_uses_id_verbatim_no_search(self):
+        api = _eclipse_v1()
+        with patch.object(api, "get_internal_account_id") as mock_resolve:
+            mock_get = _mock_get([{"isActive": True}])
+            with patch("requests.get", mock_get):
+                api.get_set_asides(internal_account_id=819)
+        mock_resolve.assert_not_called()
+        assert mock_get.call_args.args[0].endswith("/account/accounts/819/asidecash")
+
+    def test_v1_get_set_asides_both_or_neither_raise(self):
+        api = _eclipse_v1()
+        with pytest.raises(ValueError, match="not both"):
+            api.get_set_asides("819", internal_account_id=819)
+        with pytest.raises(ValueError, match="is required"):
+            api.get_set_asides()
+
+    def test_create_set_aside_uses_id_verbatim_no_search(self):
+        with (
+            patch.object(EclipseV1, "login"),
+            patch.object(EclipseV1, "_get_auth_header", return_value={}),
+            patch.object(EclipseV1, "_maybe_wait_for_analytics"),
+            patch.object(EclipseV1, "get_internal_account_id") as mock_resolve,
+        ):
+            api = EclipseV1(usr="test", pwd="pass")
+            with patch("requests.post") as mock_post:
+                mock_response = Mock()
+                mock_response.ok = True
+                mock_response.json.return_value = {"id": 1}
+                mock_post.return_value = mock_response
+                api.create_set_aside(amount=5000, internal_account_id=819)
+        mock_resolve.assert_not_called()
+        assert mock_post.call_args.args[0].endswith("/account/accounts/819/asidecash")
+
+    def test_create_set_aside_param_validation(self):
+        with (
+            patch.object(EclipseV1, "login"),
+            patch.object(EclipseV1, "_get_auth_header", return_value={}),
+        ):
+            api = EclipseV1(usr="test", pwd="pass")
+        with pytest.raises(ValueError, match="not both"):
+            api.create_set_aside(account_number="123", amount=1, internal_account_id=819)
+        with pytest.raises(ValueError, match="amount is required"):
+            api.create_set_aside(internal_account_id=819)
+        with pytest.raises(ValueError, match="is required"):
+            api.create_set_aside(amount=1)
+
+    def test_unifier_forwards_internal_account_id_to_v2(self):
+        from orionapi import Eclipse
+
+        api = Eclipse(eclipse_token="tok")
+        with patch.object(api.v2, "get_set_asides", return_value=[]) as mock_v2:
+            api.get_set_asides(internal_account_id=819, active_only=True)
+        mock_v2.assert_called_once_with(account_id=None, active_only=True, internal_account_id=819)
