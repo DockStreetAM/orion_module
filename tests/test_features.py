@@ -1274,7 +1274,7 @@ class TestEclipseV2TradeOrderTrades:
             result = api.validate_trades([self._trade()])
         assert mock_post.call_args.args[0] == f"{V2_BASE}/TradeOrder/Trades/Action/Validate"
         assert mock_post.call_args.kwargs["json"] == {
-            "application": 11,  # ManualTrade — the only value that creates orders
+            "application": 11,  # QuickTrades — the only value that creates orders
             "trades": [self._trade()],
             "tradeToolSelection": 2,
             "tradeInstanceType": 5,
@@ -1358,11 +1358,19 @@ class TestEclipseV2TradeOrderTrades:
         mock_post.assert_not_called()
 
     def test_trading_applications_map(self):
-        from orionapi import TRADING_APPLICATION_MANUAL, TRADING_APPLICATIONS
+        from orionapi import (
+            TRADING_APPLICATION_MANUAL,
+            TRADING_APPLICATION_QUICK_TRADES,
+            TRADING_APPLICATIONS,
+        )
 
-        assert TRADING_APPLICATION_MANUAL == 11
+        assert TRADING_APPLICATION_QUICK_TRADES == 11
         assert TRADING_APPLICATIONS[1] == "CashNeeds"
-        assert TRADING_APPLICATIONS[11] == "ManualTrade"
+        # 11 is QuickTrades, confirmed by Orion support 2026-08-03. The API
+        # rejects the name "ManualTrade" that 2.26.0 guessed.
+        assert TRADING_APPLICATIONS[11] == "QuickTrades"
+        # deprecated alias kept for 2.26.0/2.27.0 callers
+        assert TRADING_APPLICATION_MANUAL == TRADING_APPLICATION_QUICK_TRADES
 
 
 class TestEclipseV2ReadEndpoints:

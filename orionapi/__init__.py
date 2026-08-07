@@ -56,10 +56,16 @@ TRADE_INSTANCE_SUBTYPES = {
 }
 
 # TradingApplication mappings for the v2 /TradeOrder/Trades endpoints.
-# Not published in the Swagger (which lists the ints with no names) -- recovered
-# 2026-07-28 from the API's own rejection messages ("Trade Application <Name> is
-# not supported."). Only MANUAL_TRADE (11) actually creates trade orders; see
+# Not published in the Swagger (which lists the ints with no names). Names 0-10
+# and 12-18 were recovered 2026-07-28 from the API's own rejection messages
+# ("Trade Application <Name> is not supported."); 11 is QuickTrades, confirmed
+# 2026-08-03 by Orion support and verified live (the string "QuickTrades" and the
+# int 11 return identical results). Only 11 creates trade orders -- see
 # EclipseV2.create_trades.
+#
+# These names are also accepted as *strings* in the ``application`` field, e.g.
+# ``{"application": "QuickTrades"}``. A name outside this set is rejected with
+# 400 "Error converting value ... to type 'OAS.Eclipse.Core.Enums.TradingApplication'".
 TRADING_APPLICATIONS = {
     0: "BuySell",
     1: "CashNeeds",
@@ -72,7 +78,7 @@ TRADING_APPLICATIONS = {
     8: "TaxLossHarvesting",
     9: "TickerSwap",
     10: "TradeToTargetPercent",
-    11: "ManualTrade",
+    11: "QuickTrades",
     12: "TacticalTrades",
     13: "PartialShare",
     14: "(unnamed, accepted but creates nothing)",
@@ -86,7 +92,12 @@ TRADING_APPLICATIONS = {
 # POST /api/v2/TradeOrder/Trades. Every other value except 14 returns
 # 400 "Trade Application <Name> is not supported."; 14 returns 200 with an
 # empty ``tradeId`` list and creates nothing. Live-verified 2026-07-28.
-TRADING_APPLICATION_MANUAL = 11
+TRADING_APPLICATION_QUICK_TRADES = 11
+
+# Deprecated alias. 2.26.0 shipped this as TRADING_APPLICATION_MANUAL on the
+# mistaken belief that 11 was named "ManualTrade"; the API rejects that name.
+# Kept so 2.26.0/2.27.0 callers keep working -- the value is unchanged.
+TRADING_APPLICATION_MANUAL = TRADING_APPLICATION_QUICK_TRADES
 
 # Set-Aside Cash Constants (from Eclipse API)
 CASH_TYPE_DOLLAR = 1
@@ -3117,6 +3128,13 @@ class EclipseV1(EclipseBase):
 
             :meth:`EclipseV2.create_trades` handles buys *and* sells and honours
             share count and dollar amount exactly.
+
+            Orion support's answer to the sell-500 case (2026-08-03) was to use
+            the **v2** wrapper body (``application`` / ``trades[]`` / ``action`` /
+            ``tradeShares``). That body is not accepted here -- posting it to this
+            v1 endpoint returns ``422 "Invalid trade order type id"`` for buys and
+            sells alike -- so it is a redirect to the v2 surface, not a fix for
+            this one. The v1 sell 500 remains unexplained upstream.
 
         The generic per-trade creator behind Eclipse's Quick Trade / journal flows,
         as opposed to the ``/tradetool/`` generators (:meth:`cash_needs_trade`,
@@ -7425,7 +7443,7 @@ class EclipseV2(EclipseBase):
     def validate_trades(
         self,
         trades,
-        application=TRADING_APPLICATION_MANUAL,
+        application=TRADING_APPLICATION_QUICK_TRADES,
         trade_tool_selection=2,
         trade_instance_type=5,
         trade_instance_sub_type=11,
@@ -7452,10 +7470,13 @@ class EclipseV2(EclipseBase):
                 Size each with ``shares`` (share count) or ``amount`` (dollars) --
                 see :meth:`build_trade` for the full parameter table.
             application: ``TradingApplication`` -- see :data:`TRADING_APPLICATIONS`.
-                Defaults to 11 (ManualTrade), the only value that creates orders on
-                :meth:`create_trades`. This endpoint tolerates other values, but
-                keeping the two in step avoids validating under one application and
-                creating under another.
+                Defaults to 11 (``QuickTrades``), the only value that creates orders
+                on :meth:`create_trades`. The enum name is also accepted as a string
+                (``"QuickTrades"``) and behaves identically. This endpoint tolerates
+                other values, but they are not equivalent: ``application=1``
+                (CashNeeds) returns ``isValid: False`` with ``tradeAmount: 0`` rather
+                than pricing the trade, so validating under one application and
+                creating under another gives a meaningless pre-flight.
             trade_tool_selection: 1=Portfolio, 2=Account, 3=Model, ... (default 2)
             trade_instance_type: See :data:`TRADE_INSTANCE_TYPES` (default 5, Quick Trade)
             trade_instance_sub_type: See :data:`TRADE_INSTANCE_SUBTYPES`
@@ -7486,7 +7507,7 @@ class EclipseV2(EclipseBase):
     def create_trades(
         self,
         trades,
-        application=TRADING_APPLICATION_MANUAL,
+        application=TRADING_APPLICATION_QUICK_TRADES,
         trade_tool_selection=2,
         trade_instance_type=5,
         trade_instance_sub_type=11,
@@ -7524,7 +7545,8 @@ class EclipseV2(EclipseBase):
                 Size each with ``shares`` (share count) or ``amount`` (dollars);
                 see :meth:`build_trade` for the full parameter table.
             application: ``TradingApplication`` -- see :data:`TRADING_APPLICATIONS`.
-                **Only 11 (ManualTrade) creates orders**, and it is the default.
+                **Only 11 (``QuickTrades``) creates orders**, and it is the default.
+                The enum name is also accepted as a string (``"QuickTrades"``).
                 Every other value except 14 returns 400 "Trade Application <Name>
                 is not supported."; 14 returns 200 with an empty ``tradeId`` list
                 and creates nothing, so it is rejected here rather than allowed to
@@ -7552,11 +7574,11 @@ class EclipseV2(EclipseBase):
             >>> e.create_trades([t])["tradeId"]
             [72495]
         """
-        if application != TRADING_APPLICATION_MANUAL:
+        if application != TRADING_APPLICATION_QUICK_TRADES:
             name = TRADING_APPLICATIONS.get(application, "unknown")
             raise ValueError(
                 f"application={application} ({name}) does not create trade orders on "
-                f"this endpoint; only {TRADING_APPLICATION_MANUAL} (ManualTrade) does. "
+                f"this endpoint; only {TRADING_APPLICATION_QUICK_TRADES} (QuickTrades) does. "
                 "Other values return 400, and 14 returns 200 while creating nothing."
             )
         for i, t in enumerate(trades or []):
