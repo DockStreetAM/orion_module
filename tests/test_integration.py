@@ -259,6 +259,17 @@ class TestEclipseAPI:
         internal_id = eclipse_client.get_internal_account_id(acct_num)
         assert isinstance(internal_id, int)
 
+    def test_get_set_asides_by_internal_id_scoped(self, eclipse_client):
+        """internal_account_id= returns only that account's set-asides (no search)."""
+        set_asides = eclipse_client.get_set_asides()
+        if not set_asides:
+            pytest.skip("No set-asides on tenant")
+
+        target = set_asides[0]["accountId"]
+        scoped = eclipse_client.get_set_asides(internal_account_id=target)
+        assert scoped, "expected at least the known set-aside back"
+        assert all(r["accountId"] == target for r in scoped)
+
     def test_get_account_cash_available(self, eclipse_client):
         """Test that we can get available cash for an account."""
         accounts = eclipse_client.get_all_accounts()
