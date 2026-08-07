@@ -1,4 +1,4 @@
-__version__ = "2.27.1"
+__version__ = "2.28.0"
 
 import logging
 import re
@@ -210,6 +210,17 @@ class AuthenticationError(OrionAPIError):
 
 class NotFoundError(OrionAPIError):
     """Raised when a requested resource is not found."""
+
+    pass
+
+
+class AmbiguousAccountError(OrionAPIError):
+    """Raised when an account search matches more than one account.
+
+    The message lists the candidate accounts (id, name, accountNumber) so the
+    caller can retry with an exact internal id, a full account number, or the
+    deliberate fuzzy workflow (``search_accounts_number_and_name``).
+    """
 
     pass
 
@@ -2359,30 +2370,71 @@ class EclipseBase(BaseAPI):
         res = self.api_request(f"{self.base_url}/account/accounts/simple")
         return res.json()
 
-    def get_internal_account_id(self, search_param):
+    def get_internal_account_id(self, search_param, fuzzy=False):
         """Get internal Eclipse account ID from a search parameter.
 
-        Searches across id, accountName, accountNumber, and portfolioName.
-        Best use is to pass a full custodian account number.
+        Searches across id, accountName, accountNumber, and portfolioName,
+        then resolves in tiers:
+
+        1. **Exact match:** a result whose internal ``id`` or ``accountNumber``
+           equals ``search_param`` is returned immediately. If an exact-id and
+           an exact-account-number match point at *different* accounts, raises
+           ``AmbiguousAccountError`` rather than guessing.
+        2. A single remaining candidate is returned.
+        3. Multiple candidates raise ``AmbiguousAccountError`` listing them,
+           unless ``fuzzy=True``, which returns the first match (the pre-2.28
+           behavior).
+
+        Best use is to pass a full custodian account number. Callers that
+        already hold the internal id should pass it via the
+        ``internal_account_id=`` keyword on scoped methods instead of
+        resolving here. For deliberate partial-number + name resolution use
+        :meth:`search_accounts_number_and_name`.
 
         Args:
             search_param: Account number, name, or ID to search for
+            fuzzy: When True, silently return the first match when multiple
+                candidates remain (default False)
 
         Returns:
             int: The internal Eclipse account ID
 
         Raises:
             NotFoundError: If no matching account is found
-
-        Note:
-            Returns the first matching result, which may not be expected
-            if multiple accounts match the search parameter.
+            AmbiguousAccountError: If multiple accounts match and no exact
+                match singles one out (and ``fuzzy`` is False)
         """
         res = self.search_accounts(search_param)
         logging.debug("search_accounts result: %s", res)
         if not res:
             raise NotFoundError(f"No account found for search: {search_param}")
-        return res[0]["id"]
+
+        def _candidates(accounts):
+            return [{k: a.get(k) for k in ("id", "name", "accountNumber")} for a in accounts]
+
+        search_str = str(search_param)
+        id_exact = [a for a in res if str(a.get("id")) == search_str]
+        number_exact = [a for a in res if a.get("accountNumber") == search_str]
+        exact = id_exact + [a for a in number_exact if a not in id_exact]
+        if len(exact) == 1:
+            return exact[0]["id"]
+        if len(exact) > 1:
+            raise AmbiguousAccountError(
+                f"Search '{search_param}' exactly matches both an internal id and "
+                f"other account numbers; pass internal_account_id= or a full "
+                f"account number. Candidates: {_candidates(exact)}"
+            )
+
+        if len(res) == 1:
+            return res[0]["id"]
+        if fuzzy:
+            return res[0]["id"]
+        raise AmbiguousAccountError(
+            f"Search '{search_param}' matched {len(res)} accounts with no exact "
+            f"id/accountNumber match. Pass an exact identifier, use "
+            f"search_accounts_number_and_name(), or pass fuzzy=True to accept "
+            f"the first match. Candidates: {_candidates(res)}"
+        )
 
     def search_accounts(self, search_param):
         """Search for accounts by various criteria.
@@ -2478,7 +2530,7 @@ class EclipseV1(EclipseBase):
         res = self.api_request(f"{self.base_url}/admin/authorization/user")
         return res.json()["userLoginId"]
 
-    def get_set_asides(self, account_id, active_only=False):
+    def get_set_asides(self, account_id=None, active_only=False, *, internal_account_id=None):
         """Get set-aside cash settings for a specific account (v1 surface).
 
         Returns the raw v1 records from ``GET /account/accounts/{id}/asidecash``.
@@ -2490,11 +2542,25 @@ class EclipseV1(EclipseBase):
             account_id: Account ID, number, or name (resolved via search).
             active_only: When True, keep only records where ``isActive`` is truthy.
                 Defaults to False (includes expired/inactive).
+            internal_account_id: Eclipse internal account id, used verbatim with
+                no search resolution — the deterministic path for callers that
+                already hold the id. Mutually exclusive with ``account_id``.
 
         Returns:
             list: Raw v1 set-aside records for the account.
+
+        Raises:
+            ValueError: If both or neither of ``account_id`` /
+                ``internal_account_id`` are given.
         """
-        internal_id = self.get_internal_account_id(account_id)
+        if account_id is not None and internal_account_id is not None:
+            raise ValueError("pass account_id (search) or internal_account_id, not both")
+        if internal_account_id is not None:
+            internal_id = int(internal_account_id)
+        elif account_id is not None:
+            internal_id = self.get_internal_account_id(account_id)
+        else:
+            raise ValueError("account_id or internal_account_id is required")
         res = self.api_request(f"{self.base_url}/account/accounts/{internal_id}/asidecash")
         records = res.json()
         if active_only:
@@ -2503,8 +2569,8 @@ class EclipseV1(EclipseBase):
 
     def create_set_aside(
         self,
-        account_number,
-        amount,
+        account_number=None,
+        amount=None,
         min_amount=0.0,
         max_amount=0.0,
         description=None,
@@ -2517,11 +2583,14 @@ class EclipseV1(EclipseBase):
         deplete_over_time=False,
         percent_calc_type=0,
         sync=True,
+        *,
+        internal_account_id=None,
     ):
         """Create a set-aside cash reservation for an account.
 
         Args:
-            account_number: Full custodial account number
+            account_number: Full custodial account number (resolved via search).
+                Mutually exclusive with ``internal_account_id``.
             amount: Cash amount to set aside
             min_amount: Minimum cash amount (default 0.0)
             max_amount: Maximum cash amount (default 0.0)
@@ -2538,11 +2607,27 @@ class EclipseV1(EclipseBase):
             percent_calc_type: 0='Use Default/Managed Value', 1='Use Total Value',
                               2='Use Excluded Value' (default 0)
             sync: Wait for analytics to complete (default True)
+            internal_account_id: Eclipse internal account id, used verbatim with
+                no search resolution — the deterministic path for callers that
+                already hold the id. Mutually exclusive with ``account_number``.
 
         Returns:
             dict: Created set-aside details
+
+        Raises:
+            ValueError: If both or neither of ``account_number`` /
+                ``internal_account_id`` are given, or ``amount`` is missing.
         """
-        account_id = self.get_internal_account_id(account_number)
+        if account_number is not None and internal_account_id is not None:
+            raise ValueError("pass account_number (search) or internal_account_id, not both")
+        if amount is None:
+            raise ValueError("amount is required")
+        if internal_account_id is not None:
+            account_id = int(internal_account_id)
+        elif account_number is not None:
+            account_id = self.get_internal_account_id(account_number)
+        else:
+            raise ValueError("account_number or internal_account_id is required")
 
         cash_type_map = {
             # end point account/accounts/asideCashAmountType
@@ -6643,7 +6728,7 @@ class EclipseV2(EclipseBase):
             "end_date": end_date,
         }
 
-    def get_set_asides(self, account_id=None, active_only=False):
+    def get_set_asides(self, account_id=None, active_only=False, *, internal_account_id=None):
         """Get set-aside cash reservations, including the Eclipse set-aside id.
 
         Uses the v2 batch endpoint, which accepts a list of internal account IDs
@@ -6655,15 +6740,27 @@ class EclipseV2(EclipseBase):
 
         Args:
             account_id: Account ID, number, or name to restrict to a single
-                account. When None (default), returns set-asides firm-wide by
-                issuing one batch POST over all accounts.
+                account (resolved via search). When neither this nor
+                ``internal_account_id`` is given, returns set-asides firm-wide
+                by issuing one batch POST over all accounts.
             active_only: When True, return only currently-active set-asides.
                 Defaults to False (includes expired/inactive).
+            internal_account_id: Eclipse internal account id, used verbatim with
+                no search resolution — the deterministic path for callers that
+                already hold the id. Mutually exclusive with ``account_id``.
 
         Returns:
             list: Augmented set-aside records
+
+        Raises:
+            ValueError: If both ``account_id`` and ``internal_account_id`` are
+                given.
         """
-        if account_id is not None:
+        if account_id is not None and internal_account_id is not None:
+            raise ValueError("pass account_id (search) or internal_account_id, not both")
+        if internal_account_id is not None:
+            account_ids = [int(internal_account_id)]
+        elif account_id is not None:
             account_ids = [self.get_internal_account_id(account_id)]
         else:
             account_ids = [a["id"] for a in self.get_all_accounts()]
@@ -11570,13 +11667,19 @@ class Eclipse(EclipseBase):
 
     # --- v2-preferred overrides (documented best-of-both choices) ---------------
 
-    def get_set_asides(self, account_id=None, active_only=False):
+    def get_set_asides(self, account_id=None, active_only=False, *, internal_account_id=None):
         """Set-asides via the v2 batch endpoint (best: firm-wide + set-aside id).
 
         Delegates to :meth:`EclipseV2.get_set_asides`. Use ``self.v1.get_set_asides``
-        for the raw per-account v1 form.
+        for the raw per-account v1 form. Pass ``internal_account_id=`` when you
+        already hold the Eclipse internal id — it is used verbatim, with no
+        search resolution.
         """
-        return self.v2.get_set_asides(account_id=account_id, active_only=active_only)
+        return self.v2.get_set_asides(
+            account_id=account_id,
+            active_only=active_only,
+            internal_account_id=internal_account_id,
+        )
 
 
 class EclipseAPI(Eclipse):
