@@ -304,6 +304,62 @@ class TestAuthenticationErrors:
                 OrionAPI(usr="user", pwd="pass")
 
 
+class TestLoginRequestOptions:
+    """Test that login() bounds its request and honors SSL settings.
+
+    login() can't go through api_request() (no token yet), so it applies the
+    timeout/verify defaults itself. Without a timeout, a hung auth endpoint
+    would block the constructor forever.
+    """
+
+    @staticmethod
+    def _ok_get(token_key):
+        """Return a patch context for requests.get yielding a successful login."""
+        mock_response = Mock()
+        mock_response.ok = True
+        mock_response.json.return_value = {token_key: "tok"}
+        patcher = patch("requests.get", return_value=mock_response)
+        return patcher
+
+    def test_orion_login_uses_default_timeout(self):
+        with self._ok_get("access_token") as mock_get:
+            OrionAPI(usr="user", pwd="pass")
+            assert mock_get.call_args.kwargs["timeout"] == 30
+
+    def test_orion_login_uses_constructor_timeout(self):
+        with self._ok_get("access_token") as mock_get:
+            OrionAPI(usr="user", pwd="pass", timeout=5)
+            assert mock_get.call_args.kwargs["timeout"] == 5
+
+    def test_orion_login_per_call_timeout_overrides(self):
+        with self._ok_get("access_token") as mock_get:
+            api = OrionAPI(usr="user", pwd="pass", timeout=5)
+            api.login("user", "pass", timeout=1)
+            assert mock_get.call_args.kwargs["timeout"] == 1
+
+    def test_orion_login_uses_ca_bundle(self):
+        with self._ok_get("access_token") as mock_get:
+            OrionAPI(usr="user", pwd="pass", ca_bundle="/path/ca.pem")
+            assert mock_get.call_args.kwargs["verify"] == "/path/ca.pem"
+
+    def test_orion_login_honors_verify_ssl_false(self):
+        with self._ok_get("access_token") as mock_get:
+            OrionAPI(usr="user", pwd="pass", verify_ssl=False)
+            assert mock_get.call_args.kwargs["verify"] is False
+
+    def test_eclipse_password_login_uses_timeout(self):
+        with self._ok_get("eclipse_access_token") as mock_get:
+            EclipseV1(usr="user", pwd="pass", timeout=5)
+            assert mock_get.call_args.kwargs["timeout"] == 5
+
+    def test_eclipse_token_exchange_uses_timeout(self):
+        with self._ok_get("eclipse_access_token") as mock_get:
+            EclipseV1(orion_token="orion-tok", timeout=5)
+            assert mock_get.call_args.kwargs["timeout"] == 5
+            # The pre-existing headers kwarg must survive alongside the new ones.
+            assert mock_get.call_args.kwargs["headers"] == {"Authorization": "Session orion-tok"}
+
+
 class TestAPIErrors:
     """Test API error handling for various HTTP status codes."""
 

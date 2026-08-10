@@ -1,4 +1,4 @@
-__version__ = "2.28.0"
+__version__ = "2.29.0"
 
 import logging
 import re
@@ -332,6 +332,25 @@ class BaseAPI:
 
         return data
 
+    def _request_kwargs(self, timeout=None):
+        """Timeout + SSL kwargs for unauthenticated (pre-token) requests.
+
+        ``login()`` cannot go through :meth:`api_request` — there is no token yet,
+        so header construction would raise — but it still needs the same timeout
+        and SSL defaults applied here.
+
+        Args:
+            timeout: Per-call timeout in seconds. When None, falls back to the
+                client's ``self.timeout``.
+
+        Returns:
+            dict: ``timeout`` and ``verify`` kwargs for ``requests``.
+        """
+        return {
+            "timeout": self.timeout if timeout is None else timeout,
+            "verify": self.ca_bundle if self.ca_bundle else self.verify_ssl,
+        }
+
     def api_request(self, url, req_func=None, timeout=None, **kwargs):
         """Make an authenticated API request with error handling.
 
@@ -440,18 +459,24 @@ class OrionAPI(BaseAPI):
             self.login(usr, pwd)
             # Credentials are not stored to prevent memory exposure
 
-    def login(self, usr=None, pwd=None):
+    def login(self, usr=None, pwd=None, timeout=None):
         """Authenticate with the Orion API.
 
         Args:
             usr: Username for authentication
             pwd: Password for authentication
+            timeout: Request timeout in seconds. When None (default), falls back
+                to the client's ``self.timeout`` (constructor default 30).
 
         Raises:
             AuthenticationError: If credentials are invalid
         """
         with self._token_lock:
-            res = requests.get(f"{self.base_url}/security/token", auth=(usr, pwd))
+            res = requests.get(
+                f"{self.base_url}/security/token",
+                auth=(usr, pwd),
+                **self._request_kwargs(timeout),
+            )
             if not res.ok:
                 raise AuthenticationError(f"Login failed: {res.status_code} {res.reason}")
             try:
@@ -2275,13 +2300,15 @@ class EclipseBase(BaseAPI):
         elif orion_token is not None:
             self.login(orion_token=orion_token)
 
-    def login(self, usr=None, pwd=None, orion_token=None):
+    def login(self, usr=None, pwd=None, orion_token=None, timeout=None):
         """Authenticate with the Eclipse API.
 
         Args:
             usr: Username for authentication
             pwd: Password for authentication
             orion_token: Orion session token (alternative to usr/pwd)
+            timeout: Request timeout in seconds. When None (default), falls back
+                to the client's ``self.timeout`` (constructor default 30).
 
         Raises:
             AuthenticationError: If credentials are invalid or missing
@@ -2291,7 +2318,11 @@ class EclipseBase(BaseAPI):
 
         with self._token_lock:
             if usr is not None:
-                res = requests.get(f"{self.base_url}/admin/token", auth=(usr, pwd))
+                res = requests.get(
+                    f"{self.base_url}/admin/token",
+                    auth=(usr, pwd),
+                    **self._request_kwargs(timeout),
+                )
                 if not res.ok:
                     raise AuthenticationError(f"Login failed: {res.status_code} {res.reason}")
                 try:
@@ -2303,6 +2334,7 @@ class EclipseBase(BaseAPI):
                 res = requests.get(
                     f"{self.base_url}/admin/token",
                     headers={"Authorization": "Session " + orion_token},
+                    **self._request_kwargs(timeout),
                 )
                 if not res.ok:
                     raise AuthenticationError(
