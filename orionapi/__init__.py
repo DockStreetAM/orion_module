@@ -1,4 +1,4 @@
-__version__ = "2.29.0"
+__version__ = "2.30.0"
 
 import logging
 import re
@@ -2810,6 +2810,11 @@ class EclipseV1(EclipseBase):
         """Get portfolio details by ID.
 
         Returns dict with 'general', 'teams', 'issues', 'summary' sections.
+        The 'general' section carries ``teamIds`` / ``primaryTeamId``. The
+        'teams' section's per-record field spelling is unspecified upstream
+        (``id`` vs ``teamId``, ``name`` vs ``teamName``) — accept both, or use
+        :meth:`get_portfolio_teams` for a normalized ``{id, name, is_primary}``
+        view.
         """
         res = self.api_request(f"{self.base_url}/portfolio/portfolios/{portfolio_id}")
         return res.json()
@@ -6663,6 +6668,108 @@ class EclipseV1(EclipseBase):
             json=payload,
         ).json()
 
+    # --- Admin: Teams (v1 reads) ---
+    # The v1 team routes are the reliable team read on tenants where teams were
+    # not created with an externalId — EclipseV2.get_teams returns [] there
+    # (see its docstring). teamIds/primaryTeamId are required on the portfolio
+    # record, so these are the reads that unblock create_portfolio.
+
+    def get_teams(self, is_active=None):
+        """Get all teams (``GET /admin/teams``).
+
+        Args:
+            is_active: When set, passed as ``isActive`` (e.g. ``True`` returns
+                active teams only). When None (default), the parameter is
+                omitted and all teams are returned.
+
+        Returns:
+            list: Team dicts. At minimum ``{id, name}``; the full record also
+            carries ``portfolioAccess``, ``modelAccess``, ``status``,
+            ``numberOfUsers``, ``numberOfModels``, ``numberOfPortfolios``,
+            ``numberOfAdvisors``, ``isDeleted``, ``createdOn/By``,
+            ``editedOn/By``.
+        """
+        params = {}
+        if is_active is not None:
+            params["isActive"] = str(bool(is_active)).lower()
+        res = self.api_request(f"{self.base_url}/admin/teams", params=params)
+        return res.json()
+
+    def get_team(self, team_id):
+        """Get details for a single team (``GET /admin/teams/{id}``).
+
+        Args:
+            team_id: Eclipse team ID
+
+        Returns:
+            dict: Team detail record
+        """
+        res = self.api_request(f"{self.base_url}/admin/teams/{team_id}")
+        return res.json()
+
+    def get_team_portfolios(self, team_id):
+        """Get portfolios associated with a team (``GET /admin/teams/{id}/portfolios``).
+
+        Args:
+            team_id: Eclipse team ID
+
+        Returns:
+            list: Portfolio dicts (``{id, name, isDeleted, createdOn/By, editedOn/By}``)
+        """
+        res = self.api_request(f"{self.base_url}/admin/teams/{team_id}/portfolios")
+        return res.json()
+
+    def get_team_primary_portfolios(self, team_id):
+        """Get portfolios where the team is set as primary
+        (``GET /admin/teams/{id}/primaryPortfolios``).
+
+        Args:
+            team_id: Eclipse team ID
+
+        Returns:
+            list: Portfolio dicts (``{id, name, createdOn/By, editedOn/By}``)
+        """
+        res = self.api_request(f"{self.base_url}/admin/teams/{team_id}/primaryPortfolios")
+        return res.json()
+
+    def get_portfolio_teams(self, portfolio_id):
+        """Get the teams stamped on a portfolio, normalized.
+
+        Reads the ``teams`` section of ``GET /portfolio/portfolios/{id}``
+        (see :meth:`get_portfolio`) and normalizes each record to
+        ``{id, name, is_primary}``. Unlike the ``/admin/teams`` routes, this
+        works for a credential that is on no team at all, so it is the team
+        read of last resort for service accounts.
+
+        The upstream field spelling is unspecified (``id`` vs ``teamId``,
+        ``name`` vs ``teamName``), so both are accepted. ``is_primary`` is
+        derived from ``general.primaryTeamId`` when present, falling back to
+        the record's own ``isPrimaryTeam`` flag.
+
+        Args:
+            portfolio_id: Portfolio ID
+
+        Returns:
+            list: ``{id, name, is_primary}`` dicts, one per team on the portfolio
+        """
+        portfolio = self.get_portfolio(portfolio_id)
+        primary_team_id = portfolio.get("general", {}).get("primaryTeamId")
+        normalized = []
+        for team in portfolio.get("teams") or []:
+            team_id = team.get("id", team.get("teamId"))
+            if primary_team_id is not None:
+                is_primary = team_id == primary_team_id
+            else:
+                is_primary = bool(team.get("isPrimaryTeam"))
+            normalized.append(
+                {
+                    "id": team_id,
+                    "name": team.get("name", team.get("teamName")),
+                    "is_primary": is_primary,
+                }
+            )
+        return normalized
+
     # --- Admin token (v1) ---
 
     def get_firm_token(self, payload):
@@ -10107,13 +10214,19 @@ class EclipseV2(EclipseBase):
     # --- Team / ServiceTeams / User ---
 
     def get_teams(self, external_id=None):
-        """Get teams.
+        """Get teams (v2 ``Team/Team/GetTeams``).
+
+        Warning:
+            Returns ``[]`` (HTTP 200) on tenants where teams were not created
+            with an ``externalId`` — live-verified 2026-08-17. Prefer the v1
+            route (:meth:`EclipseV1.get_teams`, ``GET /admin/teams``), which
+            the :class:`Eclipse` unifier resolves to.
 
         Args:
             external_id: Optional external ID filter (maps to ``externalId``)
 
         Returns:
-            list: Team dicts
+            list: Team dicts (``{teamId, teamName, isPrimaryTeam, ...}``)
         """
         params = {}
         if external_id is not None:
@@ -11712,6 +11825,21 @@ class Eclipse(EclipseBase):
             active_only=active_only,
             internal_account_id=internal_account_id,
         )
+
+    # --- v1-preferred overrides (documented best-of-both choices) ----------------
+
+    def get_teams(self, is_active=None):
+        """Teams via the v1 route (best: v2 ``GetTeams`` is empty on some tenants).
+
+        Delegates to :meth:`EclipseV1.get_teams` (``GET /admin/teams``),
+        returning ``{id, name, ...}`` records. **Behavior change in 2.30.0:**
+        this name previously resolved to :meth:`EclipseV2.get_teams`, which
+        returns ``[]`` (with differently spelled ``{teamId, teamName,
+        isPrimaryTeam}`` records) on tenants where teams were not created with
+        an ``externalId``. Use ``self.v2.get_teams(external_id=...)`` for the
+        v2 surface explicitly.
+        """
+        return self.v1.get_teams(is_active=is_active)
 
 
 class EclipseAPI(Eclipse):
