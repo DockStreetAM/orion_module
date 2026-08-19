@@ -1,4 +1,4 @@
-# orionapi API Reference (v2.27.1)
+# orionapi API Reference (v2.30.0)
 
 Auto-generated from docstrings by `scripts/gen_api_reference.py`. Eclipse methods note their underlying endpoint.
 
@@ -65,7 +65,7 @@ Client for the Orion Advisor API.
 | `get_report_batches(qpe_item_id=None)` | `GET /Reporting/Batch` | List all report batches. |
 | `get_transactions(account_id=None, client_id=None, registration_id=None, start_date=None, end_date=None, status=None, trans_type_ids=None, has_errors=None)` | `GET /Portfolio/Transactions` | Get transactions, optionally filtered. |
 | `invalidate_billing_instance(instance_id)` | `POST /Billing/Instances/{instance_id}/Action/Invalidate` | Invalidate/cancel a billing instance. |
-| `login(usr=None, pwd=None)` | `GET /security/token` | Authenticate with the Orion API. |
+| `login(usr=None, pwd=None, timeout=None)` | `GET /security/token` | Authenticate with the Orion API. |
 | `merge_accounts(merges)` | `PUT /Portfolio/Accounts/Action/Merge` | Merge accounts. |
 | `move_account(account_id, target_registration_id)` | `PUT /Portfolio/Accounts/{account_id}/Action/MoveToRegistration/{target_registration_id}` | Move an account to a different registration. |
 | `move_registration(registration_ids, target_client_id)` | `PUT /Portfolio/Registrations/Action/MoveToClient/{target_client_id}` | Move registrations to a different client/household. |
@@ -92,7 +92,7 @@ Client for the Orion Advisor API.
 
 Eclipse client targeting the v1 API surface (``/v1/...``) only.
 
-**223 methods.**
+**228 methods.**
 
 | Method | Endpoint | Description |
 |---|---|---|
@@ -115,7 +115,7 @@ Eclipse client targeting the v1 API surface (``/v1/...``) only.
 | `create_portfolio_aside_cash(portfolio_id, payload)` | `POST /portfolio/portfolios/{portfolio_id}/asideCash` | Create set-aside cash for a portfolio (mutating). |
 | `create_security(payload)` | `POST /security/securities` | Create a security (mutating). |
 | `create_security_set(name, securities, description=None, tolerance_type='ABSOLUTE', tolerance_type_value=0)` | `POST /security/securityset` | Create a new security set. |
-| `create_set_aside(account_number, amount, min_amount=0.0, max_amount=0.0, description=None, cash_type='$', start_date=None, expire_type='None', expire_date=None, expire_trans_tol=0, expire_trans_type=1, deplete_over_time=False, percent_calc_type=0, sync=True)` | `POST /account/accounts/{account_id}/asidecash` | Create a set-aside cash reservation for an account. |
+| `create_set_aside(account_number=None, amount=None, min_amount=0.0, max_amount=0.0, description=None, cash_type='$', start_date=None, expire_type='None', expire_date=None, expire_trans_tol=0, expire_trans_type=1, deplete_over_time=False, percent_calc_type=0, sync=True, *, internal_account_id=None)` | `POST /account/accounts/{account_id}/asidecash` | Create a set-aside cash reservation for an account. |
 | `create_submodel(payload)` | `POST /modeling/models/submodels` | Create a submodel (mutating). |
 | `create_tlh_trade(payload)` | `POST /tradetool/taxLossHarvesting/action/createTLHTrade` | Create a tax-loss-harvesting trade. |
 | `create_tlh_trade_batch(payload)` | `POST /tradetool/taxLossHarvesting/action/createTLHTradeBatchId` | Create a tax-loss-harvesting trade by batch ID. |
@@ -226,6 +226,7 @@ Eclipse client targeting the v1 API surface (``/v1/...``) only.
 | `get_portfolio_set_aside(portfolio_id, aside_cash_id)` | `GET /portfolio/portfolios/{portfolio_id}/asideCash/{aside_cash_id}` | Get a single portfolio set-aside cash entry. |
 | `get_portfolio_set_asides(portfolio_id)` | `GET /portfolio/portfolios/{portfolio_id}/asidecash` | Get set-aside cash for a portfolio. |
 | `get_portfolio_simple(portfolio_id)` | `GET /portfolio/portfolios/simple/{portfolio_id}` | Get a lightweight portfolio record by ID. |
+| `get_portfolio_teams(portfolio_id)` |  | Get the teams stamped on a portfolio, normalized. |
 | `get_portfolio_trade_instances(portfolio_id, start_date, end_date)` | `GET /tradeorder/instances/portfolio/{portfolio_id}/search` | Get all trade instances for a specific portfolio within a date range. |
 | `get_portfolios_by_household(household_ids)` | `GET /portfolio/portfolios` | Get portfolios for the given household IDs. |
 | `get_raise_cash_methods()` | `GET /tradetool/raisecash/calculation_methods` | Get the available raise-cash calculation methods. |
@@ -249,7 +250,7 @@ Eclipse client targeting the v1 API surface (``/v1/...``) only.
 | `get_security_set_summary(id)` | `GET /security/securityset/{id}` | Get a security set by ID via the summary endpoint. |
 | `get_security_statuses()` | `GET /security/securities/securitystatus` | Get the security statuses. |
 | `get_security_types()` | `GET /security/securities/securitytype` | Get the security types. |
-| `get_set_asides(account_id, active_only=False)` | `GET /account/accounts/{internal_id}/asidecash` | Get set-aside cash settings for a specific account (v1 surface). |
+| `get_set_asides(account_id=None, active_only=False, *, internal_account_id=None)` | `GET /account/accounts/{internal_id}/asidecash` | Get set-aside cash settings for a specific account (v1 surface). |
 | `get_sleeve_allocations_v1(account_id)` | `GET /portfolio/sleeves/{account_id}/allocations` | Get sleeve allocation details for an account (v1). |
 | `get_sleeves()` | `GET /portfolio/sleeves` | Get all sleeves (v1). |
 | `get_spend_cash_methods()` | `GET /tradetool/spendcash/calculation_methods` | Get the available spend-cash calculation methods. |
@@ -261,6 +262,10 @@ Eclipse client targeting the v1 API surface (``/v1/...``) only.
 | `get_submodels_usage()` | `GET /modeling/models/submodels/usage` | Get submodel usage. |
 | `get_tactical_rebalance_cash_protection()` | `GET /tradetool/tacticalRebalanceCashProtection` | Get the tactical-rebalance cash-protection options. |
 | `get_taxlots(holding_id)` | `GET /holding/holdings/{holding_id}/taxlots` | Get tax lots for a holding. |
+| `get_team(team_id)` | `GET /admin/teams/{team_id}` | Get details for a single team (``GET /admin/teams/{id}``). |
+| `get_team_portfolios(team_id)` | `GET /admin/teams/{team_id}/portfolios` | Get portfolios associated with a team (``GET /admin/teams/{id}/portfolios``). |
+| `get_team_primary_portfolios(team_id)` | `GET /admin/teams/{team_id}/primaryPortfolios` | Get portfolios where the team is set as primary |
+| `get_teams(is_active=None)` | `GET /admin/teams` | Get all teams (``GET /admin/teams``). |
 | `get_tlh_gainloss_options()` | `GET /tradetool/taxLossHarvesting/gainloss/options` | Get the tax-loss-harvesting gain/loss options. |
 | `get_tlh_securities(portfolio_ids=None, account_ids=None)` | `POST /tradetool/taxLossHarvesting/securities` | Get tax-loss-harvesting candidate securities (preview only). |
 | `get_tlh_sign_options()` | `GET /tradetool/taxLossHarvesting/sign/options` | Get the tax-loss-harvesting sign options. |
@@ -529,7 +534,7 @@ Eclipse client targeting the v2 API surface (``/api/v2/...``) only.
 | `get_service_team()` | `GET /api/v2/ServiceTeams/GetServiceTeam` | Get the service team. |
 | `get_service_teams(service_type=None)` | `GET /api/v2/ServiceTeams/GetServiceTeams` | Get service teams. |
 | `get_set_aside_expiring_transactions(set_aside_id, set_aside_type=None)` | `GET /api/v2/SetAsideCash/SetAsideExpiringTransactions/{set_aside_id}` | Get the expiring transactions for a set-aside. |
-| `get_set_asides(account_id=None, active_only=False)` | `POST /api/v2/Account/Accounts/SetAsideCashSettings` | Get set-aside cash reservations, including the Eclipse set-aside id. |
+| `get_set_asides(account_id=None, active_only=False, *, internal_account_id=None)` | `POST /api/v2/Account/Accounts/SetAsideCashSettings` | Get set-aside cash reservations, including the Eclipse set-aside id. |
 | `get_sleeve_allocations(account_id)` | `GET /api/v2/Portfolio/Sleeves/{account_id}/Allocations` | Get sleeve allocation details for an account. |
 | `get_sleeve_contribution_methods()` | `GET /api/v2/Portfolio/Sleeves/SleeveContributionMethods` | Get all sleeve contribution methods. |
 | `get_sleeve_distribution_methods()` | `GET /api/v2/Portfolio/Sleeves/SleeveDistributionMethods` | Get all sleeve distribution methods. |
@@ -549,7 +554,7 @@ Eclipse client targeting the v2 API surface (``/api/v2/...``) only.
 | `get_tactical_trades(portfolio_id, account_id=None)` | `GET /api/v2/Tactical/Trades/{portfolio_id}` | Get trades for a portfolio (tactical view). |
 | `get_tax_lot_depletion_preference(related_type, record_id, preference_value_id=None, inherited_preference_value_id=None)` | `GET /api/v2/Preference/Preference/{related_type}/taxLotDepletionMethodPreference/{record_id}` | Get tax-lot depletion-method preference values for a record. |
 | `get_tax_lot_depletion_preference_master(related_type, preference_value_id=None, inherited_preference_value_id=None)` | `GET /api/v2/Preference/Preference/{related_type}/taxLotDepletionMethodPreference/Master` | Get the tax-lot depletion-method preference master (JSON structure). |
-| `get_teams(external_id=None)` | `GET /api/v2/Team/Team/GetTeams` | Get teams. |
+| `get_teams(external_id=None)` | `GET /api/v2/Team/Team/GetTeams` | Get teams (v2 ``Team/Team/GetTeams``). |
 | `get_tlh_opportunity_flag(payload)` | `POST /api/v2/TradeTool/TlhOpportunityFlag` | Get the tax-loss-harvesting opportunity flag (POST-body read). |
 | `get_todays_price_updates()` | `GET /api/v2/SecurityPriceChanges/GetTodaysUpdates` | Get today's security price updates. |
 | `get_token_environment()` | `GET /api/v2/Admin/Token/Environment` | Get the token environment. |
@@ -643,8 +648,9 @@ Eclipse client targeting the v2 API surface (``/api/v2/...``) only.
 
 Best-of-both Eclipse client composing :class:`EclipseV1` and :class:`EclipseV2`.
 
-**1 methods.**
+**2 methods.**
 
 | Method | Endpoint | Description |
 |---|---|---|
-| `get_set_asides(account_id=None, active_only=False)` |  | Set-asides via the v2 batch endpoint (best: firm-wide + set-aside id). |
+| `get_set_asides(account_id=None, active_only=False, *, internal_account_id=None)` |  | Set-asides via the v2 batch endpoint (best: firm-wide + set-aside id). |
+| `get_teams(is_active=None)` |  | Teams via the v1 route (best: v2 ``GetTeams`` is empty on some tenants). |

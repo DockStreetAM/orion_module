@@ -1980,3 +1980,148 @@ class TestPollUntilGenerated:
             api.poll_until_generated(batch_id=5, timeout=0)
         with pytest.raises(ValueError, match="poll_interval must be a positive number"):
             api.poll_until_generated(batch_id=5, poll_interval=-1)
+
+
+class TestEclipseTeams:
+    """Test EclipseV1 team read methods (v1 /admin/teams family)."""
+
+    def test_get_teams(self):
+        """Test getting all teams via the v1 route."""
+        with patch.object(EclipseV1, "login"):
+            api = EclipseV1(usr="test", pwd="pass")
+
+            with patch.object(api, "api_request") as mock_api_request:
+                mock_response = Mock()
+                mock_response.json.return_value = [{"id": 1, "name": "Default Team"}]
+                mock_api_request.return_value = mock_response
+
+                result = api.get_teams()
+
+                mock_api_request.assert_called_once()
+                url = mock_api_request.call_args.args[0]
+                assert url.endswith("/admin/teams")
+                assert mock_api_request.call_args.kwargs["params"] == {}
+                assert result[0] == {"id": 1, "name": "Default Team"}
+
+    def test_get_teams_is_active(self):
+        """Test that is_active maps to the isActive query param."""
+        with patch.object(EclipseV1, "login"):
+            api = EclipseV1(usr="test", pwd="pass")
+
+            with patch.object(api, "api_request") as mock_api_request:
+                mock_response = Mock()
+                mock_response.json.return_value = []
+                mock_api_request.return_value = mock_response
+
+                api.get_teams(is_active=True)
+
+                assert mock_api_request.call_args.kwargs["params"] == {"isActive": "true"}
+
+    def test_get_team(self):
+        """Test getting a single team's details."""
+        with patch.object(EclipseV1, "login"):
+            api = EclipseV1(usr="test", pwd="pass")
+
+            with patch.object(api, "api_request") as mock_api_request:
+                mock_response = Mock()
+                mock_response.json.return_value = {"id": 1, "name": "Default Team"}
+                mock_api_request.return_value = mock_response
+
+                result = api.get_team(1)
+
+                url = mock_api_request.call_args.args[0]
+                assert url.endswith("/admin/teams/1")
+                assert result["id"] == 1
+
+    def test_get_team_portfolios(self):
+        """Test getting a team's portfolios."""
+        with patch.object(EclipseV1, "login"):
+            api = EclipseV1(usr="test", pwd="pass")
+
+            with patch.object(api, "api_request") as mock_api_request:
+                mock_response = Mock()
+                mock_response.json.return_value = [{"id": 3, "name": "Test Portfolio 3"}]
+                mock_api_request.return_value = mock_response
+
+                result = api.get_team_portfolios(1)
+
+                url = mock_api_request.call_args.args[0]
+                assert url.endswith("/admin/teams/1/portfolios")
+                assert result[0]["id"] == 3
+
+    def test_get_team_primary_portfolios(self):
+        """Test getting portfolios where the team is primary."""
+        with patch.object(EclipseV1, "login"):
+            api = EclipseV1(usr="test", pwd="pass")
+
+            with patch.object(api, "api_request") as mock_api_request:
+                mock_response = Mock()
+                mock_response.json.return_value = [{"id": 3, "name": "Test Portfolio 3"}]
+                mock_api_request.return_value = mock_response
+
+                api.get_team_primary_portfolios(1)
+
+                url = mock_api_request.call_args.args[0]
+                assert url.endswith("/admin/teams/1/primaryPortfolios")
+
+    def test_get_portfolio_teams_normalizes_both_spellings(self):
+        """Test that get_portfolio_teams accepts id/teamId and name/teamName."""
+        with patch.object(EclipseV1, "login"):
+            api = EclipseV1(usr="test", pwd="pass")
+
+            portfolio = {
+                "general": {"primaryTeamId": 1, "teamIds": [1, 2]},
+                "teams": [
+                    {"id": 1, "name": "Default Team"},
+                    {"teamId": 2, "teamName": "Ops Team"},
+                ],
+            }
+            with patch.object(api, "get_portfolio", return_value=portfolio):
+                result = api.get_portfolio_teams(42)
+
+            assert result == [
+                {"id": 1, "name": "Default Team", "is_primary": True},
+                {"id": 2, "name": "Ops Team", "is_primary": False},
+            ]
+
+    def test_get_portfolio_teams_falls_back_to_is_primary_flag(self):
+        """Test is_primary fallback when general.primaryTeamId is absent."""
+        with patch.object(EclipseV1, "login"):
+            api = EclipseV1(usr="test", pwd="pass")
+
+            portfolio = {
+                "general": {},
+                "teams": [{"teamId": 2, "teamName": "Ops Team", "isPrimaryTeam": 1}],
+            }
+            with patch.object(api, "get_portfolio", return_value=portfolio):
+                result = api.get_portfolio_teams(42)
+
+            assert result == [{"id": 2, "name": "Ops Team", "is_primary": True}]
+
+    def test_get_portfolio_teams_empty(self):
+        """Test get_portfolio_teams with no teams section."""
+        with patch.object(EclipseV1, "login"):
+            api = EclipseV1(usr="test", pwd="pass")
+
+            with patch.object(api, "get_portfolio", return_value={"general": {}}):
+                assert api.get_portfolio_teams(42) == []
+
+
+class TestEclipseFacadeTeams:
+    """Test that the Eclipse unifier resolves get_teams to the v1 surface."""
+
+    def test_get_teams_uses_v1(self):
+        """Test the documented v1-preferred override."""
+        from orionapi import Eclipse
+
+        with patch.object(Eclipse, "login"), patch.object(EclipseV1, "login"):
+            api = Eclipse.__new__(Eclipse)
+            api.v1 = Mock()
+            api.v1.get_teams.return_value = [{"id": 1, "name": "Default Team"}]
+            api.v2 = Mock()
+
+            result = api.get_teams(is_active=True)
+
+            api.v1.get_teams.assert_called_once_with(is_active=True)
+            api.v2.get_teams.assert_not_called()
+            assert result[0]["id"] == 1
