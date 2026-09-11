@@ -298,7 +298,7 @@ Eclipse client targeting the v1 API surface (``/v1/...``) only.
 | `search_tlh_securities(payload)` | `POST /tradetool/taxLossHarvesting/action/searchTLHsecurity` | Search tax-loss-harvesting securities (POST-body). |
 | `set_account_tradeable(account_id, trade_restriction='tradeable', sync=True)` | `PUT /account/accounts/{account_id}` | Set trading restrictions for an account. |
 | `set_portfolio_flag(payload)` | `POST /portfolio/portfolioFlag` | Set a portfolio flag (mutating). |
-| `set_portfolio_tradeable(portfolio_id, tradeable=True, sync=True)` | `PUT /portfolio/portfolios/{portfolio_id}` | Set whether trading is allowed for a portfolio. |
+| `set_portfolio_tradeable(portfolio_id, tradeable=True, sync=True)` | `PUT /api/v2/Portfolio/Portfolios/action/setPortfolioTradeBlock` | Set whether trading is allowed for a portfolio. |
 | `set_security_set_favorite(set_id, payload)` | `PUT /security/securityset/favorites/{set_id}` | Set a security set as favorite (mutating). |
 | `set_submodel_favorite(submodel_id, payload)` | `PUT /modeling/models/submodels/favorites/{submodel_id}` | Set a submodel as favorite (mutating). |
 | `spend_cash_trade(portfolio_ids, portfolio_trade_group_ids=None, is_view_only=True, reason='', is_excel_import=False, sync=True, selected_method_id=None, spend_full_amount=None, filter_type=None)` | `POST /tradetool/spendcash/action/generatetrade` | Generate Spend Cash trade for portfolios. |

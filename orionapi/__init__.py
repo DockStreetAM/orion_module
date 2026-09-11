@@ -1,4 +1,4 @@
-__version__ = "2.30.0"
+__version__ = "2.30.1"
 
 import logging
 import re
@@ -4843,40 +4843,33 @@ class EclipseV1(EclipseBase):
     def set_portfolio_tradeable(self, portfolio_id, tradeable=True, sync=True):
         """Set whether trading is allowed for a portfolio.
 
+        Uses the v2 ``setPortfolioTradeBlock`` action, which accepts only
+        ``{"id", "doNotTrade"}`` and therefore cannot touch any other portfolio
+        field. The older approach (GET the portfolio, rebuild the v1 PUT payload
+        by hand) rejected portfolios with no primary team and risked stripping
+        teams, trading instructions and auto-rebalance settings that the
+        rebuilt payload did not carry. Verified live 2026-09-10 on portfolio
+        209: the flag flips and every ``general``/``teams`` field is unchanged.
+
         Args:
             portfolio_id: Portfolio ID
             tradeable: True to allow trading, False to block (default True)
             sync: Wait for analytics to complete (default True)
 
         Returns:
-            dict: Updated portfolio details
+            dict: Updated portfolio details (same shape as :meth:`get_portfolio`)
         """
         if not isinstance(portfolio_id, int) or portfolio_id < 1:
             raise ValueError("portfolio_id must be a positive integer")
         if not isinstance(tradeable, bool):
             raise ValueError("tradeable must be a boolean")
 
-        # Get current portfolio to preserve other fields
-        portfolio = self.get_portfolio(portfolio_id)
-        general = portfolio.get("general", {})
-
-        # Build payload preserving existing fields
-        payload = {
-            "name": general.get("portfolioName"),
-            "modelId": general.get("modelId"),
-            "isSleevePortfolio": general.get("sleevePortfolio", False),
-            "doNotTrade": 0 if tradeable else 1,
-            "tags": general.get("tags", ""),
-            "teamIds": general.get("teamIds", []),
-            "primaryTeamId": general.get("primaryTeamId"),
-        }
-
-        res = self.api_request(
-            f"{self.base_url}/portfolio/portfolios/{portfolio_id}",
+        self.api_request(
+            f"{self.base_url_v2}/Portfolio/Portfolios/action/setPortfolioTradeBlock",
             requests.put,
-            json=payload,
+            json=[{"id": portfolio_id, "doNotTrade": not tradeable}],
         )
-        result = res.json()
+        result = self.get_portfolio(portfolio_id)
         self._maybe_wait_for_analytics(sync)
         return result
 
