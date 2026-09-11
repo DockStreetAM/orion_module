@@ -470,35 +470,47 @@ class TestEclipseTradeRestrictions:
     """Test EclipseV1 trade restriction methods."""
 
     def test_set_portfolio_tradeable_block(self):
-        """Test blocking portfolio trading."""
+        """Blocking sends only {id, doNotTrade} to the v2 action and re-reads."""
         with patch.object(EclipseV1, "login"):
             api = EclipseV1(usr="test", pwd="pass")
+            with (
+                patch.object(api, "get_portfolio") as mock_get,
+                patch.object(api, "api_request") as mock_api_request,
+                patch.object(api, "_maybe_wait_for_analytics") as mock_wait,
+            ):
+                mock_get.return_value = {
+                    "id": 123,
+                    "general": {"portfolioName": "Test Portfolio", "doNotTrade": 1},
+                    "teams": [{"id": 2, "name": "Reps", "isPrimary": 1}],
+                }
 
-            # Mock get_portfolio to return current portfolio state
+                result = api.set_portfolio_tradeable(portfolio_id=123, tradeable=False, sync=False)
+
+                assert result["general"]["doNotTrade"] == 1
+                url = mock_api_request.call_args.args[0]
+                assert url.endswith("/api/v2/Portfolio/Portfolios/action/setPortfolioTradeBlock")
+                assert mock_api_request.call_args.kwargs["json"] == [
+                    {"id": 123, "doNotTrade": True}
+                ]
+                mock_get.assert_called_once_with(123)
+                mock_wait.assert_called_once_with(False)
+
+    def test_set_portfolio_tradeable_unblock(self):
+        """Unblocking sends doNotTrade=False and nothing else."""
+        with patch.object(EclipseV1, "login"):
+            api = EclipseV1(usr="test", pwd="pass")
             with (
                 patch.object(api, "get_portfolio") as mock_get,
                 patch.object(api, "api_request") as mock_api_request,
                 patch.object(api, "_maybe_wait_for_analytics"),
             ):
-                mock_get.return_value = {
-                    "general": {
-                        "portfolioName": "Test Portfolio",
-                        "modelId": 1,
-                        "sleevePortfolio": False,
-                        "doNotTrade": 0,
-                        "tags": "test",
-                        "teamIds": [1],
-                        "primaryTeamId": 1,
-                    }
-                }
+                mock_get.return_value = {"general": {"doNotTrade": 0}, "teams": []}
 
-                mock_response = Mock()
-                mock_response.json.return_value = {"general": {"doNotTrade": 1}}
-                mock_api_request.return_value = mock_response
+                api.set_portfolio_tradeable(portfolio_id=7, tradeable=True, sync=False)
 
-                result = api.set_portfolio_tradeable(portfolio_id=123, tradeable=False, sync=False)
-
-                assert result["general"]["doNotTrade"] == 1
+                payload = mock_api_request.call_args.kwargs["json"]
+                assert payload == [{"id": 7, "doNotTrade": False}]
+                assert set(payload[0]) == {"id", "doNotTrade"}
 
     def test_set_account_tradeable_block_advisor(self):
         """Test blocking advisor trading for an account."""
