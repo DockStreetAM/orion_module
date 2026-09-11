@@ -1,4 +1,4 @@
-__version__ = "2.30.0"
+__version__ = "2.30.1"
 
 import logging
 import re
@@ -4858,18 +4858,37 @@ class EclipseV1(EclipseBase):
 
         # Get current portfolio to preserve other fields
         portfolio = self.get_portfolio(portfolio_id)
-        general = portfolio.get("general", {})
+        general = portfolio.get("general") or {}
+
+        # Team membership lives in the portfolio's top-level ``teams`` list
+        # (``[{"id", "name", "isPrimary", ...}]``), NOT in ``general`` — reading
+        # ``general.teamIds`` / ``general.primaryTeamId`` sent ``[]`` / ``null``,
+        # which Eclipse rejects with ``400 primaryTeamId is not of a type(s)
+        # number`` (and would have stripped every team assignment had it
+        # been accepted). Fall back to the ``general`` keys only if a future
+        # DTO carries them.
+        teams = portfolio.get("teams") or []
+        team_ids = [t["id"] for t in teams if isinstance(t, dict) and "id" in t]
+        if not team_ids:
+            team_ids = list(general.get("teamIds") or [])
+        primary_team_id = next(
+            (t["id"] for t in teams if isinstance(t, dict) and t.get("isPrimary")),
+            general.get("primaryTeamId"),
+        )
 
         # Build payload preserving existing fields
         payload = {
             "name": general.get("portfolioName"),
             "modelId": general.get("modelId"),
-            "isSleevePortfolio": general.get("sleevePortfolio", False),
+            "isSleevePortfolio": general.get("sleevePortfolio") or False,
             "doNotTrade": 0 if tradeable else 1,
-            "tags": general.get("tags", ""),
-            "teamIds": general.get("teamIds", []),
-            "primaryTeamId": general.get("primaryTeamId"),
+            "tags": general.get("tags") or "",
+            "teamIds": team_ids,
         }
+        # ``primaryTeamId`` must be a number when present; a portfolio with no
+        # primary team must omit the key rather than send ``null``.
+        if primary_team_id is not None:
+            payload["primaryTeamId"] = primary_team_id
 
         res = self.api_request(
             f"{self.base_url}/portfolio/portfolios/{portfolio_id}",
