@@ -296,7 +296,7 @@ Eclipse client targeting the v1 API surface (``/v1/...``) only.
 | `search_orion_securities(search, top=20)` | `GET /security/securities/orion` | Search the Orion security master. |
 | `search_securities(search, top=20, exclude_cash=True)` | `GET /security/securities` | Search for securities by ticker symbol, name, or ID. |
 | `search_tlh_securities(payload)` | `POST /tradetool/taxLossHarvesting/action/searchTLHsecurity` | Search tax-loss-harvesting securities (POST-body). |
-| `set_account_tradeable(account_id, trade_restriction='tradeable', sync=True)` | `PUT /account/accounts/{account_id}` | Set trading restrictions for an account. |
+| `set_account_tradeable(account_id, trade_restriction='tradeable', sync=True)` | `PUT /api/v2/Account/Accounts/action/setAccountTradeBlock` | Set trading restrictions for an account. |
 | `set_portfolio_flag(payload)` | `POST /portfolio/portfolioFlag` | Set a portfolio flag (mutating). |
 | `set_portfolio_tradeable(portfolio_id, tradeable=True, sync=True)` | `PUT /api/v2/Portfolio/Portfolios/action/setPortfolioTradeBlock` | Set whether trading is allowed for a portfolio. |
 | `set_security_set_favorite(set_id, payload)` | `PUT /security/securityset/favorites/{set_id}` | Set a security set as favorite (mutating). |
