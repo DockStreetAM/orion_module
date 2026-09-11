@@ -512,38 +512,41 @@ class TestEclipseTradeRestrictions:
                 assert payload == [{"id": 7, "doNotTrade": False}]
                 assert set(payload[0]) == {"id", "doNotTrade"}
 
-    def test_set_account_tradeable_block_advisor(self):
-        """Test blocking advisor trading for an account."""
+    def _run_account_tradeable(self, restriction):
         with patch.object(EclipseV1, "login"):
             api = EclipseV1(usr="test", pwd="pass")
-
             with (
                 patch.object(api, "get_account_details") as mock_get,
                 patch.object(api, "api_request") as mock_api_request,
-                patch.object(api, "_maybe_wait_for_analytics"),
+                patch.object(api, "_maybe_wait_for_analytics") as mock_wait,
             ):
                 mock_get.return_value = {
-                    "generalSection": {
-                        "accountName": "Test Account",
-                        "portfolioId": 1,
-                        "doNotTrade": 0,
-                        "doNotTradeCustodian": 0,
-                    }
+                    "id": 456,
+                    "isDoNotBuySell": False,
+                    "isCustodialRestriction": False,
                 }
-
-                mock_response = Mock()
-                mock_response.json.return_value = {"generalSection": {"doNotTrade": 1}}
-                mock_api_request.return_value = mock_response
-
-                api.set_account_tradeable(
-                    account_id=456, trade_restriction="block_advisor", sync=False
+                result = api.set_account_tradeable(
+                    account_id=456, trade_restriction=restriction, sync=False
                 )
+                url = mock_api_request.call_args.args[0]
+                assert url.endswith("/api/v2/Account/Accounts/action/setAccountTradeBlock")
+                mock_get.assert_called_once_with(456)
+                mock_wait.assert_called_once_with(False)
+                assert result is mock_get.return_value
+                return mock_api_request.call_args.kwargs["json"]
 
-                # Verify the request was made with correct payload
-                call_args = mock_api_request.call_args
-                payload = call_args[1]["json"]
-                assert payload["doNotTrade"] == 1
-                assert payload["doNotTradeCustodian"] == 0
+    def test_set_account_tradeable_block_advisor(self):
+        """block_advisor sends only {id, isDoNotBuySell=True, isCustodialRestriction=False}."""
+        payload = self._run_account_tradeable("block_advisor")
+        assert payload == [{"id": 456, "isDoNotBuySell": True, "isCustodialRestriction": False}]
+
+    def test_set_account_tradeable_block_custodian(self):
+        payload = self._run_account_tradeable("block_custodian")
+        assert payload == [{"id": 456, "isDoNotBuySell": False, "isCustodialRestriction": True}]
+
+    def test_set_account_tradeable_tradeable(self):
+        payload = self._run_account_tradeable("tradeable")
+        assert payload == [{"id": 456, "isDoNotBuySell": False, "isCustodialRestriction": False}]
 
     def test_set_account_tradeable_invalid_restriction(self):
         """Test set_account_tradeable with invalid restriction."""

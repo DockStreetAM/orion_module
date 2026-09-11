@@ -1,4 +1,4 @@
-__version__ = "2.30.1"
+__version__ = "2.30.2"
 
 import logging
 import re
@@ -4876,6 +4876,13 @@ class EclipseV1(EclipseBase):
     def set_account_tradeable(self, account_id, trade_restriction="tradeable", sync=True):
         """Set trading restrictions for an account.
 
+        Uses the v2 ``setAccountTradeBlock`` action, which accepts only
+        ``{"id", "isDoNotBuySell", "isCustodialRestriction"}`` and therefore
+        cannot touch any other account field. The older approach rebuilt the
+        v1 ``PUT /account/accounts/{id}`` payload from ``generalSection`` of the
+        GET DTO, but the account DTO is flat (no ``generalSection``), so it was
+        sending ``accountName: null`` / ``portfolioId: null`` alongside the flags.
+
         Args:
             account_id: Internal Eclipse account ID
             trade_restriction: One of:
@@ -4885,7 +4892,8 @@ class EclipseV1(EclipseBase):
             sync: Wait for analytics to complete (default True)
 
         Returns:
-            dict: Updated account details
+            dict: Updated account details (same shape as :meth:`get_account_details`;
+            the flags are ``isDoNotBuySell`` and ``isCustodialRestriction``)
 
         Note:
             These are mutually exclusive options - only one can be active at a time.
@@ -4893,35 +4901,27 @@ class EclipseV1(EclipseBase):
         if not isinstance(account_id, int) or account_id < 1:
             raise ValueError("account_id must be a positive integer")
 
-        valid_restrictions = ["tradeable", "block_advisor", "block_custodian"]
-        if trade_restriction not in valid_restrictions:
-            raise ValueError(f"trade_restriction must be one of {valid_restrictions}")
-
-        # Get current account details
-        account = self.get_account_details(account_id)
-        general = account.get("generalSection", {})
-
-        # Build payload
-        payload = {
-            "accountName": general.get("accountName"),
-            "portfolioId": general.get("portfolioId"),
+        flags = {
+            "tradeable": (False, False),
+            "block_advisor": (True, False),
+            "block_custodian": (False, True),
         }
+        if trade_restriction not in flags:
+            raise ValueError(f"trade_restriction must be one of {list(flags)}")
+        do_not_buy_sell, custodial_restriction = flags[trade_restriction]
 
-        # Set flags based on restriction type
-        if trade_restriction == "tradeable":
-            payload["doNotTrade"] = 0
-            payload["doNotTradeCustodian"] = 0
-        elif trade_restriction == "block_advisor":
-            payload["doNotTrade"] = 1
-            payload["doNotTradeCustodian"] = 0
-        elif trade_restriction == "block_custodian":
-            payload["doNotTrade"] = 0
-            payload["doNotTradeCustodian"] = 1
-
-        res = self.api_request(
-            f"{self.base_url}/account/accounts/{account_id}", requests.put, json=payload
+        self.api_request(
+            f"{self.base_url_v2}/Account/Accounts/action/setAccountTradeBlock",
+            requests.put,
+            json=[
+                {
+                    "id": account_id,
+                    "isDoNotBuySell": do_not_buy_sell,
+                    "isCustodialRestriction": custodial_restriction,
+                }
+            ],
         )
-        result = res.json()
+        result = self.get_account_details(account_id)
         self._maybe_wait_for_analytics(sync)
         return result
 
