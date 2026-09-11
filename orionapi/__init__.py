@@ -4843,59 +4843,33 @@ class EclipseV1(EclipseBase):
     def set_portfolio_tradeable(self, portfolio_id, tradeable=True, sync=True):
         """Set whether trading is allowed for a portfolio.
 
+        Uses the v2 ``setPortfolioTradeBlock`` action, which accepts only
+        ``{"id", "doNotTrade"}`` and therefore cannot touch any other portfolio
+        field. The older approach (GET the portfolio, rebuild the v1 PUT payload
+        by hand) rejected portfolios with no primary team and risked stripping
+        teams, trading instructions and auto-rebalance settings that the
+        rebuilt payload did not carry. Verified live 2026-09-10 on portfolio
+        209: the flag flips and every ``general``/``teams`` field is unchanged.
+
         Args:
             portfolio_id: Portfolio ID
             tradeable: True to allow trading, False to block (default True)
             sync: Wait for analytics to complete (default True)
 
         Returns:
-            dict: Updated portfolio details
+            dict: Updated portfolio details (same shape as :meth:`get_portfolio`)
         """
         if not isinstance(portfolio_id, int) or portfolio_id < 1:
             raise ValueError("portfolio_id must be a positive integer")
         if not isinstance(tradeable, bool):
             raise ValueError("tradeable must be a boolean")
 
-        # Get current portfolio to preserve other fields
-        portfolio = self.get_portfolio(portfolio_id)
-        general = portfolio.get("general") or {}
-
-        # Team membership lives in the portfolio's top-level ``teams`` list
-        # (``[{"id", "name", "isPrimary", ...}]``), NOT in ``general`` — reading
-        # ``general.teamIds`` / ``general.primaryTeamId`` sent ``[]`` / ``null``,
-        # which Eclipse rejects with ``400 primaryTeamId is not of a type(s)
-        # number`` (and would have stripped every team assignment had it
-        # been accepted). Fall back to the ``general`` keys only if a future
-        # DTO carries them.
-        teams = portfolio.get("teams") or []
-        team_ids = [t["id"] for t in teams if isinstance(t, dict) and "id" in t]
-        if not team_ids:
-            team_ids = list(general.get("teamIds") or [])
-        primary_team_id = next(
-            (t["id"] for t in teams if isinstance(t, dict) and t.get("isPrimary")),
-            general.get("primaryTeamId"),
-        )
-
-        # Build payload preserving existing fields
-        payload = {
-            "name": general.get("portfolioName"),
-            "modelId": general.get("modelId"),
-            "isSleevePortfolio": general.get("sleevePortfolio") or False,
-            "doNotTrade": 0 if tradeable else 1,
-            "tags": general.get("tags") or "",
-            "teamIds": team_ids,
-        }
-        # ``primaryTeamId`` must be a number when present; a portfolio with no
-        # primary team must omit the key rather than send ``null``.
-        if primary_team_id is not None:
-            payload["primaryTeamId"] = primary_team_id
-
-        res = self.api_request(
-            f"{self.base_url}/portfolio/portfolios/{portfolio_id}",
+        self.api_request(
+            f"{self.base_url_v2}/Portfolio/Portfolios/action/setPortfolioTradeBlock",
             requests.put,
-            json=payload,
+            json=[{"id": portfolio_id, "doNotTrade": not tradeable}],
         )
-        result = res.json()
+        result = self.get_portfolio(portfolio_id)
         self._maybe_wait_for_analytics(sync)
         return result
 
