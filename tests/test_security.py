@@ -580,12 +580,12 @@ class TestBugFixes:
                 assert request_json["maxCashAmount"] == 0.0
                 assert request_json["cashAmount"] == 1000.0
 
-    def test_create_set_aside_expire_type_transaction_uses_tolerance(self):
-        """Test create_set_aside uses tolerance value for transaction expiration.
+    def test_create_set_aside_expire_type_transaction_sends_type_in_expiration_value(self):
+        """For Transaction expiration, expirationValue carries the transaction type id.
 
-        Bug: When expire_type=2 (Transaction), was setting expire_value to
-        expire_trans_type (the type ID) instead of expire_trans_tol (the tolerance value).
-        Fix: Changed to use expire_trans_tol
+        Live-verified 2026-09: Eclipse stores the type (e.g. 3 -> "Fee") from
+        expirationValue and ignores a separate transactionTypeId; sending
+        expirationValue 0 left the set-aside with no transaction type.
         """
         with (
             patch.object(EclipseV1, "login"),
@@ -610,11 +610,52 @@ class TestBugFixes:
                     expire_trans_type=1,  # The transaction type ID
                 )
 
-                # Verify expirationValue is set to tolerance, not type ID
                 mock_post.assert_called_once()
                 request_json = mock_post.call_args[1]["json"]
-
-                # For Transaction expiration, expirationValue should be 0
-                assert request_json["expirationValue"] == 0
+                assert request_json["expirationTypeId"] == 2
+                assert request_json["expirationValue"] == 1
                 assert request_json["toleranceValue"] == 50
-                assert request_json["transactionTypeId"] == 1
+                assert "transactionTypeId" not in request_json
+
+    def test_create_set_aside_fee_expiry_like_orion_billing_export(self):
+        """The shape Orion's Cash Funding Export writes: %, Fee expiry, tolerance 15."""
+        with (
+            patch.object(EclipseV1, "login"),
+            patch.object(EclipseV1, "_get_auth_header", return_value={}),
+            patch.object(EclipseV1, "_maybe_wait_for_analytics"),
+        ):
+            api = EclipseV1(usr="test", pwd="pass")
+            with patch("requests.post") as mock_post:
+                mock_post.return_value = Mock(ok=True, json=Mock(return_value={"id": 1}))
+                api.create_set_aside(
+                    internal_account_id=55,
+                    amount=0.18,
+                    min_amount=0.18,
+                    max_amount=0.18,
+                    cash_type="%",
+                    start_date="2026-09-18",
+                    expire_type="Transaction",
+                    expire_trans_type="Fee",
+                    expire_trans_tol=15,
+                    percent_calc_type="Use Total Value",
+                )
+                body = mock_post.call_args[1]["json"]
+                assert mock_post.call_args[0][0].endswith("/account/accounts/55/asidecash")
+                assert body["cashAmountTypeId"] == 2
+                assert body["expirationTypeId"] == 2
+                assert body["expirationValue"] == 3
+                assert body["toleranceValue"] == 15
+                assert body["percentCalculationTypeId"] == 1
+                assert body["startDate"] == "2026-09-18"
+
+    def test_create_set_aside_omits_start_date_when_unset(self):
+        with (
+            patch.object(EclipseV1, "login"),
+            patch.object(EclipseV1, "_get_auth_header", return_value={}),
+            patch.object(EclipseV1, "_maybe_wait_for_analytics"),
+        ):
+            api = EclipseV1(usr="test", pwd="pass")
+            with patch("requests.post") as mock_post:
+                mock_post.return_value = Mock(ok=True, json=Mock(return_value={"id": 1}))
+                api.create_set_aside(internal_account_id=55, amount=10)
+                assert "startDate" not in mock_post.call_args[1]["json"]
