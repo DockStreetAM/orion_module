@@ -1,4 +1,4 @@
-__version__ = "2.31.0"
+__version__ = "2.31.1"
 
 import logging
 import re
@@ -3050,11 +3050,13 @@ class EclipseV1(EclipseBase):
             max_amount: Maximum cash amount (default 0.0)
             description: Description of the set-aside
             cash_type: '$' for dollar amount, '%' for percentage (default '$')
-            start_date: Start date for the set-aside
+            start_date: Optional start date (YYYY-MM-DD)
             expire_type: 'None', 'Date', or 'Transaction' (default 'None')
             expire_date: Expiration date (if expire_type='Date')
             expire_trans_tol: Transaction tolerance value (default 0)
-            expire_trans_type: 1='Distribution / Merge Out', 3='Fee' (default 1)
+            expire_trans_type: For expire_type='Transaction', the transaction
+                that expires it: 1 or 'Distribution / Merge Out', 3 or 'Fee'
+                (default 1). Orion's billing export uses 'Fee' with tolerance 15.
             deplete_over_time: Maps to the UI "Deplete Over Time" checkbox
                 (``isDepleteOverTime``). Only meaningful when
                 expire_type='Transaction' (default False)
@@ -3113,8 +3115,10 @@ class EclipseV1(EclipseBase):
         if expire_type == 1:
             expire_value = expire_date
         elif expire_type == 2:
-            # Transaction-based expiration uses toleranceValue, expirationValue should be 0
-            expire_value = 0
+            # For Transaction expiration, expirationValue carries the transaction
+            # type id (3 = Fee). Live-verified 2026-09: Eclipse ignores a separate
+            # transactionTypeId and stores no type when expirationValue is 0.
+            expire_value = expire_trans_type
         elif expire_type == 3:
             expire_value = 0
 
@@ -3126,22 +3130,24 @@ class EclipseV1(EclipseBase):
         if isinstance(percent_calc_type, str):
             percent_calc_type = percent_calc_type_map[percent_calc_type]
 
+        payload = {
+            "cashAmountTypeId": cash_type,
+            "cashAmount": float(amount),
+            "minCashAmount": float(min_amount),
+            "maxCashAmount": float(max_amount),
+            "expirationTypeId": expire_type,
+            "expirationValue": expire_value,
+            "toleranceValue": expire_trans_tol,
+            "isDepleteOverTime": bool(deplete_over_time),
+            "description": description,
+            "percentCalculationTypeId": percent_calc_type,
+        }
+        if start_date is not None:
+            payload["startDate"] = start_date
         res = self.api_request(
             f"{self.base_url}/account/accounts/{account_id}/asidecash",
             requests.post,
-            json={
-                "cashAmountTypeId": cash_type,
-                "cashAmount": float(amount),
-                "minCashAmount": float(min_amount),
-                "maxCashAmount": float(max_amount),
-                "expirationTypeId": expire_type,
-                "expirationValue": expire_value,
-                "toleranceValue": expire_trans_tol,
-                "transactionTypeId": expire_trans_type,
-                "isDepleteOverTime": bool(deplete_over_time),
-                "description": description,
-                "percentCalculationTypeId": percent_calc_type,
-            },
+            json=payload,
         )
         result = res.json()
         self._maybe_wait_for_analytics(sync)
@@ -9670,18 +9676,22 @@ class EclipseV2(EclipseBase):
         return res.json()
 
     def billing_set_aside_cash(self, payload):
-        """Create billing set-aside cash (mutating).
+        """Create or update billing set-aside cash (mutating).
+
+        This is the endpoint behind Orion's Cash Funding Export.
 
         Args:
-            payload: Billing set-aside DTO (request body)
+            payload: List of ``{"orionConnectExternalAccountId": int,
+                "orionConnectFirmId": int, "amount": float}`` (dollar amount)
 
         Returns:
-            dict: Result
+            dict | None: Parsed response, or None on the empty body the
+                endpoint normally returns
         """
         res = self.api_request(
             f"{self.base_url_v2}/SetAsideCash/BillingSetAsideCash", requests.post, json=payload
         )
-        return res.json()
+        return _json_or_none(res)
 
     def delete_account_set_aside_cash(self, payload):
         """Delete account set-aside cash (mutating).
