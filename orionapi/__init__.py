@@ -1,4 +1,4 @@
-__version__ = "2.30.2"
+__version__ = "2.31.0"
 
 import logging
 import re
@@ -127,6 +127,8 @@ BILLING_RUN_FOR_TYPES = [
     "SingleHHRerun",
     "Accounts",
     "ImportedHouseholds",
+    "ImportedHHRerun",
+    "FinalBill",
 ]
 
 BILLING_ACCOUNT_FILTERS = ["ActiveAccounts", "InActiveAccounts", "AllAccounts"]
@@ -169,6 +171,19 @@ BILLING_BILL_TYPES = [
     "Performance",
     "AdvanceCreditDebit",
 ]
+
+# Billing instance statusValue strings as the live API returns them. The
+# swagger enum names differ ("BillDataFilesNeeded", "FeeFileNeeded", ...);
+# the API sends display strings instead.
+BILLING_STATUS_NOT_GENERATED = "Not Generated"
+BILLING_STATUS_DATA_FILES_NEEDED = "Data Files Needed"
+BILLING_STATUS_FEE_FILE_NEEDED = "Fee File Needed"
+BILLING_STATUS_COMPLETE = "Complete"
+# Instance statuses that mean something went wrong; waiting further is pointless.
+BILLING_ERROR_STATUSES = {"Fee File Failed", "Error Deleting Instance"}
+# Per-household (BillInstanceClient) statuses still in flight during generation.
+BILLING_CLIENT_PENDING_STATUSES = {"NotGenerated", "PendingGeneration"}
+
 
 # Fields of the Orion API ReceiveableSummaryDto, the body of
 # POST /Billing/SyncCashtoEclipse. Identical to the CashFundingGridDto rows
@@ -223,6 +238,48 @@ class AmbiguousAccountError(OrionAPIError):
     """
 
     pass
+
+
+class BillingGenerationError(OrionAPIError):
+    """A billing run reached an error state (instance or household level)."""
+
+    def __init__(self, message, instance=None, errors=None):
+        super().__init__(message)
+        self.instance = instance
+        self.errors = errors or []
+
+
+def _require_positive_int_list(name, values):
+    """Raise ValueError unless ``values`` is a non-empty list of positive ints."""
+    if not isinstance(values, list) or not values:
+        raise ValueError(f"{name} must be a non-empty list")
+    for value in values:
+        if not isinstance(value, int) or value < 1:
+            raise ValueError(f"{name} must be positive integers")
+
+
+def _require_poll_args(timeout, poll_interval):
+    """Raise ValueError unless ``timeout`` and ``poll_interval`` are positive numbers."""
+    if not isinstance(timeout, (int, float)) or timeout <= 0:
+        raise ValueError("timeout must be a positive number")
+    if not isinstance(poll_interval, (int, float)) or poll_interval <= 0:
+        raise ValueError("poll_interval must be a positive number")
+
+
+def _squash(value):
+    """Remove spaces, so display strings ("Pending Generation") match enum names."""
+    return (value or "").replace(" ", "")
+
+
+def _json_or_none(res):
+    """Parse a JSON response body, or return None when the body is empty.
+
+    Several Orion billing actions (e.g. Generate, PostAuditFiles) answer
+    200/204 with no body.
+    """
+    if not res.content or not res.content.strip():
+        return None
+    return res.json()
 
 
 class RateLimiter:
@@ -366,7 +423,9 @@ class BaseAPI:
             **kwargs: Additional arguments passed to the request
 
         Returns:
-            requests.Response object
+            requests.Response object. Some mutating endpoints answer with an
+            empty body; parse those with ``_json_or_none(res)`` rather than
+            ``res.json()``.
 
         Raises:
             AuthenticationError: On 401/403 responses
@@ -1412,14 +1471,22 @@ class OrionAPI(BaseAPI):
         as_of_date=None,
         end_date_override=None,
         include_cash_flow=False,
+        allow_duplicate_mock_bills=None,
+        value_as_of_override=None,
+        date_range=None,
     ):
         """Create a new billing instance (live or forecast).
+
+        The billing period is derived from ``as_of_date`` (e.g. 2026-09-30
+        creates a 2026-10-01..2026-12-31 quarterly instance). A new instance
+        starts in "Not Generated"; call generate_billing() to run it.
 
         Args:
             is_forecast: If True, creates a forecast/mock bill (default False)
             run_for: Scope of the billing run. One of: AllHouseholds, FundFamily,
                 Custodian, Representative, BusinessLine, SingleHHNewBill,
-                SingleHHRerun, Accounts, ImportedHouseholds
+                SingleHHRerun, Accounts, ImportedHouseholds, ImportedHHRerun,
+                FinalBill
             run_for_accounts: Account filter. One of: ActiveAccounts,
                 InActiveAccounts, AllAccounts
             bill_type: Type of bill. One of: Unknown, Renewal, NewMoney,
@@ -1429,9 +1496,14 @@ class OrionAPI(BaseAPI):
             as_of_date: Optional as-of date (YYYY-MM-DD format)
             end_date_override: Optional end date override (YYYY-MM-DD format)
             include_cash_flow: Whether to include cash flow (default False)
+            allow_duplicate_mock_bills: Optional bool, sent as
+                allowDuplicateMockBills. Orion accepted a second single-household
+                forecast for an already-forecast period without it (2026-09).
+            value_as_of_override: Optional valuation date override (YYYY-MM-DD)
+            date_range: Optional list of dates, sent as-is as dateRange
 
         Returns:
-            dict: Created billing instance details
+            dict: Created billing instance details (BillInstanceDto)
         """
         if run_for not in BILLING_RUN_FOR_TYPES:
             raise ValueError(f"run_for must be one of {BILLING_RUN_FOR_TYPES}")
@@ -1444,6 +1516,9 @@ class OrionAPI(BaseAPI):
 
         if keys is not None and not isinstance(keys, list):
             raise ValueError("keys must be a list of integers")
+
+        if date_range is not None and not isinstance(date_range, list):
+            raise ValueError("date_range must be a list")
 
         payload = {
             "isMockBill": is_forecast,
@@ -1460,6 +1535,12 @@ class OrionAPI(BaseAPI):
             payload["asOfDate"] = as_of_date
         if end_date_override is not None:
             payload["endDateOverride"] = end_date_override
+        if allow_duplicate_mock_bills is not None:
+            payload["allowDuplicateMockBills"] = allow_duplicate_mock_bills
+        if value_as_of_override is not None:
+            payload["valueAsOfOverride"] = value_as_of_override
+        if date_range is not None:
+            payload["dateRange"] = date_range
 
         res = self.api_request(
             f"{self.base_url}/Billing/BillGenerator/Action/Instance",
@@ -1468,25 +1549,39 @@ class OrionAPI(BaseAPI):
         )
         return res.json()
 
-    def generate_billing(self, instance_id, lock_down=True):
-        """Generate bills for a billing instance.
+    def generate_billing(self, instance_id, lock_down=True, ids=None):
+        """Start bill generation for a billing instance.
+
+        Generation runs in the background and returns immediately with an
+        empty body. Use wait_for_billing_instance() to block until it finishes.
 
         Args:
             instance_id: Billing instance ID
             lock_down: Whether to lock down the instance during generation (default True)
+            ids: Optional list of household-record IDs to limit the run to:
+                the ``id`` of get_billing_instance_clients() rows, NOT client
+                IDs (a client ID gets 404 "No available bills found"). Sent as
+                a bare int array body. Omitted, no body is sent and the whole
+                instance is generated. To rerun one household, delete its bill
+                (delete_bills) and pass its record id here.
 
         Returns:
-            dict: Generation result
+            dict | None: Parsed response, or None when Orion returns an empty
+                body (the normal case).
         """
         if not isinstance(instance_id, int) or instance_id < 1:
             raise ValueError("instance_id must be a positive integer")
+        if ids is not None and (not isinstance(ids, list) or not ids):
+            raise ValueError("ids must be a non-empty list of integers")
 
         params = urlencode({"lockDown": str(lock_down).lower()})
+        kwargs = {"json": ids} if ids is not None else {}
         res = self.api_request(
             f"{self.base_url}/Billing/Instances/{instance_id}/Action/Generate?{params}",
             requests.put,
+            **kwargs,
         )
-        return res.json()
+        return _json_or_none(res)
 
     def complete_billing_instance(self, instance_id):
         """Finalize/complete a billing instance.
@@ -1506,23 +1601,24 @@ class OrionAPI(BaseAPI):
         )
         return res.json()
 
-    def invalidate_billing_instance(self, instance_id):
+    def invalidate_billing_instance(self, instance_id, validate=None):
         """Invalidate/cancel a billing instance.
 
         Args:
             instance_id: Billing instance ID
+            validate: Optional bool, sent as the ``validate`` query param
 
         Returns:
-            dict: Updated billing instance
+            dict | None: Updated billing instance, or None on an empty body
         """
         if not isinstance(instance_id, int) or instance_id < 1:
             raise ValueError("instance_id must be a positive integer")
 
-        res = self.api_request(
-            f"{self.base_url}/Billing/Instances/{instance_id}/Action/Invalidate",
-            requests.post,
-        )
-        return res.json()
+        url = f"{self.base_url}/Billing/Instances/{instance_id}/Action/Invalidate"
+        if validate is not None:
+            url += "?" + urlencode({"validate": str(bool(validate)).lower()})
+        res = self.api_request(url, requests.post)
+        return _json_or_none(res)
 
     def generate_fee_files(self, instance_id, custodian_id=None):
         """Generate fee files for a billing instance.
@@ -1531,8 +1627,12 @@ class OrionAPI(BaseAPI):
             instance_id: Billing instance ID
             custodian_id: Optional custodian ID to filter fee files
 
+        The instance must be in "Fee File Needed" status; otherwise Orion
+        returns 400 "You cannot generate fee file. The status needs to be Fee
+        File Needed".
+
         Returns:
-            dict: Fee file generation result
+            dict | None: Fee file generation result, or None on an empty body
         """
         if not isinstance(instance_id, int) or instance_id < 1:
             raise ValueError("instance_id must be a positive integer")
@@ -1543,8 +1643,10 @@ class OrionAPI(BaseAPI):
                 raise ValueError("custodian_id must be a positive integer")
             url += "?" + urlencode({"custodianId": custodian_id})
 
-        res = self.api_request(url, requests.post, json={"ids": [instance_id]})
-        return res.json()
+        # Bare int array. Live-verified 2026-09: {"ids": [...]} gets a generic
+        # 501 "An error has occurred"; the bare array reaches Orion's status check.
+        res = self.api_request(url, requests.post, json=[instance_id])
+        return _json_or_none(res)
 
     def get_fee_files(self, instance_id):
         """Get fee files for a billing instance.
@@ -1559,6 +1661,318 @@ class OrionAPI(BaseAPI):
             raise ValueError("instance_id must be a positive integer")
 
         res = self.api_request(f"{self.base_url}/Billing/FeeFile/instance/{instance_id}")
+        return res.json()
+
+    def get_billing_instance_clients(self, instance_id):
+        """Get the per-household records of a billing instance.
+
+        Each record carries the household's generation ``status`` (one of
+        NotGenerated, Generated, Errored, PendingGeneration, OnHold, Warning,
+        FeeFileError, ReconError), ``errorMessage``, ``billId`` and amounts.
+        This is where generation errors show up; the instance's own
+        statusValue has no generation-error state.
+
+        Args:
+            instance_id: Billing instance ID
+
+        Returns:
+            list: BillInstanceClient records
+        """
+        if not isinstance(instance_id, int) or instance_id < 1:
+            raise ValueError("instance_id must be a positive integer")
+
+        res = self.api_request(
+            f"{self.base_url}/Billing/BillGenerator/Instance/{instance_id}/ClientList"
+        )
+        return res.json()
+
+    def wait_for_billing_instance(
+        self,
+        instance_id,
+        target_statuses=(BILLING_STATUS_DATA_FILES_NEEDED,),
+        timeout=600,
+        poll_interval=10,
+        raise_on_client_errors=True,
+    ):
+        """Block until a billing instance reaches one of ``target_statuses``.
+
+        Generation has no job id, so the only completion signal is the
+        instance's statusValue plus the per-household statuses. A generated
+        instance moves from "Not Generated" to "Data Files Needed", which is
+        the default target (a one-household forecast took ~15s in 2026-09).
+        On a rerun the instance can already sit at "Data Files Needed", so the
+        wait also requires that no household is still "Not Generated" /
+        "Pending Generation". Call it right after generate_billing(). The live
+        API returns display strings ("Data Files Needed"), not the swagger's
+        enum names ("BillDataFilesNeeded").
+
+        Args:
+            instance_id: Billing instance ID
+            target_statuses: statusValue strings that count as done
+            timeout: Wall-clock timeout in seconds (default 600)
+            poll_interval: Seconds between polls (default 10)
+            raise_on_client_errors: If True (default), once done, raise if any
+                household has status "Errored".
+                "Warning" (e.g. "No receivables with value.") is not an error.
+
+        Returns:
+            dict: The final billing instance
+
+        Raises:
+            ValueError: on invalid args
+            BillingGenerationError: if the instance enters an error status
+                ("Fee File Failed", "Error Deleting Instance"); if every
+                household finished, some errored, and the instance never
+                reached a target; or (with raise_on_client_errors) if the
+                target is reached with errored households. ``.errors`` holds
+                the errored household records.
+            TimeoutError: if no target status is reached within ``timeout``
+        """
+        if not isinstance(instance_id, int) or instance_id < 1:
+            raise ValueError("instance_id must be a positive integer")
+        if isinstance(target_statuses, str):
+            target_statuses = (target_statuses,)
+        if not target_statuses:
+            raise ValueError("target_statuses must be a non-empty list of statuses")
+        _require_poll_args(timeout, poll_interval)
+
+        deadline = time.monotonic() + timeout
+        while True:
+            instance = self.get_billing_instance(instance_id)
+            status = instance.get("statusValue")
+
+            if status in BILLING_ERROR_STATUSES:
+                raise BillingGenerationError(
+                    f"Billing instance {instance_id} is in error status {status!r}",
+                    instance=instance,
+                )
+
+            # Household statuses come back as display strings ("Pending
+            # Generation"); compare with spaces removed.
+            clients = self.get_billing_instance_clients(instance_id)
+            pending = any(
+                _squash(c.get("status")) in BILLING_CLIENT_PENDING_STATUSES for c in clients
+            )
+            errors = [c for c in clients if _squash(c.get("status")) == "Errored"]
+
+            done = status in target_statuses
+            # Raise on errored households once none are pending: at the target
+            # (unless told not to), or when the instance never got there and
+            # further polling won't help.
+            if not pending and errors and (raise_on_client_errors or not done):
+                verb = "reached" if done else "stayed"
+                raise BillingGenerationError(
+                    f"Billing instance {instance_id} {verb} {status!r} with "
+                    f"{len(errors)} errored household(s)",
+                    instance=instance,
+                    errors=errors,
+                )
+            if not pending and done:
+                return instance
+
+            if time.monotonic() >= deadline:
+                raise TimeoutError(
+                    f"Billing instance {instance_id} still {status!r} after {timeout}s; "
+                    f"waiting for one of {list(target_statuses)}"
+                )
+            time.sleep(poll_interval)
+
+    def cancel_billing_generation(self, instance_id):
+        """Cancel a running bill generation job.
+
+        Not live-verified: a one-household forecast finishes generating in
+        ~15s, before there is anything to cancel.
+
+        Args:
+            instance_id: Billing instance ID
+
+        Returns:
+            dict | None: Parsed response, or None on an empty body
+        """
+        if not isinstance(instance_id, int) or instance_id < 1:
+            raise ValueError("instance_id must be a positive integer")
+
+        res = self.api_request(
+            f"{self.base_url}/Billing/Instances/{instance_id}/Action/Generate/Cancel",
+            requests.put,
+        )
+        return _json_or_none(res)
+
+    def delete_billing_instances(self, instance_ids, forecast_only=True):
+        """Delete billing instances. Irreversible.
+
+        Deletion is asynchronous but quick: verified 2026-09 on a
+        one-household forecast, the instance read "Deletion In Progress"
+        immediately and was gone within ~5s, after which
+        get_billing_instance() raises OrionAPIError 400 "Unable to find Bill
+        Instance" (not NotFoundError/404). "Error Deleting Instance" is the
+        failure status.
+
+        The instance's audit files are NOT deleted with it; remove them first
+        with get_audit_files(instance_id=...) and delete_audit_file().
+
+        Args:
+            instance_ids: List of billing instance IDs
+            forecast_only: If True (default), fetch each instance first and
+                refuse (ValueError, nothing deleted) unless every one is a
+                forecast (``isMockBill``). ``instanceType`` is not used for
+                this check because it reads "Live" on a forecast until the
+                forecast has been generated. Pass False to delete live
+                instances.
+
+        Returns:
+            list: IDs Orion accepted for deletion
+        """
+        _require_positive_int_list("instance_ids", instance_ids)
+
+        if forecast_only:
+            live = [i for i in instance_ids if not self.get_billing_instance(i).get("isMockBill")]
+            if live:
+                raise ValueError(
+                    f"Refusing to delete non-forecast billing instance(s) {live}; "
+                    "pass forecast_only=False to delete live instances"
+                )
+
+        res = self.api_request(
+            f"{self.base_url}/Billing/Instances/Action/Delete",
+            requests.put,
+            json=instance_ids,
+        )
+        return _json_or_none(res)
+
+    def generate_audit_files(self, instance_ids, start_date=None, end_date=None, entity_list=None):
+        """Generate the billing audit files for billing instance(s).
+
+        Works on forecast instances. For one instance Orion produced three
+        files within ~10s: "billing audit.CSV", "billing data.XLSX" and
+        "payable summary data.XLSX". The call returns before they exist; poll
+        get_audit_files() to see them.
+
+        Args:
+            instance_ids: List of billing instance IDs (sent to Orion as a
+                comma-separated string, billInstanceIds)
+            start_date: Optional start of the instance date range (YYYY-MM-DD)
+            end_date: Optional end of the instance date range (YYYY-MM-DD)
+            entity_list: Optional list of payable entities to filter accounts on
+
+        Returns:
+            None: Orion answers 204 No Content
+        """
+        _require_positive_int_list("instance_ids", instance_ids)
+
+        # billData/payableSummary/billingAudit are marked UNUSED in the spec.
+        payload = {"billInstanceIds": ",".join(str(i) for i in instance_ids)}
+        if start_date is not None:
+            payload["startDate"] = start_date
+        if end_date is not None:
+            payload["endDate"] = end_date
+        if entity_list is not None:
+            payload["entityList"] = entity_list
+
+        res = self.api_request(
+            f"{self.base_url}/Billing/PostAuditFiles", requests.post, json=payload
+        )
+        return _json_or_none(res)
+
+    def get_audit_files(self, instance_id=None, start_date=None, end_date=None):
+        """List billing audit files.
+
+        ``blobText`` is null in the listing; fetch content with
+        download_audit_file(file["id"]).
+
+        Args:
+            instance_id: Optional billing instance ID to filter by
+            start_date: Optional start date (YYYY-MM-DD)
+            end_date: Optional end date (YYYY-MM-DD)
+
+        Returns:
+            list: AuditFileBlobDto records (id, instanceId, fileName, blobDesc,
+                openWith, isZip, createdDate, startDate, endDate, ...)
+        """
+        params = {}
+        if instance_id is not None:
+            if not isinstance(instance_id, int) or instance_id < 1:
+                raise ValueError("instance_id must be a positive integer")
+            params["billInstanceId"] = instance_id
+        if start_date is not None:
+            params["startDate"] = start_date
+        if end_date is not None:
+            params["endDate"] = end_date
+
+        url = f"{self.base_url}/Billing/Audit/AuditFiles"
+        if params:
+            url += "?" + urlencode(params)
+        res = self.api_request(url)
+        return res.json()
+
+    def download_audit_file(self, file_id):
+        """Download one billing audit file.
+
+        Args:
+            file_id: Audit file ID (``id`` from get_audit_files)
+
+        Returns:
+            dict: ``content`` (bytes), ``filename`` (from Content-Disposition,
+                or None) and ``content_type``. CSVs come back as
+                application/octet-stream, XLSX as the OpenXML spreadsheet type.
+        """
+        if not isinstance(file_id, int) or file_id < 1:
+            raise ValueError("file_id must be a positive integer")
+
+        res = self.api_request(f"{self.base_url}/Billing/Audit/{file_id}/File")
+        disposition = res.headers.get("Content-Disposition") or ""
+        match = re.search(r'filename="?([^";]+)"?', disposition)
+        return {
+            "content": res.content,
+            "filename": match.group(1) if match else None,
+            "content_type": res.headers.get("Content-Type"),
+        }
+
+    def delete_audit_file(self, file_id):
+        """Delete one billing audit file.
+
+        Args:
+            file_id: Audit file ID (``id`` from get_audit_files)
+
+        Returns:
+            None: Orion answers with an empty body (verified 2026-09)
+        """
+        if not isinstance(file_id, int) or file_id < 1:
+            raise ValueError("file_id must be a positive integer")
+
+        res = self.api_request(f"{self.base_url}/Billing/Audit/{file_id}/File", requests.delete)
+        return _json_or_none(res)
+
+    def get_bill_data_export(self, instance_id=None, start_date=None, end_date=None):
+        """Get the bill data export (Orion: "list of unpaid bills").
+
+        Returns unpaid live bills only. Verified 2026-09: it returns [] for a
+        generated forecast instance, so for forecast rows use get_bills(
+        instance_id=...) or the "billing data.XLSX" audit file
+        (generate_audit_files / download_audit_file) instead.
+
+        Args:
+            instance_id: Optional billing instance ID to filter by
+            start_date: Optional start date (YYYY-MM-DD)
+            end_date: Optional end date (YYYY-MM-DD)
+
+        Returns:
+            list: BillDataDto records
+        """
+        params = {}
+        if instance_id is not None:
+            if not isinstance(instance_id, int) or instance_id < 1:
+                raise ValueError("instance_id must be a positive integer")
+            params["billInstanceId"] = instance_id
+        if start_date is not None:
+            params["startDate"] = start_date
+        if end_date is not None:
+            params["endDate"] = end_date
+
+        url = f"{self.base_url}/Billing/BillDataExport"
+        if params:
+            url += "?" + urlencode(params)
+        res = self.api_request(url)
         return res.json()
 
     def get_bills(self, instance_id=None, is_valid=None, bill_type=None):
@@ -1778,8 +2192,17 @@ class OrionAPI(BaseAPI):
         """Export one cash funding row to Eclipse as a cash set-aside.
 
         This is the API equivalent of the Cash Funding grid's export action:
-        Orion creates (or updates) a set-aside in Eclipse for the account's
-        balance due, so the fee cash is reserved from trading.
+        Orion creates a set-aside in Eclipse for the account's balance due,
+        so the fee cash is reserved from trading.
+
+        Every call INSERTS a new set-aside; it never updates an existing one.
+        Live-verified 2026-09: two calls for the same account left two active
+        set-asides. Each is a dollar amount with description "OC to Eclipse
+        Sync" and expiration type "None" (it never expires on its own). To
+        re-export, first retire the account's earlier active "OC to Eclipse
+        Sync" set-asides. Prefer Eclipse expire_set_asides(), which keeps them
+        as inactive history, over delete_account_set_aside_cash(), which
+        removes them.
 
         Orion documents this as a draft endpoint that takes a single account
         per call, so exporting a whole report means looping over the rows of
@@ -1835,7 +2258,9 @@ class OrionAPI(BaseAPI):
         if delete_related_households:
             url += "?" + urlencode({"deleteRelatedHouseholds": "true"})
 
-        res = self.api_request(url, requests.put, json={"ids": bill_ids})
+        # Bare int array. Live-verified 2026-09: {"ids": [...]} gets 400
+        # "Bill Ids are missing."; the bare array deletes and echoes the ids.
+        res = self.api_request(url, requests.put, json=bill_ids)
         return res.json()
 
     # -------------------------------------------------------------------------
@@ -2119,10 +2544,7 @@ class OrionAPI(BaseAPI):
         """
         if not isinstance(batch_id, int) or batch_id < 1:
             raise ValueError("batch_id must be a positive integer")
-        if not isinstance(timeout, (int, float)) or timeout <= 0:
-            raise ValueError("timeout must be a positive number")
-        if not isinstance(poll_interval, (int, float)) or poll_interval <= 0:
-            raise ValueError("poll_interval must be a positive number")
+        _require_poll_args(timeout, poll_interval)
 
         deadline = time.monotonic() + timeout
         last_reported = None
@@ -9265,27 +9687,39 @@ class EclipseV2(EclipseBase):
         """Delete account set-aside cash (mutating).
 
         Args:
-            payload: DTO identifying the account set-asides to delete (request body)
+            payload: ``{"setAsideIds": [...], "skipAnalytics": bool}``
+                (skipAnalytics optional)
+
+        Returns:
+            dict | None: Parsed response, or None on an empty body. The
+                account variant was live-verified (2026-09) to answer with an
+                empty body.
         """
         res = self.api_request(
             f"{self.base_url_v2}/SetAsideCash/DeleteAccountSetAsideCash",
             requests.post,
             json=payload,
         )
-        return res.json()
+        return _json_or_none(res)
 
     def delete_portfolio_set_aside_cash(self, payload):
         """Delete portfolio set-aside cash (mutating).
 
         Args:
-            payload: DTO identifying the portfolio set-asides to delete (request body)
+            payload: ``{"setAsideIds": [...], "skipAnalytics": bool}``
+                (skipAnalytics optional)
+
+        Returns:
+            dict | None: Parsed response, or None on an empty body. The
+                account variant was live-verified (2026-09) to answer with an
+                empty body.
         """
         res = self.api_request(
             f"{self.base_url_v2}/SetAsideCash/DeletePortfolioSetAsideCash",
             requests.post,
             json=payload,
         )
-        return res.json()
+        return _json_or_none(res)
 
     # =========================================================================
     # Data-management CRUD / actions (v2). Account, portfolio, and model data
@@ -9358,10 +9792,16 @@ class EclipseV2(EclipseBase):
         return res.json()
 
     def expire_account_set_asides(self, payload):
-        """Expire account set-asides (mutating).
+        """Expire account set-asides (mutating). Raw form of expire_set_asides().
 
         Args:
-            payload: DTO identifying the set-asides to expire (request body)
+            payload: List of ``{"setAsideId": int, "setAsideTransactions":
+                [{"transactionId": int, "transactionExternalId": int}]}``
+
+        Returns:
+            list: One result per set-aside (setAsideId, accountId,
+                systemExpiredOn, errorMessage, ...). Failures come back as 200
+                with a non-empty errorMessage.
         """
         res = self.api_request(
             f"{self.base_url_v2}/Account/Accounts/expireAccountSetAsides",
@@ -9369,6 +9809,41 @@ class EclipseV2(EclipseBase):
             json=payload,
         )
         return res.json()
+
+    def expire_set_asides(self, set_aside_ids, raise_on_error=True):
+        """Expire account set-asides now, keeping them as history.
+
+        Unlike delete_account_set_aside_cash(), an expired set-aside stays on
+        the account: get_set_asides() still returns it with ``isActive``
+        False and ``expiredOn`` set, and it drops out of
+        ``get_set_asides(active_only=True)``. Live-verified 2026-09.
+
+        Expiring an already-expired set-aside succeeds again and overwrites
+        its ``expiredOn`` with the new time, so pass only active ids if the
+        original expiry time matters.
+
+        Args:
+            set_aside_ids: List of set-aside ids (``id`` from get_set_asides)
+            raise_on_error: If True (default), raise OrionAPIError when any
+                result carries an errorMessage (e.g. "No matching set aside
+                cash found for SetAsideId: ..."). Eclipse reports those with
+                HTTP 200, so without this they pass silently.
+
+        Returns:
+            list: One result per set-aside (setAsideId, accountId,
+                systemExpiredOn, errorMessage, ...)
+        """
+        _require_positive_int_list("set_aside_ids", set_aside_ids)
+
+        results = self.expire_account_set_asides(
+            [{"setAsideId": i, "setAsideTransactions": []} for i in set_aside_ids]
+        )
+        if raise_on_error:
+            failed = [r for r in results or [] if r.get("errorMessage")]
+            if failed:
+                details = "; ".join(f"{r.get('setAsideId')}: {r['errorMessage']}" for r in failed)
+                raise OrionAPIError(f"Failed to expire set-aside(s): {details}")
+        return results
 
     def set_account_tags(self, payload):
         """Set tags on accounts (mutating).
