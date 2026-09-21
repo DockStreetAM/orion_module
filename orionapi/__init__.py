@@ -249,6 +249,23 @@ class BillingGenerationError(OrionAPIError):
         self.errors = errors or []
 
 
+def _require_positive_int_list(name, values):
+    """Raise ValueError unless ``values`` is a non-empty list of positive ints."""
+    if not isinstance(values, list) or not values:
+        raise ValueError(f"{name} must be a non-empty list")
+    for value in values:
+        if not isinstance(value, int) or value < 1:
+            raise ValueError(f"{name} must be positive integers")
+
+
+def _require_poll_args(timeout, poll_interval):
+    """Raise ValueError unless ``timeout`` and ``poll_interval`` are positive numbers."""
+    if not isinstance(timeout, (int, float)) or timeout <= 0:
+        raise ValueError("timeout must be a positive number")
+    if not isinstance(poll_interval, (int, float)) or poll_interval <= 0:
+        raise ValueError("poll_interval must be a positive number")
+
+
 def _squash(value):
     """Remove spaces, so display strings ("Pending Generation") match enum names."""
     return (value or "").replace(" ", "")
@@ -406,7 +423,9 @@ class BaseAPI:
             **kwargs: Additional arguments passed to the request
 
         Returns:
-            requests.Response object
+            requests.Response object. Some mutating endpoints answer with an
+            empty body; parse those with ``_json_or_none(res)`` rather than
+            ``res.json()``.
 
         Raises:
             AuthenticationError: On 401/403 responses
@@ -1715,10 +1734,7 @@ class OrionAPI(BaseAPI):
             target_statuses = (target_statuses,)
         if not target_statuses:
             raise ValueError("target_statuses must be a non-empty list of statuses")
-        if not isinstance(timeout, (int, float)) or timeout <= 0:
-            raise ValueError("timeout must be a positive number")
-        if not isinstance(poll_interval, (int, float)) or poll_interval <= 0:
-            raise ValueError("poll_interval must be a positive number")
+        _require_poll_args(timeout, poll_interval)
 
         deadline = time.monotonic() + timeout
         while True:
@@ -1739,25 +1755,20 @@ class OrionAPI(BaseAPI):
             )
             errors = [c for c in clients if _squash(c.get("status")) == "Errored"]
 
-            if not pending and status in target_statuses:
-                if raise_on_client_errors and errors:
-                    raise BillingGenerationError(
-                        f"Billing instance {instance_id} reached {status!r} with "
-                        f"{len(errors)} errored household(s)",
-                        instance=instance,
-                        errors=errors,
-                    )
-                return instance
-
-            # Households all finished but the instance never reached a target:
-            # if any errored, the run failed and further polling won't help.
-            if clients and not pending and errors:
+            done = status in target_statuses
+            # Raise on errored households once none are pending: at the target
+            # (unless told not to), or when the instance never got there and
+            # further polling won't help.
+            if not pending and errors and (raise_on_client_errors or not done):
+                verb = "reached" if done else "stayed"
                 raise BillingGenerationError(
-                    f"Billing instance {instance_id} stayed {status!r} with "
+                    f"Billing instance {instance_id} {verb} {status!r} with "
                     f"{len(errors)} errored household(s)",
                     instance=instance,
                     errors=errors,
                 )
+            if not pending and done:
+                return instance
 
             if time.monotonic() >= deadline:
                 raise TimeoutError(
@@ -1812,11 +1823,7 @@ class OrionAPI(BaseAPI):
         Returns:
             list: IDs Orion accepted for deletion
         """
-        if not isinstance(instance_ids, list) or not instance_ids:
-            raise ValueError("instance_ids must be a non-empty list")
-        for instance_id in instance_ids:
-            if not isinstance(instance_id, int) or instance_id < 1:
-                raise ValueError("instance_ids must be positive integers")
+        _require_positive_int_list("instance_ids", instance_ids)
 
         if forecast_only:
             live = [i for i in instance_ids if not self.get_billing_instance(i).get("isMockBill")]
@@ -1851,11 +1858,7 @@ class OrionAPI(BaseAPI):
         Returns:
             None: Orion answers 204 No Content
         """
-        if not isinstance(instance_ids, list) or not instance_ids:
-            raise ValueError("instance_ids must be a non-empty list")
-        for instance_id in instance_ids:
-            if not isinstance(instance_id, int) or instance_id < 1:
-                raise ValueError("instance_ids must be positive integers")
+        _require_positive_int_list("instance_ids", instance_ids)
 
         # billData/payableSummary/billingAudit are marked UNUSED in the spec.
         payload = {"billInstanceIds": ",".join(str(i) for i in instance_ids)}
@@ -2541,10 +2544,7 @@ class OrionAPI(BaseAPI):
         """
         if not isinstance(batch_id, int) or batch_id < 1:
             raise ValueError("batch_id must be a positive integer")
-        if not isinstance(timeout, (int, float)) or timeout <= 0:
-            raise ValueError("timeout must be a positive number")
-        if not isinstance(poll_interval, (int, float)) or poll_interval <= 0:
-            raise ValueError("poll_interval must be a positive number")
+        _require_poll_args(timeout, poll_interval)
 
         deadline = time.monotonic() + timeout
         last_reported = None
@@ -9833,11 +9833,7 @@ class EclipseV2(EclipseBase):
             list: One result per set-aside (setAsideId, accountId,
                 systemExpiredOn, errorMessage, ...)
         """
-        if not isinstance(set_aside_ids, list) or not set_aside_ids:
-            raise ValueError("set_aside_ids must be a non-empty list")
-        for set_aside_id in set_aside_ids:
-            if not isinstance(set_aside_id, int) or set_aside_id < 1:
-                raise ValueError("set_aside_ids must be positive integers")
+        _require_positive_int_list("set_aside_ids", set_aside_ids)
 
         results = self.expire_account_set_asides(
             [{"setAsideId": i, "setAsideTransactions": []} for i in set_aside_ids]
