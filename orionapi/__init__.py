@@ -2196,8 +2196,10 @@ class OrionAPI(BaseAPI):
         Live-verified 2026-09: two calls for the same account left two active
         set-asides. Each is a dollar amount with description "OC to Eclipse
         Sync" and expiration type "None" (it never expires on its own). To
-        re-export, first delete the account's earlier "OC to Eclipse Sync"
-        set-asides (Eclipse get_set_asides + delete_account_set_aside_cash).
+        re-export, first retire the account's earlier active "OC to Eclipse
+        Sync" set-asides. Prefer Eclipse expire_set_asides(), which keeps them
+        as inactive history, over delete_account_set_aside_cash(), which
+        removes them.
 
         Orion documents this as a draft endpoint that takes a single account
         per call, so exporting a whole report means looping over the rows of
@@ -9790,10 +9792,16 @@ class EclipseV2(EclipseBase):
         return res.json()
 
     def expire_account_set_asides(self, payload):
-        """Expire account set-asides (mutating).
+        """Expire account set-asides (mutating). Raw form of expire_set_asides().
 
         Args:
-            payload: DTO identifying the set-asides to expire (request body)
+            payload: List of ``{"setAsideId": int, "setAsideTransactions":
+                [{"transactionId": int, "transactionExternalId": int}]}``
+
+        Returns:
+            list: One result per set-aside (setAsideId, accountId,
+                systemExpiredOn, errorMessage, ...). Failures come back as 200
+                with a non-empty errorMessage.
         """
         res = self.api_request(
             f"{self.base_url_v2}/Account/Accounts/expireAccountSetAsides",
@@ -9801,6 +9809,45 @@ class EclipseV2(EclipseBase):
             json=payload,
         )
         return res.json()
+
+    def expire_set_asides(self, set_aside_ids, raise_on_error=True):
+        """Expire account set-asides now, keeping them as history.
+
+        Unlike delete_account_set_aside_cash(), an expired set-aside stays on
+        the account: get_set_asides() still returns it with ``isActive``
+        False and ``expiredOn`` set, and it drops out of
+        ``get_set_asides(active_only=True)``. Live-verified 2026-09.
+
+        Expiring an already-expired set-aside succeeds again and overwrites
+        its ``expiredOn`` with the new time, so pass only active ids if the
+        original expiry time matters.
+
+        Args:
+            set_aside_ids: List of set-aside ids (``id`` from get_set_asides)
+            raise_on_error: If True (default), raise OrionAPIError when any
+                result carries an errorMessage (e.g. "No matching set aside
+                cash found for SetAsideId: ..."). Eclipse reports those with
+                HTTP 200, so without this they pass silently.
+
+        Returns:
+            list: One result per set-aside (setAsideId, accountId,
+                systemExpiredOn, errorMessage, ...)
+        """
+        if not isinstance(set_aside_ids, list) or not set_aside_ids:
+            raise ValueError("set_aside_ids must be a non-empty list")
+        for set_aside_id in set_aside_ids:
+            if not isinstance(set_aside_id, int) or set_aside_id < 1:
+                raise ValueError("set_aside_ids must be positive integers")
+
+        results = self.expire_account_set_asides(
+            [{"setAsideId": i, "setAsideTransactions": []} for i in set_aside_ids]
+        )
+        if raise_on_error:
+            failed = [r for r in results or [] if r.get("errorMessage")]
+            if failed:
+                details = "; ".join(f"{r.get('setAsideId')}: {r['errorMessage']}" for r in failed)
+                raise OrionAPIError(f"Failed to expire set-aside(s): {details}")
+        return results
 
     def set_account_tags(self, payload):
         """Set tags on accounts (mutating).
