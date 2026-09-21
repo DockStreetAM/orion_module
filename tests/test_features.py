@@ -2579,6 +2579,14 @@ class TestEclipseV2ConfigPrefs:
             api.billing_set_aside_cash({"accountId": 1})
         assert mock_post.call_args.args[0] == f"{V2_BASE}/SetAsideCash/BillingSetAsideCash"
 
+    def test_billing_set_aside_cash_empty_body(self):
+        api = _eclipse_for_set_asides()
+        mock_post = _mock_post(None)
+        mock_post.return_value.content = b""
+        with patch("requests.post", mock_post):
+            assert api.billing_set_aside_cash([{"orionConnectExternalAccountId": 1}]) is None
+        mock_post.return_value.json.assert_not_called()
+
     def test_delete_account_set_aside_cash(self):
         api = _eclipse_for_set_asides()
         mock_post = _mock_post({})

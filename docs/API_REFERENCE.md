@@ -1,4 +1,4 @@
-# orionapi API Reference (v2.31.0)
+# orionapi API Reference (v2.31.1)
 
 Auto-generated from docstrings by `scripts/gen_api_reference.py`. Eclipse methods note their underlying endpoint.
 
@@ -352,7 +352,7 @@ Eclipse client targeting the v2 API surface (``/api/v2/...``) only.
 | `add_trade_block_reason_by_name(payload)` | `POST /api/v2/TradeBlockReasons/AddByName` | Add a trade-block reason by name (mutating). |
 | `apply_custom_import(instance_id)` | `PUT /api/v2/CustomImports/Instances/Apply/{instance_id}` | Apply a custom-import instance (mutating). |
 | `assign_model_to_portfolios(payload)` | `PUT /api/v2/Portfolio/Portfolios/action/assignModel` | Assign a model to portfolios (mutating). |
-| `billing_set_aside_cash(payload)` | `POST /api/v2/SetAsideCash/BillingSetAsideCash` | Create billing set-aside cash (mutating). |
+| `billing_set_aside_cash(payload)` | `POST /api/v2/SetAsideCash/BillingSetAsideCash` | Create or update billing set-aside cash (mutating). |
 | `build_trade(account_id, portfolio_id, security_id, action, shares=None, amount=None, percent=None, **extra)` |  | Build one entry for the ``trades`` list of :meth:`validate_trades` / |
 | `cancel_analytics()` | `POST /api/v2/Analytics/Cancel` | Cancel the running analytics (mutating). |
 | `classify_securities(classifications)` | `POST /api/v2/AssetClassification/Security/Classifications` | Assign classifications to securities. |
