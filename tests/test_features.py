@@ -2583,14 +2583,24 @@ class TestEclipseV2ConfigPrefs:
         api = _eclipse_for_set_asides()
         mock_post = _mock_post({})
         with patch("requests.post", mock_post):
-            api.delete_account_set_aside_cash({"ids": [1]})
+            api.delete_account_set_aside_cash({"setAsideIds": [1]})
         assert mock_post.call_args.args[0] == f"{V2_BASE}/SetAsideCash/DeleteAccountSetAsideCash"
+        assert mock_post.call_args.kwargs["json"] == {"setAsideIds": [1]}
+
+    def test_delete_account_set_aside_cash_empty_body(self):
+        """Eclipse answers the delete with an empty body (live-verified)."""
+        api = _eclipse_for_set_asides()
+        mock_post = _mock_post(None)
+        mock_post.return_value.content = b""
+        with patch("requests.post", mock_post):
+            assert api.delete_account_set_aside_cash({"setAsideIds": [1]}) is None
+        mock_post.return_value.json.assert_not_called()
 
     def test_delete_portfolio_set_aside_cash(self):
         api = _eclipse_for_set_asides()
         mock_post = _mock_post({})
         with patch("requests.post", mock_post):
-            api.delete_portfolio_set_aside_cash({"ids": [1]})
+            api.delete_portfolio_set_aside_cash({"setAsideIds": [1]})
         assert mock_post.call_args.args[0] == f"{V2_BASE}/SetAsideCash/DeletePortfolioSetAsideCash"
 
 
