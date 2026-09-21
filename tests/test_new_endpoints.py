@@ -2282,10 +2282,30 @@ class TestOrionForecastBilling:
             patch.object(
                 api, "get_billing_instance", return_value={"statusValue": "Data Files Needed"}
             ),
-            patch.object(api, "get_billing_instance_clients") as mock_clients,
+            patch.object(api, "get_billing_instance_clients", return_value=[{"status": "Errored"}]),
         ):
-            api.wait_for_billing_instance(1, raise_on_client_errors=False)
-            mock_clients.assert_not_called()
+            result = api.wait_for_billing_instance(1, raise_on_client_errors=False)
+            assert result["statusValue"] == "Data Files Needed"
+
+    def test_wait_rerun_not_done_while_household_pending(self):
+        """On a rerun the instance already sits at the target; a household still
+        "Pending Generation" (display string, with a space) must keep it waiting."""
+        api = self._make_api()
+        clients = [
+            [{"status": "Not Generated"}],
+            [{"status": "Pending Generation"}],
+            [{"status": "Generated"}],
+        ]
+        with (
+            patch.object(
+                api, "get_billing_instance", return_value={"statusValue": "Data Files Needed"}
+            ),
+            patch.object(api, "get_billing_instance_clients", side_effect=clients) as mock_c,
+            patch("orionapi.time.sleep") as mock_sleep,
+        ):
+            api.wait_for_billing_instance(1, poll_interval=1)
+            assert mock_c.call_count == 3
+            assert mock_sleep.call_count == 2
 
     def test_wait_raises_on_instance_error_status(self):
         from orionapi import BillingGenerationError
@@ -2317,10 +2337,14 @@ class TestOrionForecastBilling:
     def test_wait_keeps_polling_while_households_pending(self):
         api = self._make_api()
         states = [{"statusValue": "Not Generated"}] * 2 + [{"statusValue": "Complete"}]
-        clients = [{"status": "Errored"}, {"status": "PendingGeneration"}]
+        clients = [
+            [{"status": "Errored"}, {"status": "Pending Generation"}],
+            [{"status": "Errored"}, {"status": "Pending Generation"}],
+            [{"status": "Errored"}, {"status": "Generated"}],
+        ]
         with (
             patch.object(api, "get_billing_instance", side_effect=states),
-            patch.object(api, "get_billing_instance_clients", return_value=clients),
+            patch.object(api, "get_billing_instance_clients", side_effect=clients),
             patch("orionapi.time.sleep"),
         ):
             result = api.wait_for_billing_instance(
