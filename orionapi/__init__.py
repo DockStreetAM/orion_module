@@ -2188,7 +2188,7 @@ class OrionAPI(BaseAPI):
         res = self.api_request(url, requests.post)
         return res.json()
 
-    def sync_cash_to_eclipse(self, account):
+    def sync_cash_to_eclipse(self, account, description=None):
         """Export one cash funding row to Eclipse as a cash set-aside.
 
         This is the API equivalent of the Cash Funding grid's export action:
@@ -2197,12 +2197,18 @@ class OrionAPI(BaseAPI):
 
         Every call INSERTS a new set-aside; it never updates an existing one.
         Live-verified 2026-09: two calls for the same account left two active
-        set-asides. Each is a dollar amount with description "OC to Eclipse
-        Sync" and expiration type "None" (it never expires on its own). To
-        re-export, first retire the account's earlier active "OC to Eclipse
-        Sync" set-asides. Prefer Eclipse expire_set_asides(), which keeps them
-        as inactive history, over delete_account_set_aside_cash(), which
-        removes them.
+        set-asides, each a dollar amount with expiration type "None" (it never
+        expires on its own). To re-export, first retire the account's earlier
+        active syncs. Prefer Eclipse expire_set_asides(), which keeps them as
+        inactive history, over delete_account_set_aside_cash(), which removes
+        them.
+
+        Pass a ``description`` so those syncs can be found later. Orion always
+        stamps "OC to Eclipse Sync" and its endpoint has no description field,
+        so a description is applied by renaming the new set-aside in Eclipse
+        right after the sync (one GET and one full-record PUT, via an Eclipse
+        session exchanged from this Orion token). The renamed description
+        stays on the set-aside after it is expired.
 
         Orion documents this as a draft endpoint that takes a single account
         per call, so exporting a whole report means looping over the rows of
@@ -2213,25 +2219,76 @@ class OrionAPI(BaseAPI):
                 The row's ``id`` is the Orion account ID and is sent as
                 ``accountId``. A dict already keyed ``accountId`` is also
                 accepted. Keys outside ReceiveableSummaryDto are dropped.
+            description: Set-aside description, e.g. "Q4 2026 advisory fee".
+                Optional but strongly encouraged: without it the set-aside
+                keeps Orion's generic "OC to Eclipse Sync" and a UserWarning
+                is raised.
 
         Returns:
-            dict: The created/updated Eclipse set-aside
-                (EclipseCashFundingResponse) with id, accountId, cashAmount,
+            dict: The created Eclipse set-aside (EclipseCashFundingResponse)
+                with id, accountId (Eclipse internal id), cashAmount,
                 cashAmountTypeId, description, expirationTypeId, etc.
+
+        Raises:
+            OrionAPIError: if the sync succeeded but the rename failed. The
+                message names the set-aside id, which exists in Eclipse with
+                Orion's default description.
         """
         if not isinstance(account, dict):
             raise ValueError("account must be a cash funding row dict")
+        if description is not None and (
+            not isinstance(description, str) or not description.strip()
+        ):
+            raise ValueError("description must be a non-empty string")
 
         account_id = account.get("accountId", account.get("id"))
         if account_id is None:
             raise ValueError("account must have an 'id' (or 'accountId') field")
+
+        if description is None:
+            warnings.warn(
+                "sync_cash_to_eclipse() without a description leaves Orion's generic "
+                "'OC to Eclipse Sync' on the set-aside; pass description= so the "
+                "sync can be identified later",
+                UserWarning,
+                stacklevel=2,
+            )
 
         payload = {k: account[k] for k in RECEIVABLE_SUMMARY_FIELDS if k in account}
         payload["accountId"] = account_id
 
         url = f"{self.base_url}/Billing/SyncCashtoEclipse"
         res = self.api_request(url, requests.post, json=payload)
-        return res.json()
+        created = res.json()
+        if description is None:
+            return created
+
+        eclipse = self._eclipse_v1()
+        set_aside_id, eclipse_account_id = created["id"], created["accountId"]
+        try:
+            # The v1 PUT replaces the whole record; a description-only body
+            # fails with "Cash amount type does not exist" (live-verified).
+            record = eclipse.get_account_set_aside(eclipse_account_id, set_aside_id)
+            updated = eclipse.update_account_aside_cash(
+                eclipse_account_id, set_aside_id, {**record, "description": description}
+            )
+        except OrionAPIError as ex:
+            raise OrionAPIError(
+                f"Set-aside {set_aside_id} was created in Eclipse but renaming it to "
+                f"{description!r} failed: {ex}"
+            ) from ex
+        return {**created, "description": updated.get("description", description)}
+
+    def _eclipse_v1(self):
+        """An EclipseV1 client on this Orion session (token exchange), cached."""
+        if getattr(self, "_eclipse_v1_client", None) is None:
+            self._eclipse_v1_client = EclipseV1(
+                orion_token=self.token,
+                verify_ssl=self.verify_ssl,
+                ca_bundle=self.ca_bundle,
+                timeout=self.timeout,
+            )
+        return self._eclipse_v1_client
 
     # -------------------------------------------------------------------------
     # Bill Management

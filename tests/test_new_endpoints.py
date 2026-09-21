@@ -3,6 +3,7 @@
 Tests for OrionAPI and EclipseV1 methods added in v1.4.0.
 """
 
+import warnings
 from unittest.mock import Mock, patch
 
 import pytest
@@ -1108,7 +1109,8 @@ class TestOrionBillingOperations:
             mock.return_value = Mock(
                 json=Mock(return_value={"id": 1801, "accountId": 74, "cashAmount": 4763.0})
             )
-            result = api.sync_cash_to_eclipse(self.CASH_FUNDING_ROW)
+            with pytest.warns(UserWarning, match="without a description"):
+                result = api.sync_cash_to_eclipse(self.CASH_FUNDING_ROW)
             assert result["cashAmount"] == 4763.0
 
             call_url = mock.call_args[0][0]
@@ -1123,6 +1125,7 @@ class TestOrionBillingOperations:
             assert body["accountNumber"] == "27163812"
             assert body["feeReqSrc"] == "Cash account"
 
+    @pytest.mark.filterwarnings("ignore:sync_cash_to_eclipse")
     def test_sync_cash_to_eclipse_accepts_account_id(self):
         """Test a dict already keyed accountId passes through."""
         api = self._make_api()
@@ -1132,6 +1135,7 @@ class TestOrionBillingOperations:
             body = mock.call_args[1]["json"]
             assert body == {"accountId": 99, "balanceDue": 10.0}
 
+    @pytest.mark.filterwarnings("ignore:sync_cash_to_eclipse")
     def test_sync_cash_to_eclipse_drops_unknown_fields(self):
         """Test extra grid columns are not sent in the request body."""
         api = self._make_api()
@@ -1148,6 +1152,58 @@ class TestOrionBillingOperations:
             api.sync_cash_to_eclipse("bad")
         with pytest.raises(ValueError, match="account must have an 'id'"):
             api.sync_cash_to_eclipse({"balanceDue": 500.0})
+        with pytest.raises(ValueError, match="description must be a non-empty string"):
+            api.sync_cash_to_eclipse({"accountId": 99}, description="  ")
+
+    def test_sync_cash_to_eclipse_description_renames_in_eclipse(self):
+        """Orion has no description field; the set-aside is renamed in Eclipse
+        with a full-record PUT (a description-only body is rejected)."""
+        api = self._make_api()
+        record = {"id": 1801, "accountId": 5, "description": "OC to Eclipse Sync", "cashAmount": 1}
+        eclipse = Mock()
+        eclipse.get_account_set_aside.return_value = record
+        eclipse.update_account_aside_cash.return_value = {**record, "description": "Q4 fee"}
+        with (
+            patch.object(api, "api_request") as mock,
+            patch.object(api, "_eclipse_v1", return_value=eclipse),
+            warnings.catch_warnings(),
+        ):
+            warnings.simplefilter("error")
+            mock.return_value = Mock(json=Mock(return_value=dict(record)))
+            result = api.sync_cash_to_eclipse({"accountId": 99}, description="Q4 fee")
+
+        assert result["description"] == "Q4 fee"
+        eclipse.get_account_set_aside.assert_called_once_with(5, 1801)
+        eclipse.update_account_aside_cash.assert_called_once_with(
+            5, 1801, {**record, "description": "Q4 fee"}
+        )
+
+    def test_sync_cash_to_eclipse_rename_failure_names_set_aside(self):
+        api = self._make_api()
+        eclipse = Mock()
+        eclipse.get_account_set_aside.return_value = {"id": 1801, "accountId": 5}
+        eclipse.update_account_aside_cash.side_effect = OrionAPIError("500 boom")
+        with (
+            patch.object(api, "api_request") as mock,
+            patch.object(api, "_eclipse_v1", return_value=eclipse),
+        ):
+            mock.return_value = Mock(json=Mock(return_value={"id": 1801, "accountId": 5}))
+            with pytest.raises(OrionAPIError, match="Set-aside 1801 was created"):
+                api.sync_cash_to_eclipse({"accountId": 99}, description="Q4 fee")
+
+    def test_eclipse_v1_client_from_orion_token_is_cached(self):
+        api = self._make_api()
+        api.token = "orion-token"
+        with patch("orionapi.EclipseV1") as mock_cls:
+            first = api._eclipse_v1()
+            second = api._eclipse_v1()
+        assert first is second
+        mock_cls.assert_called_once_with(
+            orion_token="orion-token",
+            verify_ssl=api.verify_ssl,
+            ca_bundle=api.ca_bundle,
+            timeout=api.timeout,
+        )
 
     # --- Bill Management ---
 
