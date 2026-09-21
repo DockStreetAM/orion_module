@@ -1769,6 +1769,9 @@ class OrionAPI(BaseAPI):
     def cancel_billing_generation(self, instance_id):
         """Cancel a running bill generation job.
 
+        Not live-verified: a one-household forecast finishes generating in
+        ~15s, before there is anything to cancel.
+
         Args:
             instance_id: Billing instance ID
 
@@ -2186,8 +2189,15 @@ class OrionAPI(BaseAPI):
         """Export one cash funding row to Eclipse as a cash set-aside.
 
         This is the API equivalent of the Cash Funding grid's export action:
-        Orion creates (or updates) a set-aside in Eclipse for the account's
-        balance due, so the fee cash is reserved from trading.
+        Orion creates a set-aside in Eclipse for the account's balance due,
+        so the fee cash is reserved from trading.
+
+        Every call INSERTS a new set-aside; it never updates an existing one.
+        Live-verified 2026-09: two calls for the same account left two active
+        set-asides. Each is a dollar amount with description "OC to Eclipse
+        Sync" and expiration type "None" (it never expires on its own). To
+        re-export, first delete the account's earlier "OC to Eclipse Sync"
+        set-asides (Eclipse get_set_asides + delete_account_set_aside_cash).
 
         Orion documents this as a draft endpoint that takes a single account
         per call, so exporting a whole report means looping over the rows of
@@ -9675,27 +9685,39 @@ class EclipseV2(EclipseBase):
         """Delete account set-aside cash (mutating).
 
         Args:
-            payload: DTO identifying the account set-asides to delete (request body)
+            payload: ``{"setAsideIds": [...], "skipAnalytics": bool}``
+                (skipAnalytics optional)
+
+        Returns:
+            dict | None: Parsed response, or None on an empty body. The
+                account variant was live-verified (2026-09) to answer with an
+                empty body.
         """
         res = self.api_request(
             f"{self.base_url_v2}/SetAsideCash/DeleteAccountSetAsideCash",
             requests.post,
             json=payload,
         )
-        return res.json()
+        return _json_or_none(res)
 
     def delete_portfolio_set_aside_cash(self, payload):
         """Delete portfolio set-aside cash (mutating).
 
         Args:
-            payload: DTO identifying the portfolio set-asides to delete (request body)
+            payload: ``{"setAsideIds": [...], "skipAnalytics": bool}``
+                (skipAnalytics optional)
+
+        Returns:
+            dict | None: Parsed response, or None on an empty body. The
+                account variant was live-verified (2026-09) to answer with an
+                empty body.
         """
         res = self.api_request(
             f"{self.base_url_v2}/SetAsideCash/DeletePortfolioSetAsideCash",
             requests.post,
             json=payload,
         )
-        return res.json()
+        return _json_or_none(res)
 
     # =========================================================================
     # Data-management CRUD / actions (v2). Account, portfolio, and model data
