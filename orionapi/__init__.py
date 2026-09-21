@@ -249,6 +249,11 @@ class BillingGenerationError(OrionAPIError):
         self.errors = errors or []
 
 
+def _squash(value):
+    """Remove spaces, so display strings ("Pending Generation") match enum names."""
+    return (value or "").replace(" ", "")
+
+
 def _json_or_none(res):
     """Parse a JSON response body, or return None when the body is empty.
 
@@ -1534,9 +1539,12 @@ class OrionAPI(BaseAPI):
         Args:
             instance_id: Billing instance ID
             lock_down: Whether to lock down the instance during generation (default True)
-            ids: Optional list of household (client) IDs to limit the run to,
-                sent as a bare int array body. Omitted, no body is sent and
-                the whole instance is generated.
+            ids: Optional list of household-record IDs to limit the run to:
+                the ``id`` of get_billing_instance_clients() rows, NOT client
+                IDs (a client ID gets 404 "No available bills found"). Sent as
+                a bare int array body. Omitted, no body is sent and the whole
+                instance is generated. To rerun one household, delete its bill
+                (delete_bills) and pass its record id here.
 
         Returns:
             dict | None: Parsed response, or None when Orion returns an empty
@@ -1670,19 +1678,22 @@ class OrionAPI(BaseAPI):
         """Block until a billing instance reaches one of ``target_statuses``.
 
         Generation has no job id, so the only completion signal is the
-        instance's statusValue. A generated instance moves from "Not
-        Generated" to "Data Files Needed", which is the default target
-        (a one-household forecast took ~15s in 2026-09). The live API returns
-        display strings ("Data Files Needed"), not the swagger's enum names
-        ("BillDataFilesNeeded").
+        instance's statusValue plus the per-household statuses. A generated
+        instance moves from "Not Generated" to "Data Files Needed", which is
+        the default target (a one-household forecast took ~15s in 2026-09).
+        On a rerun the instance can already sit at "Data Files Needed", so the
+        wait also requires that no household is still "Not Generated" /
+        "Pending Generation". Call it right after generate_billing(). The live
+        API returns display strings ("Data Files Needed"), not the swagger's
+        enum names ("BillDataFilesNeeded").
 
         Args:
             instance_id: Billing instance ID
             target_statuses: statusValue strings that count as done
             timeout: Wall-clock timeout in seconds (default 600)
             poll_interval: Seconds between polls (default 10)
-            raise_on_client_errors: If True (default), once the target is
-                reached, raise if any household has status "Errored".
+            raise_on_client_errors: If True (default), once done, raise if any
+                household has status "Errored".
                 "Warning" (e.g. "No receivables with value.") is not an error.
 
         Returns:
@@ -1714,42 +1725,39 @@ class OrionAPI(BaseAPI):
             instance = self.get_billing_instance(instance_id)
             status = instance.get("statusValue")
 
-            if status in target_statuses:
-                if raise_on_client_errors:
-                    errors = [
-                        c
-                        for c in self.get_billing_instance_clients(instance_id)
-                        if c.get("status") == "Errored"
-                    ]
-                    if errors:
-                        raise BillingGenerationError(
-                            f"Billing instance {instance_id} reached {status!r} with "
-                            f"{len(errors)} errored household(s)",
-                            instance=instance,
-                            errors=errors,
-                        )
-                return instance
-
             if status in BILLING_ERROR_STATUSES:
                 raise BillingGenerationError(
                     f"Billing instance {instance_id} is in error status {status!r}",
                     instance=instance,
                 )
 
-            # Households all finished but the instance never moved: if any
-            # errored, the run failed and further polling won't help.
+            # Household statuses come back as display strings ("Pending
+            # Generation"); compare with spaces removed.
             clients = self.get_billing_instance_clients(instance_id)
-            if clients and not any(
-                c.get("status") in BILLING_CLIENT_PENDING_STATUSES for c in clients
-            ):
-                errors = [c for c in clients if c.get("status") == "Errored"]
-                if errors:
+            pending = any(
+                _squash(c.get("status")) in BILLING_CLIENT_PENDING_STATUSES for c in clients
+            )
+            errors = [c for c in clients if _squash(c.get("status")) == "Errored"]
+
+            if not pending and status in target_statuses:
+                if raise_on_client_errors and errors:
                     raise BillingGenerationError(
-                        f"Billing instance {instance_id} stayed {status!r} with "
+                        f"Billing instance {instance_id} reached {status!r} with "
                         f"{len(errors)} errored household(s)",
                         instance=instance,
                         errors=errors,
                     )
+                return instance
+
+            # Households all finished but the instance never reached a target:
+            # if any errored, the run failed and further polling won't help.
+            if clients and not pending and errors:
+                raise BillingGenerationError(
+                    f"Billing instance {instance_id} stayed {status!r} with "
+                    f"{len(errors)} errored household(s)",
+                    instance=instance,
+                    errors=errors,
+                )
 
             if time.monotonic() >= deadline:
                 raise TimeoutError(
@@ -1779,9 +1787,15 @@ class OrionAPI(BaseAPI):
     def delete_billing_instances(self, instance_ids, forecast_only=True):
         """Delete billing instances. Irreversible.
 
-        Deletion is asynchronous: per the spec the instance passes through
-        "Pending Deletion" / "Deletion In Progress" (or "Error Deleting
-        Instance") before it disappears.
+        Deletion is asynchronous but quick: verified 2026-09 on a
+        one-household forecast, the instance read "Deletion In Progress"
+        immediately and was gone within ~5s, after which
+        get_billing_instance() raises OrionAPIError 400 "Unable to find Bill
+        Instance" (not NotFoundError/404). "Error Deleting Instance" is the
+        failure status.
+
+        The instance's audit files are NOT deleted with it; remove them first
+        with get_audit_files(instance_id=...) and delete_audit_file().
 
         Args:
             instance_ids: List of billing instance IDs
@@ -1915,7 +1929,7 @@ class OrionAPI(BaseAPI):
             file_id: Audit file ID (``id`` from get_audit_files)
 
         Returns:
-            dict | None: Parsed response, or None on an empty body
+            None: Orion answers with an empty body (verified 2026-09)
         """
         if not isinstance(file_id, int) or file_id < 1:
             raise ValueError("file_id must be a positive integer")
@@ -2229,8 +2243,8 @@ class OrionAPI(BaseAPI):
         if delete_related_households:
             url += "?" + urlencode({"deleteRelatedHouseholds": "true"})
 
-        # Bare int array, per the swagger. Same body binding as
-        # Instances/Action/FeeFiles, where {"ids": [...]} was live-verified to fail.
+        # Bare int array. Live-verified 2026-09: {"ids": [...]} gets 400
+        # "Bill Ids are missing."; the bare array deletes and echoes the ids.
         res = self.api_request(url, requests.put, json=bill_ids)
         return res.json()
 
