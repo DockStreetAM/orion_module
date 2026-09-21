@@ -765,7 +765,7 @@ class TestOrionBillingWorkflow:
             result = api.generate_fee_files(instance_id=42)
             assert result["success"] is True
             payload = mock.call_args[1]["json"]
-            assert payload == {"ids": [42]}
+            assert payload == [42]
             assert "custodianId" not in mock.call_args[0][0]
 
     def test_generate_fee_files_with_custodian(self):
@@ -1162,7 +1162,7 @@ class TestOrionBillingOperations:
             assert "/Billing/Bills/Action/Delete" in call_url
             assert "deleteRelatedHouseholds" not in call_url
             payload = mock.call_args[1]["json"]
-            assert payload == {"ids": [10, 20]}
+            assert payload == [10, 20]
 
     def test_delete_bills_with_related_households(self):
         """Test deleting bills with related households."""
@@ -2140,3 +2140,320 @@ class TestEclipseFacadeTeams:
             api.v1.get_teams.assert_called_once_with(is_active=True)
             api.v2.get_teams.assert_not_called()
             assert result[0]["id"] == 1
+
+
+class TestOrionForecastBilling:
+    """Forecast billing lifecycle: generate, wait, audit files, delete (2.31.0)."""
+
+    def _make_api(self):
+        with (
+            patch.object(OrionAPI, "login"),
+            patch.object(OrionAPI, "_get_auth_header", return_value={}),
+        ):
+            return OrionAPI(usr="test", pwd="pass")
+
+    @staticmethod
+    def _resp(json_value=None, content=b"x", headers=None):
+        return Mock(json=Mock(return_value=json_value), content=content, headers=headers or {})
+
+    # --- generate_billing ---------------------------------------------------
+
+    def test_generate_billing_empty_body_returns_none(self):
+        api = self._make_api()
+        with patch.object(api, "api_request", return_value=self._resp(content=b"")) as mock:
+            assert api.generate_billing(instance_id=164, lock_down=False) is None
+            assert mock.call_args[0][0].endswith(
+                "/Billing/Instances/164/Action/Generate?lockDown=false"
+            )
+            assert mock.call_args[0][1] is requests.put
+            assert "json" not in mock.call_args[1]
+
+    def test_generate_billing_with_ids_sends_bare_array(self):
+        api = self._make_api()
+        with patch.object(api, "api_request", return_value=self._resp(content=b"")) as mock:
+            api.generate_billing(instance_id=164, ids=[23, 24])
+            assert mock.call_args[1]["json"] == [23, 24]
+
+    def test_generate_billing_rejects_empty_ids(self):
+        api = self._make_api()
+        with pytest.raises(ValueError, match="ids must be a non-empty list"):
+            api.generate_billing(instance_id=164, ids=[])
+
+    # --- create_billing_instance ------------------------------------------
+
+    def test_create_billing_instance_new_fields(self):
+        api = self._make_api()
+        with patch.object(api, "api_request", return_value=self._resp({"id": 1})) as mock:
+            api.create_billing_instance(
+                is_forecast=True,
+                run_for="FinalBill",
+                allow_duplicate_mock_bills=True,
+                value_as_of_override="2026-09-30",
+                date_range=["2026-10-01", "2026-12-31"],
+            )
+            payload = mock.call_args[1]["json"]
+            assert payload["runFor"] == "FinalBill"
+            assert payload["allowDuplicateMockBills"] is True
+            assert payload["valueAsOfOverride"] == "2026-09-30"
+            assert payload["dateRange"] == ["2026-10-01", "2026-12-31"]
+
+    def test_create_billing_instance_omits_unset_new_fields(self):
+        api = self._make_api()
+        with patch.object(api, "api_request", return_value=self._resp({"id": 1})) as mock:
+            api.create_billing_instance(run_for="ImportedHHRerun")
+            payload = mock.call_args[1]["json"]
+            for key in ("allowDuplicateMockBills", "valueAsOfOverride", "dateRange"):
+                assert key not in payload
+
+    def test_create_billing_instance_rejects_non_list_date_range(self):
+        api = self._make_api()
+        with pytest.raises(ValueError, match="date_range must be a list"):
+            api.create_billing_instance(date_range="2026-10-01")
+
+    # --- invalidate / cancel ------------------------------------------------
+
+    def test_invalidate_billing_instance_validate_param(self):
+        api = self._make_api()
+        with patch.object(api, "api_request", return_value=self._resp({})) as mock:
+            api.invalidate_billing_instance(7, validate=True)
+            assert mock.call_args[0][0].endswith(
+                "/Billing/Instances/7/Action/Invalidate?validate=true"
+            )
+            assert mock.call_args[0][1] is requests.post
+
+    def test_invalidate_billing_instance_no_param_by_default(self):
+        api = self._make_api()
+        with patch.object(api, "api_request", return_value=self._resp({})) as mock:
+            api.invalidate_billing_instance(7)
+            assert mock.call_args[0][0].endswith("/Billing/Instances/7/Action/Invalidate")
+
+    def test_cancel_billing_generation(self):
+        api = self._make_api()
+        with patch.object(api, "api_request", return_value=self._resp(content=b"")) as mock:
+            assert api.cancel_billing_generation(7) is None
+            assert mock.call_args[0][0].endswith("/Billing/Instances/7/Action/Generate/Cancel")
+            assert mock.call_args[0][1] is requests.put
+
+    # --- get_billing_instance_clients --------------------------------------
+
+    def test_get_billing_instance_clients(self):
+        api = self._make_api()
+        rows = [{"clientId": 23, "status": "Generated"}]
+        with patch.object(api, "api_request", return_value=self._resp(rows)) as mock:
+            assert api.get_billing_instance_clients(164) == rows
+            assert mock.call_args[0][0].endswith("/Billing/BillGenerator/Instance/164/ClientList")
+
+    # --- wait_for_billing_instance -----------------------------------------
+
+    def test_wait_returns_when_target_reached(self):
+        api = self._make_api()
+        states = [
+            {"id": 1, "statusValue": "Not Generated"},
+            {"id": 1, "statusValue": "Data Files Needed"},
+        ]
+        clients = [{"status": "Generated"}, {"status": "Warning"}]
+        with (
+            patch.object(api, "get_billing_instance", side_effect=states),
+            patch.object(api, "get_billing_instance_clients", return_value=clients),
+            patch("orionapi.time.sleep") as mock_sleep,
+        ):
+            result = api.wait_for_billing_instance(1, poll_interval=1)
+            assert result["statusValue"] == "Data Files Needed"
+            assert mock_sleep.call_count == 1
+
+    def test_wait_raises_on_errored_households_at_target(self):
+        from orionapi import BillingGenerationError
+
+        api = self._make_api()
+        errored = {"clientId": 9, "status": "Errored", "errorMessage": "boom"}
+        with (
+            patch.object(
+                api, "get_billing_instance", return_value={"statusValue": "Data Files Needed"}
+            ),
+            patch.object(api, "get_billing_instance_clients", return_value=[errored]),
+        ):
+            with pytest.raises(BillingGenerationError) as exc:
+                api.wait_for_billing_instance(1)
+            assert exc.value.errors == [errored]
+
+    def test_wait_client_errors_can_be_ignored(self):
+        api = self._make_api()
+        with (
+            patch.object(
+                api, "get_billing_instance", return_value={"statusValue": "Data Files Needed"}
+            ),
+            patch.object(api, "get_billing_instance_clients") as mock_clients,
+        ):
+            api.wait_for_billing_instance(1, raise_on_client_errors=False)
+            mock_clients.assert_not_called()
+
+    def test_wait_raises_on_instance_error_status(self):
+        from orionapi import BillingGenerationError
+
+        api = self._make_api()
+        with (
+            patch.object(
+                api, "get_billing_instance", return_value={"statusValue": "Fee File Failed"}
+            ),
+            patch.object(api, "get_billing_instance_clients", return_value=[]),
+        ):
+            with pytest.raises(BillingGenerationError, match="Fee File Failed"):
+                api.wait_for_billing_instance(1)
+
+    def test_wait_raises_when_households_done_with_errors_but_status_stuck(self):
+        from orionapi import BillingGenerationError
+
+        api = self._make_api()
+        clients = [{"status": "Generated"}, {"status": "Errored"}]
+        with (
+            patch.object(
+                api, "get_billing_instance", return_value={"statusValue": "Not Generated"}
+            ),
+            patch.object(api, "get_billing_instance_clients", return_value=clients),
+        ):
+            with pytest.raises(BillingGenerationError, match="stayed 'Not Generated'"):
+                api.wait_for_billing_instance(1)
+
+    def test_wait_keeps_polling_while_households_pending(self):
+        api = self._make_api()
+        states = [{"statusValue": "Not Generated"}] * 2 + [{"statusValue": "Complete"}]
+        clients = [{"status": "Errored"}, {"status": "PendingGeneration"}]
+        with (
+            patch.object(api, "get_billing_instance", side_effect=states),
+            patch.object(api, "get_billing_instance_clients", return_value=clients),
+            patch("orionapi.time.sleep"),
+        ):
+            result = api.wait_for_billing_instance(
+                1, target_statuses="Complete", raise_on_client_errors=False
+            )
+            assert result["statusValue"] == "Complete"
+
+    def test_wait_times_out(self):
+        api = self._make_api()
+        with (
+            patch.object(
+                api, "get_billing_instance", return_value={"statusValue": "Not Generated"}
+            ),
+            patch.object(api, "get_billing_instance_clients", return_value=[]),
+            patch("orionapi.time.sleep"),
+            patch("orionapi.time.monotonic", side_effect=[0, 5, 11]),
+        ):
+            with pytest.raises(TimeoutError, match="still 'Not Generated'"):
+                api.wait_for_billing_instance(1, timeout=10, poll_interval=5)
+
+    def test_wait_validates_args(self):
+        api = self._make_api()
+        with pytest.raises(ValueError, match="target_statuses"):
+            api.wait_for_billing_instance(1, target_statuses=())
+        with pytest.raises(ValueError, match="timeout"):
+            api.wait_for_billing_instance(1, timeout=0)
+
+    # --- delete_billing_instances ------------------------------------------
+
+    def test_delete_billing_instances_forecast(self):
+        api = self._make_api()
+        with (
+            patch.object(api, "get_billing_instance", return_value={"isMockBill": True}),
+            patch.object(api, "api_request", return_value=self._resp([164])) as mock,
+        ):
+            assert api.delete_billing_instances([164]) == [164]
+            assert mock.call_args[0][0].endswith("/Billing/Instances/Action/Delete")
+            assert mock.call_args[0][1] is requests.put
+            assert mock.call_args[1]["json"] == [164]
+
+    def test_delete_billing_instances_refuses_live(self):
+        api = self._make_api()
+        instances = {164: {"isMockBill": True}, 162: {"isMockBill": False}}
+        with (
+            patch.object(api, "get_billing_instance", side_effect=instances.get),
+            patch.object(api, "api_request") as mock,
+        ):
+            with pytest.raises(ValueError, match=r"non-forecast billing instance\(s\) \[162\]"):
+                api.delete_billing_instances([164, 162])
+            mock.assert_not_called()
+
+    def test_delete_billing_instances_live_allowed_when_opted_out(self):
+        api = self._make_api()
+        with (
+            patch.object(api, "get_billing_instance") as mock_get,
+            patch.object(api, "api_request", return_value=self._resp([162])),
+        ):
+            api.delete_billing_instances([162], forecast_only=False)
+            mock_get.assert_not_called()
+
+    def test_delete_billing_instances_validates(self):
+        api = self._make_api()
+        with pytest.raises(ValueError, match="non-empty list"):
+            api.delete_billing_instances([])
+        with pytest.raises(ValueError, match="positive integers"):
+            api.delete_billing_instances([0])
+
+    # --- audit files ----------------------------------------------------------
+
+    def test_generate_audit_files_comma_string(self):
+        api = self._make_api()
+        with patch.object(api, "api_request", return_value=self._resp(content=b"")) as mock:
+            assert api.generate_audit_files([164, 165], start_date="2026-10-01") is None
+            assert mock.call_args[0][0].endswith("/Billing/PostAuditFiles")
+            assert mock.call_args[0][1] is requests.post
+            assert mock.call_args[1]["json"] == {
+                "billInstanceIds": "164,165",
+                "startDate": "2026-10-01",
+            }
+
+    def test_generate_audit_files_validates(self):
+        api = self._make_api()
+        with pytest.raises(ValueError, match="non-empty list"):
+            api.generate_audit_files(164)
+
+    def test_get_audit_files_query(self):
+        api = self._make_api()
+        with patch.object(api, "api_request", return_value=self._resp([])) as mock:
+            api.get_audit_files(instance_id=164, end_date="2026-12-31")
+            assert mock.call_args[0][0].endswith(
+                "/Billing/Audit/AuditFiles?billInstanceId=164&endDate=2026-12-31"
+            )
+
+    def test_get_audit_files_no_filters(self):
+        api = self._make_api()
+        with patch.object(api, "api_request", return_value=self._resp([])) as mock:
+            api.get_audit_files()
+            assert mock.call_args[0][0].endswith("/Billing/Audit/AuditFiles")
+
+    def test_download_audit_file(self):
+        api = self._make_api()
+        headers = {
+            "Content-Type": "application/octet-stream",
+            "Content-Disposition": 'attachment; filename="billing audit.CSV"',
+        }
+        resp = self._resp(content=b"pkClient,pkAccount\n", headers=headers)
+        with patch.object(api, "api_request", return_value=resp) as mock:
+            result = api.download_audit_file(129386)
+            assert mock.call_args[0][0].endswith("/Billing/Audit/129386/File")
+            assert result == {
+                "content": b"pkClient,pkAccount\n",
+                "filename": "billing audit.CSV",
+                "content_type": "application/octet-stream",
+            }
+
+    def test_download_audit_file_no_disposition(self):
+        api = self._make_api()
+        with patch.object(api, "api_request", return_value=self._resp(content=b"PK")):
+            assert api.download_audit_file(1)["filename"] is None
+
+    def test_delete_audit_file(self):
+        api = self._make_api()
+        with patch.object(api, "api_request", return_value=self._resp(content=b"")) as mock:
+            api.delete_audit_file(5)
+            assert mock.call_args[0][0].endswith("/Billing/Audit/5/File")
+            assert mock.call_args[0][1] is requests.delete
+
+    # --- bill data export -----------------------------------------------------
+
+    def test_get_bill_data_export_query(self):
+        api = self._make_api()
+        with patch.object(api, "api_request", return_value=self._resp([])) as mock:
+            api.get_bill_data_export(instance_id=164, start_date="2026-10-01")
+            assert mock.call_args[0][0].endswith(
+                "/Billing/BillDataExport?billInstanceId=164&startDate=2026-10-01"
+            )

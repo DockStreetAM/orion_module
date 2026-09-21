@@ -1,4 +1,4 @@
-# orionapi API Reference (v2.30.0)
+# orionapi API Reference (v2.30.2)
 
 Auto-generated from docstrings by `scripts/gen_api_reference.py`. Eclipse methods note their underlying endpoint.
 
@@ -8,27 +8,32 @@ Classes: `OrionAPI` (Orion Advisor), `EclipseV1` / `EclipseV2` (explicit Eclipse
 
 Client for the Orion Advisor API.
 
-**75 methods.**
+**84 methods.**
 
 | Method | Endpoint | Description |
 |---|---|---|
+| `cancel_billing_generation(instance_id)` | `PUT /Billing/Instances/{instance_id}/Action/Generate/Cancel` | Cancel a running bill generation job. |
 | `cancel_client(client_id, cancel_type='Full', account_ids=None, as_of_date=None, zero_assets=False, exclude_download=False, create_final_bill=False)` | `PUT /Portfolio/Clients/Action/Cancel` | Cancel a client/household (full or partial). |
 | `check_username()` | `GET /authorization/user` | Get the authenticated user's login ID. |
 | `complete_billing_instance(instance_id)` | `POST /Billing/Instances/{instance_id}/Action/Complete` | Finalize/complete a billing instance. |
 | `convert_account(from_account_id, convert_date, copy_assets=True, copy_billing=True, copy_transactions=True, old_active=False)` | `POST /Portfolio/Accounts/Action/ConvertAccount` | Convert an account (e.g., IRA to Roth conversion). |
 | `copy_report_batch(batch_id, name, start_date=None, end_date=None)` |  | Copy an existing report batch with a new name and optional date range. |
-| `create_billing_instance(is_forecast=False, run_for='AllHouseholds', run_for_accounts='ActiveAccounts', bill_type='Renewal', nickname=None, keys=None, as_of_date=None, end_date_override=None, include_cash_flow=False)` | `POST /Billing/BillGenerator/Action/Instance` | Create a new billing instance (live or forecast). |
+| `create_billing_instance(is_forecast=False, run_for='AllHouseholds', run_for_accounts='ActiveAccounts', bill_type='Renewal', nickname=None, keys=None, as_of_date=None, end_date_override=None, include_cash_flow=False, allow_duplicate_mock_bills=None, value_as_of_override=None, date_range=None)` | `POST /Billing/BillGenerator/Action/Instance` | Create a new billing instance (live or forecast). |
 | `create_client(data)` | `POST /Portfolio/Clients/Verbose` | Create a new client/household. |
 | `create_orion_account(data, generate_account_number=False)` | `POST /Portfolio/Accounts/Verbose` | Create a new account. |
 | `create_registration(data)` | `POST /Portfolio/Registrations/Verbose` | Create a new registration. |
 | `create_report_batch(batch_data)` | `POST /Reporting/Batch/Verbose` | Create a new report batch. |
 | `delete_accounts(account_ids)` | `PUT /Portfolio/Accounts/Action/Delete` | Delete accounts by ID. |
+| `delete_audit_file(file_id)` | `DELETE /Billing/Audit/{file_id}/File` | Delete one billing audit file. |
+| `delete_billing_instances(instance_ids, forecast_only=True)` | `PUT /Billing/Instances/Action/Delete` | Delete billing instances. Irreversible. |
 | `delete_bills(bill_ids, delete_related_households=False)` | `PUT /Billing/Bills/Action/Delete` | Delete bills by ID list. |
 | `delete_clients(client_ids)` | `PUT /Portfolio/Clients/Action/Delete` | Delete clients/households by ID. |
 | `delete_registrations(registration_ids)` | `PUT /Portfolio/Registrations/Action/Delete` | Delete registrations by ID. |
+| `download_audit_file(file_id)` | `GET /Billing/Audit/{file_id}/File` | Download one billing audit file. |
 | `download_report_pdf(batch_id, entity_key)` | `GET /Reporting/Batch/{batch_id}/Entities/{entity_key}/Action/Download` | Download the rendered PDF for one entity in a generated report batch. |
 | `find_query_by_name(name)` |  | Return the ID of the saved query whose name exactly matches ``name``. |
-| `generate_billing(instance_id, lock_down=True)` | `PUT /Billing/Instances/{instance_id}/Action/Generate` | Generate bills for a billing instance. |
+| `generate_audit_files(instance_ids, start_date=None, end_date=None, entity_list=None)` | `POST /Billing/PostAuditFiles` | Generate the billing audit files for billing instance(s). |
+| `generate_billing(instance_id, lock_down=True, ids=None)` | `PUT /Billing/Instances/{instance_id}/Action/Generate` | Start bill generation for a billing instance. |
 | `generate_cash_funding(instance_ids, start_date=None, end_date=None, is_forecast=False)` | `POST /Billing/Instances/GenerateCashFunding` | Generate cash funding data for billing instance(s). |
 | `generate_fee_files(instance_id, custodian_id=None)` | `POST /Billing/Instances/Action/FeeFiles` | Generate fee files for a billing instance. |
 | `generate_statements(batch_id, entity_ids=None)` | `POST /Reporting/Batch/{batch_id}/Entities/Action/Generate` | Generate PDF statements for a report batch. |
@@ -36,9 +41,12 @@ Client for the Orion Advisor API.
 | `get_adjustment_types(is_payable=None, is_debit=None)` | `GET /Billing/AdjustmentTypes` | Get available billing adjustment types. |
 | `get_all_queries(search_term='', top=100)` |  | Deprecated alias for :meth:`search_queries`. |
 | `get_assets(account_id, has_value=True)` | `GET /Portfolio/Assets` | Get assets for a specific account. |
+| `get_audit_files(instance_id=None, start_date=None, end_date=None)` | `GET /Billing/Audit/AuditFiles` | List billing audit files. |
+| `get_bill_data_export(instance_id=None, start_date=None, end_date=None)` | `GET /Billing/BillDataExport` | Get the bill data export (Orion: "list of unpaid bills"). |
 | `get_bill_item_adjustments(bill_account_item_id)` | `GET /Billing/BillGenerator/BillAccountItems/BillAccountAdj/{bill_account_item_id}` | Get adjustments for a specific bill account item. |
 | `get_billing_household_summary(household_id)` | `GET /Billing/HouseholdSummary/{household_id}` | Get billing summary for a specific household. |
 | `get_billing_instance(instance_id)` | `GET /Billing/Instances/{instance_id}` | Get details for a single billing instance. |
+| `get_billing_instance_clients(instance_id)` | `GET /Billing/BillGenerator/Instance/{instance_id}/ClientList` | Get the per-household records of a billing instance. |
 | `get_billing_instances(start_date=None, end_date=None)` | `GET /Billing/Instances` | List billing instances, optionally filtered by date range. |
 | `get_bills(instance_id=None, is_valid=None, bill_type=None)` | `GET /Billing/Bills` | Get bills, optionally filtered. |
 | `get_cash_funding(start_date, end_date, is_forecast=False, take=10000, skip=0)` | `GET /Billing/CashFunding` | Get cash funding data showing after-fee cash balances. |
@@ -64,7 +72,7 @@ Client for the Orion Advisor API.
 | `get_report_batch_verbose(batch_id, expand='All')` | `GET /Reporting/Batch/Verbose/{batch_id}` | Get verbose details of a report batch. |
 | `get_report_batches(qpe_item_id=None)` | `GET /Reporting/Batch` | List all report batches. |
 | `get_transactions(account_id=None, client_id=None, registration_id=None, start_date=None, end_date=None, status=None, trans_type_ids=None, has_errors=None)` | `GET /Portfolio/Transactions` | Get transactions, optionally filtered. |
-| `invalidate_billing_instance(instance_id)` | `POST /Billing/Instances/{instance_id}/Action/Invalidate` | Invalidate/cancel a billing instance. |
+| `invalidate_billing_instance(instance_id, validate=None)` | `POST /Billing/Instances/{instance_id}/Action/Invalidate` | Invalidate/cancel a billing instance. |
 | `login(usr=None, pwd=None, timeout=None)` | `GET /security/token` | Authenticate with the Orion API. |
 | `merge_accounts(merges)` | `PUT /Portfolio/Accounts/Action/Merge` | Merge accounts. |
 | `move_account(account_id, target_registration_id)` | `PUT /Portfolio/Accounts/{account_id}/Action/MoveToRegistration/{target_registration_id}` | Move an account to a different registration. |
@@ -86,6 +94,7 @@ Client for the Orion Advisor API.
 | `update_orion_account(account_id, data)` | `PUT /Portfolio/Accounts/{account_id}` | Update an account. |
 | `update_registration(registration_id, data)` | `PUT /Portfolio/Registrations/{registration_id}` | Update a registration. |
 | `update_report_batch(batch_id, batch_data)` | `PUT /Reporting/Batch/Verbose/{batch_id}` | Update an existing report batch. |
+| `wait_for_billing_instance(instance_id, target_statuses=('Data Files Needed',), timeout=600, poll_interval=10, raise_on_client_errors=True)` |  | Block until a billing instance reaches one of ``target_statuses``. |
 | `write_off_bills(payments, payment_from='Household', batch_number=None)` | `POST /Billing/PostPayments/WriteOffBills` | Write off remaining balances on bills. |
 
 ## EclipseV1
