@@ -1,4 +1,4 @@
-__version__ = "2.31.0"
+__version__ = "2.31.1"
 
 import logging
 import re
@@ -9676,18 +9676,22 @@ class EclipseV2(EclipseBase):
         return res.json()
 
     def billing_set_aside_cash(self, payload):
-        """Create billing set-aside cash (mutating).
+        """Create or update billing set-aside cash (mutating).
+
+        This is the endpoint behind Orion's Cash Funding Export.
 
         Args:
-            payload: Billing set-aside DTO (request body)
+            payload: List of ``{"orionConnectExternalAccountId": int,
+                "orionConnectFirmId": int, "amount": float}`` (dollar amount)
 
         Returns:
-            dict: Result
+            dict | None: Parsed response, or None on the empty body the
+                endpoint normally returns
         """
         res = self.api_request(
             f"{self.base_url_v2}/SetAsideCash/BillingSetAsideCash", requests.post, json=payload
         )
-        return res.json()
+        return _json_or_none(res)
 
     def delete_account_set_aside_cash(self, payload):
         """Delete account set-aside cash (mutating).
