@@ -338,7 +338,7 @@ Eclipse client targeting the v1 API surface (``/v1/...``) only.
 
 Eclipse client targeting the v2 API surface (``/api/v2/...``) only.
 
-**310 methods.**
+**311 methods.**
 
 | Method | Endpoint | Description |
 |---|---|---|
@@ -396,7 +396,8 @@ Eclipse client targeting the v2 API surface (``/api/v2/...``) only.
 | `delete_workflow_context(context_id)` | `DELETE /api/v2/Workflow/contexts/{context_id}` | Delete a workflow context (mutating). |
 | `download_custom_import_template(template_id)` | `POST /api/v2/CustomImports/Templates/Download/{template_id}` | Download a custom-import template. |
 | `execute_saved_view(view_id)` | `GET /api/v2/SavedView/Execute/{view_id}` | Execute a saved view and return the number of records. |
-| `expire_account_set_asides(payload)` | `PUT /api/v2/Account/Accounts/expireAccountSetAsides` | Expire account set-asides (mutating). |
+| `expire_account_set_asides(payload)` | `PUT /api/v2/Account/Accounts/expireAccountSetAsides` | Expire account set-asides (mutating). Raw form of expire_set_asides(). |
+| `expire_set_asides(set_aside_ids, raise_on_error=True)` |  | Expire account set-asides now, keeping them as history. |
 | `export_import_history(payload)` | `POST /api/v2/DataImport/Export/ImportHistory` | Export import history (POST-body export). |
 | `export_portfolios_grid()` | `POST /api/v2/Portfolio/Portfolios/list/export/excel/griddata` | Export the portfolios list as Excel grid data (mutating/export). |
 | `export_reverse_sync_history(payload)` | `POST /api/v2/DataImport/Export/ReverseSyncHistory` | Export reverse-sync history (POST-body export). |

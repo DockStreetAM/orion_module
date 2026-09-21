@@ -2603,6 +2603,42 @@ class TestEclipseV2ConfigPrefs:
             api.delete_portfolio_set_aside_cash({"setAsideIds": [1]})
         assert mock_post.call_args.args[0] == f"{V2_BASE}/SetAsideCash/DeletePortfolioSetAsideCash"
 
+    def test_expire_set_asides(self):
+        api = _eclipse_for_set_asides()
+        results = [{"setAsideId": 101, "accountId": 55, "errorMessage": ""}]
+        mock_put = _mock_post(results)
+        with patch("requests.put", mock_put):
+            assert api.expire_set_asides([101, 102]) == results
+        assert mock_put.call_args.args[0] == f"{V2_BASE}/Account/Accounts/expireAccountSetAsides"
+        assert mock_put.call_args.kwargs["json"] == [
+            {"setAsideId": 101, "setAsideTransactions": []},
+            {"setAsideId": 102, "setAsideTransactions": []},
+        ]
+
+    def test_expire_set_asides_raises_on_error_message(self):
+        """Eclipse reports a bad id with HTTP 200 and an errorMessage."""
+        api = _eclipse_for_set_asides()
+        results = [
+            {"setAsideId": 1, "errorMessage": ""},
+            {"setAsideId": 9, "errorMessage": "No matching set aside cash found for SetAsideId: 9"},
+        ]
+        with patch("requests.put", _mock_post(results)):
+            with pytest.raises(OrionAPIError, match="9: No matching set aside"):
+                api.expire_set_asides([1, 9])
+
+    def test_expire_set_asides_error_can_be_returned(self):
+        api = _eclipse_for_set_asides()
+        results = [{"setAsideId": 9, "errorMessage": "No matching set aside cash found"}]
+        with patch("requests.put", _mock_post(results)):
+            assert api.expire_set_asides([9], raise_on_error=False) == results
+
+    def test_expire_set_asides_validates(self):
+        api = _eclipse_for_set_asides()
+        with pytest.raises(ValueError, match="non-empty list"):
+            api.expire_set_asides([])
+        with pytest.raises(ValueError, match="positive integers"):
+            api.expire_set_asides(["101"])
+
 
 class TestEclipseV2CrudBatch8:
     """Verb/URL/body coverage for v2 data-management CRUD/actions (batch 8).
