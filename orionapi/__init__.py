@@ -1,4 +1,4 @@
-__version__ = "2.32.0"
+__version__ = "2.32.1"
 
 import logging
 import re
@@ -2716,6 +2716,9 @@ class EclipseBase(BaseAPI):
         super().__init__(
             rate_limit=rate_limit, verify_ssl=verify_ssl, ca_bundle=ca_bundle, timeout=timeout
         )
+        # Auth state (token, lock) lives on the owner: this client, or the
+        # Eclipse unifier that composes it (see Eclipse._adopt).
+        self._auth_owner = self
         self.eclipse_token = None
         self.base_url = "https://api.orioneclipse.com/v1"
         # The v2 surface lives at the host root (/api/v2/...), NOT under /v1.
@@ -2732,8 +2735,21 @@ class EclipseBase(BaseAPI):
         elif orion_token is not None:
             self.login(orion_token=orion_token)
 
+    @property
+    def eclipse_token(self):
+        """The Eclipse session token, shared with the owning Eclipse unifier."""
+        return self._auth_owner.__dict__.get("_eclipse_token")
+
+    @eclipse_token.setter
+    def eclipse_token(self, value):
+        self._auth_owner.__dict__["_eclipse_token"] = value
+
     def login(self, usr=None, pwd=None, orion_token=None, timeout=None):
         """Authenticate with the Eclipse API.
+
+        On an Eclipse unifier (or its ``.v1`` / ``.v2``), the new token is
+        shared by all three. The library does not keep credentials, so after
+        a session expires the caller must call login() again.
 
         Args:
             usr: Username for authentication
@@ -2976,7 +2992,8 @@ class EclipseBase(BaseAPI):
             OrionAPIError: if the user has no firm id or more than one (pass
                 ``orionConnectFirmId`` explicitly in that case)
         """
-        if getattr(self, "_orion_connect_firm_id", None) is None:
+        owner = self._auth_owner  # cache once per unifier, not per sub-client
+        if getattr(owner, "_orion_connect_firm_id", None) is None:
             res = self.api_request(f"{self.base_url}/admin/authorization/user")
             firm_ids = res.json().get("ocFirmId") or []
             if len(firm_ids) != 1:
@@ -2984,8 +3001,8 @@ class EclipseBase(BaseAPI):
                     f"Expected one Orion Connect firm id for this user, got {firm_ids!r}; "
                     "pass orionConnectFirmId explicitly"
                 )
-            self._orion_connect_firm_id = firm_ids[0]
-        return self._orion_connect_firm_id
+            owner._orion_connect_firm_id = firm_ids[0]
+        return owner._orion_connect_firm_id
 
 
 class EclipseV1(EclipseBase):
@@ -12319,16 +12336,19 @@ class Eclipse(EclipseBase):
             ca_bundle=ca_bundle,
             timeout=timeout,
         )
-        # Share the single authenticated token with both sub-clients (no re-login).
-        sub_kwargs = {
-            "eclipse_token": self.eclipse_token,
-            "rate_limit": rate_limit,
-            "verify_ssl": verify_ssl,
-            "ca_bundle": ca_bundle,
-            "timeout": timeout,
-        }
-        self.v1 = EclipseV1(**sub_kwargs)
-        self.v2 = EclipseV2(**sub_kwargs)
+        # Sub-clients share this client's auth state and rate limiter, so a
+        # later login() (or token assignment) reaches .v1 / .v2 too, and the
+        # rate limit applies to the unifier as a whole.
+        sub_kwargs = {"verify_ssl": verify_ssl, "ca_bundle": ca_bundle, "timeout": timeout}
+        self.v1 = self._adopt(EclipseV1(**sub_kwargs))
+        self.v2 = self._adopt(EclipseV2(**sub_kwargs))
+
+    def _adopt(self, client):
+        """Point a sub-client's token, lock and rate limiter at this client."""
+        client._auth_owner = self
+        client._token_lock = self._token_lock
+        client._rate_limiter = self._rate_limiter
+        return client
 
     def __getattr__(self, name):
         """Delegate unknown attributes to the v1 surface, then the v2 surface.
