@@ -2574,18 +2574,59 @@ class TestEclipseV2ConfigPrefs:
 
     def test_billing_set_aside_cash(self):
         api = _eclipse_for_set_asides()
-        mock_post = _mock_post({})
+        mock_post = _mock_post(None)
+        mock_post.return_value.content = b""
+        entries = [{"orionConnectExternalAccountId": 7, "orionConnectFirmId": 9, "amount": 100}]
         with patch("requests.post", mock_post):
-            api.billing_set_aside_cash({"accountId": 1})
+            assert api.billing_set_aside_cash(entries) is None
         assert mock_post.call_args.args[0] == f"{V2_BASE}/SetAsideCash/BillingSetAsideCash"
+        assert mock_post.call_args.kwargs["json"] == entries
+        mock_post.return_value.json.assert_not_called()
 
-    def test_billing_set_aside_cash_empty_body(self):
+    def test_billing_set_aside_cash_fills_firm_id(self):
         api = _eclipse_for_set_asides()
         mock_post = _mock_post(None)
         mock_post.return_value.content = b""
-        with patch("requests.post", mock_post):
-            assert api.billing_set_aside_cash([{"orionConnectExternalAccountId": 1}]) is None
-        mock_post.return_value.json.assert_not_called()
+        with (
+            patch.object(api, "get_orion_connect_firm_id", return_value=9) as mock_firm,
+            patch("requests.post", mock_post),
+        ):
+            api.billing_set_aside_cash(
+                [
+                    {"orionConnectExternalAccountId": 7, "amount": 100},
+                    {"orionConnectExternalAccountId": 8, "amount": 0, "orionConnectFirmId": 4},
+                ]
+            )
+        mock_firm.assert_called_once()
+        assert mock_post.call_args.kwargs["json"] == [
+            {"orionConnectFirmId": 9, "orionConnectExternalAccountId": 7, "amount": 100},
+            {"orionConnectExternalAccountId": 8, "amount": 0, "orionConnectFirmId": 4},
+        ]
+
+    def test_billing_set_aside_cash_validates(self):
+        api = _eclipse_for_set_asides()
+        with pytest.raises(ValueError, match="non-empty list"):
+            api.billing_set_aside_cash({"orionConnectExternalAccountId": 7, "amount": 1})
+        with pytest.raises(ValueError, match="orionConnectExternalAccountId"):
+            api.billing_set_aside_cash([{"amount": 1}])
+        with pytest.raises(ValueError, match="amount"):
+            api.billing_set_aside_cash([{"orionConnectExternalAccountId": 7}])
+
+    def test_get_orion_connect_firm_id_cached(self):
+        api = _eclipse_for_set_asides()
+        mock_get = Mock(return_value=Mock(ok=True, json=Mock(return_value={"ocFirmId": [3]})))
+        with patch("requests.get", mock_get):
+            assert api.get_orion_connect_firm_id() == 3
+            assert api.get_orion_connect_firm_id() == 3
+        assert mock_get.call_count == 1
+        assert mock_get.call_args.args[0].endswith("/v1/admin/authorization/user")
+
+    def test_get_orion_connect_firm_id_requires_exactly_one(self):
+        api = _eclipse_for_set_asides()
+        mock_get = Mock(return_value=Mock(ok=True, json=Mock(return_value={"ocFirmId": [3, 4]})))
+        with patch("requests.get", mock_get):
+            with pytest.raises(OrionAPIError, match="Expected one Orion Connect firm id"):
+                api.get_orion_connect_firm_id()
 
     def test_delete_account_set_aside_cash(self):
         api = _eclipse_for_set_asides()

@@ -1,4 +1,4 @@
-__version__ = "2.31.1"
+__version__ = "2.32.0"
 
 import logging
 import re
@@ -2189,11 +2189,15 @@ class OrionAPI(BaseAPI):
         return res.json()
 
     def sync_cash_to_eclipse(self, account):
-        """Export one cash funding row to Eclipse as a cash set-aside.
+        """Deprecated: export one cash funding row to Eclipse as a set-aside.
 
-        This is the API equivalent of the Cash Funding grid's export action:
-        Orion creates a set-aside in Eclipse for the account's balance due,
-        so the fee cash is reserved from trading.
+        This is NOT what Orion's Cash Funding Export does. Use Eclipse
+        billing_set_aside_cash() instead, which produces the same billing
+        set-asides as the Orion screen (percent of value, expire on the Fee
+        transaction, updated in place). Emits a ``DeprecationWarning``.
+
+        Orion creates a dollar set-aside in Eclipse for the ``balanceDue`` you
+        send; it does not recompute the amount.
 
         Every call INSERTS a new set-aside; it never updates an existing one.
         Live-verified 2026-09: two calls for the same account left two active
@@ -2219,6 +2223,12 @@ class OrionAPI(BaseAPI):
                 (EclipseCashFundingResponse) with id, accountId, cashAmount,
                 cashAmountTypeId, description, expirationTypeId, etc.
         """
+        warnings.warn(
+            "sync_cash_to_eclipse is deprecated; use Eclipse billing_set_aside_cash(), "
+            "which matches Orion's Cash Funding Export.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         if not isinstance(account, dict):
             raise ValueError("account must be a cash funding row dict")
 
@@ -2952,6 +2962,30 @@ class EclipseBase(BaseAPI):
             ),
         )
         return best_acct["id"], best_acct["accountNumber"]
+
+    def get_orion_connect_firm_id(self):
+        """Get the Orion Connect firm id of the logged-in Eclipse user, cached.
+
+        Read from ``ocFirmId`` on ``GET /v1/admin/authorization/user``. This
+        is the ``orionConnectFirmId`` that billing_set_aside_cash() needs.
+
+        Returns:
+            int: The Orion Connect firm id
+
+        Raises:
+            OrionAPIError: if the user has no firm id or more than one (pass
+                ``orionConnectFirmId`` explicitly in that case)
+        """
+        if getattr(self, "_orion_connect_firm_id", None) is None:
+            res = self.api_request(f"{self.base_url}/admin/authorization/user")
+            firm_ids = res.json().get("ocFirmId") or []
+            if len(firm_ids) != 1:
+                raise OrionAPIError(
+                    f"Expected one Orion Connect firm id for this user, got {firm_ids!r}; "
+                    "pass orionConnectFirmId explicitly"
+                )
+            self._orion_connect_firm_id = firm_ids[0]
+        return self._orion_connect_firm_id
 
 
 class EclipseV1(EclipseBase):
@@ -9676,18 +9710,46 @@ class EclipseV2(EclipseBase):
         return res.json()
 
     def billing_set_aside_cash(self, payload):
-        """Create or update billing set-aside cash (mutating).
+        """Set each account's billing set-aside cash (mutating).
 
-        This is the endpoint behind Orion's Cash Funding Export.
+        The endpoint behind Orion's Cash Funding Export. Give it dollar
+        amounts; Eclipse applies its billing template. Live-verified 2026-09:
+
+        - The set-aside is a % of the account's total value (amount / value),
+          "Use Total Value", expiring on the next Fee transaction (tolerance
+          15), start date today, description "Billing Set Aside Cash from
+          Orion Connect on <date>", and ``isBilling`` true (only this
+          endpoint sets it).
+        - It updates the account's active billing set-aside in place rather
+          than adding another.
+        - An amount of 0 leaves the set-aside active at 0%; use
+          expire_set_asides() to retire it.
+
+        Only single-account lists have been live-verified; the endpoint takes
+        a list, so larger batches should work but check the results.
 
         Args:
             payload: List of ``{"orionConnectExternalAccountId": int,
-                "orionConnectFirmId": int, "amount": float}`` (dollar amount)
+                "amount": float}``. ``orionConnectExternalAccountId`` is the
+                Orion account id (the ``id`` of a get_cash_funding() row), not
+                the Eclipse id. ``orionConnectFirmId`` is filled in from
+                get_orion_connect_firm_id() when an entry omits it.
 
         Returns:
             dict | None: Parsed response, or None on the empty body the
                 endpoint normally returns
         """
+        if not isinstance(payload, list) or not payload:
+            raise ValueError("payload must be a non-empty list of account entries")
+        for entry in payload:
+            if not isinstance(entry, dict) or "orionConnectExternalAccountId" not in entry:
+                raise ValueError("each entry needs an orionConnectExternalAccountId")
+            if "amount" not in entry:
+                raise ValueError("each entry needs an amount")
+        if any("orionConnectFirmId" not in entry for entry in payload):
+            firm_id = self.get_orion_connect_firm_id()
+            payload = [{"orionConnectFirmId": firm_id, **entry} for entry in payload]
+
         res = self.api_request(
             f"{self.base_url_v2}/SetAsideCash/BillingSetAsideCash", requests.post, json=payload
         )
