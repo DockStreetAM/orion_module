@@ -624,6 +624,67 @@ class TestEclipseUnifierAndAlias:
         assert api.v1.eclipse_token == "tok"
 
 
+class TestEclipseUnifierSharedAuth:
+    """The unifier and its .v1 / .v2 share one token, lock and rate limiter."""
+
+    def _token_response(self, token):
+        return Mock(ok=True, json=Mock(return_value={"eclipse_access_token": token}))
+
+    def test_relogin_reaches_subclients(self):
+        from orionapi import Eclipse
+
+        api = Eclipse(eclipse_token="old")
+        with patch("requests.get", return_value=self._token_response("new")):
+            api.login(usr="u", pwd="p")
+        assert api.v1._get_auth_header() == {"Authorization": "Session new"}
+        assert api.v2._get_auth_header() == {"Authorization": "Session new"}
+
+    def test_tokenless_construct_then_login(self):
+        from orionapi import AuthenticationError, Eclipse
+
+        api = Eclipse()
+        with pytest.raises(AuthenticationError, match="Not logged in"):
+            api.v2._get_auth_header()
+        with patch("requests.get", return_value=self._token_response("tok")):
+            api.login(orion_token="orion")
+        assert api.v2._get_auth_header() == {"Authorization": "Session tok"}
+
+    def test_direct_assignment_and_subclient_login_are_shared(self):
+        from orionapi import Eclipse
+
+        api = Eclipse(eclipse_token="a")
+        api.eclipse_token = "b"
+        assert api.v1.eclipse_token == "b"
+        with patch("requests.get", return_value=self._token_response("c")):
+            api.v2.login(usr="u", pwd="p")
+        assert api.eclipse_token == "c"
+        assert api.v1.eclipse_token == "c"
+
+    def test_rate_limiter_and_lock_shared(self):
+        from orionapi import Eclipse
+
+        api = Eclipse(eclipse_token="tok")
+        assert api.v1._rate_limiter is api._rate_limiter
+        assert api.v2._rate_limiter is api._rate_limiter
+        assert api.v1._token_lock is api._token_lock
+
+    def test_standalone_clients_keep_their_own_state(self):
+        a = EclipseV2(eclipse_token="a")
+        b = EclipseV2(eclipse_token="b")
+        assert a.eclipse_token == "a"
+        assert b.eclipse_token == "b"
+
+    def test_firm_id_cached_once_across_unifier_and_subclients(self):
+        from orionapi import Eclipse
+
+        api = Eclipse(eclipse_token="tok")
+        mock_get = Mock(return_value=Mock(ok=True, json=Mock(return_value={"ocFirmId": [7]})))
+        with patch("requests.get", mock_get):
+            assert api.get_orion_connect_firm_id() == 7
+            assert api.v2.get_orion_connect_firm_id() == 7
+        assert mock_get.call_count == 1
+
+
 def _eclipse_v1():
     """Construct an EclipseV1 with auth/login patched out for unit tests."""
     with patch.object(EclipseV1, "login"):
