@@ -2644,6 +2644,25 @@ class TestEclipseV2ConfigPrefs:
         assert mock_post.call_args.kwargs["json"] == entries
         mock_post.return_value.json.assert_not_called()
 
+    def test_billing_set_aside_cash_sync_waits_for_analytics(self):
+        api = _eclipse_for_set_asides()
+        mock_post = _mock_post(None)
+        mock_post.return_value.content = b""
+        entries = [{"orionConnectExternalAccountId": 7, "orionConnectFirmId": 9, "amount": 1}]
+        with (
+            patch("requests.post", mock_post),
+            patch.object(api, "wait_for_analytics") as mock_wait,
+        ):
+            assert api.billing_set_aside_cash(entries, sync=True) is None
+            mock_wait.assert_called_once()
+            api.billing_set_aside_cash(entries)
+            mock_wait.assert_called_once()  # default sync=False does not wait
+
+    def test_analytics_helpers_available_on_v2(self):
+        """wait_for_analytics lives on EclipseBase, so standalone v2 can sync."""
+        assert callable(getattr(EclipseV2, "wait_for_analytics", None))
+        assert callable(getattr(EclipseV2, "_maybe_wait_for_analytics", None))
+
     def test_billing_set_aside_cash_fills_firm_id(self):
         api = _eclipse_for_set_asides()
         mock_post = _mock_post(None)

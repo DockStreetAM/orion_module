@@ -2214,6 +2214,35 @@ class TestOrionForecastBilling:
         with pytest.raises(ValueError, match="date_range must be a list"):
             api.create_billing_instance(date_range="2026-10-01")
 
+    def test_create_billing_instance_sends_empty_keys_by_default(self):
+        """Orion 404s AllHouseholds without keys; [] works (live-verified)."""
+        api = self._make_api()
+        with patch.object(api, "api_request", return_value=self._resp({"id": 1})) as mock:
+            api.create_billing_instance(is_forecast=True)
+            assert mock.call_args[1]["json"]["keys"] == []
+
+    def test_create_billing_instance_passes_keys(self):
+        api = self._make_api()
+        with patch.object(api, "api_request", return_value=self._resp({"id": 1})) as mock:
+            api.create_billing_instance(run_for="SingleHHNewBill", keys=[23])
+            assert mock.call_args[1]["json"]["keys"] == [23]
+
+    # --- create_bill_data_files --------------------------------------------
+
+    def test_create_bill_data_files(self):
+        api = self._make_api()
+        with patch.object(api, "api_request", return_value=self._resp(content=b"")) as mock:
+            assert api.create_bill_data_files(169) is None
+            assert mock.call_args[0][0].endswith("/Billing/Instances/169/Action/BillDataFiles")
+            assert mock.call_args[0][1] is requests.post
+            assert "json" not in mock.call_args[1]
+            assert "data" not in mock.call_args[1]
+
+    def test_create_bill_data_files_validates(self):
+        api = self._make_api()
+        with pytest.raises(ValueError, match="instance_id must be a positive integer"):
+            api.create_bill_data_files(0)
+
     # --- invalidate / cancel ------------------------------------------------
 
     def test_invalidate_billing_instance_validate_param(self):
