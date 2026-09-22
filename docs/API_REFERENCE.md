@@ -1,4 +1,4 @@
-# orionapi API Reference (v2.32.1)
+# orionapi API Reference (v2.33.0)
 
 Auto-generated from docstrings by `scripts/gen_api_reference.py`. Eclipse methods note their underlying endpoint.
 
@@ -8,7 +8,7 @@ Classes: `OrionAPI` (Orion Advisor), `EclipseV1` / `EclipseV2` (explicit Eclipse
 
 Client for the Orion Advisor API.
 
-**84 methods.**
+**85 methods.**
 
 | Method | Endpoint | Description |
 |---|---|---|
@@ -18,6 +18,7 @@ Client for the Orion Advisor API.
 | `complete_billing_instance(instance_id)` | `POST /Billing/Instances/{instance_id}/Action/Complete` | Finalize/complete a billing instance. |
 | `convert_account(from_account_id, convert_date, copy_assets=True, copy_billing=True, copy_transactions=True, old_active=False)` | `POST /Portfolio/Accounts/Action/ConvertAccount` | Convert an account (e.g., IRA to Roth conversion). |
 | `copy_report_batch(batch_id, name, start_date=None, end_date=None)` |  | Copy an existing report batch with a new name and optional date range. |
+| `create_bill_data_files(instance_id)` | `POST /Billing/Instances/{instance_id}/Action/BillDataFiles` | Create the Data Files for a billing instance and advance its status. |
 | `create_billing_instance(is_forecast=False, run_for='AllHouseholds', run_for_accounts='ActiveAccounts', bill_type='Renewal', nickname=None, keys=None, as_of_date=None, end_date_override=None, include_cash_flow=False, allow_duplicate_mock_bills=None, value_as_of_override=None, date_range=None)` | `POST /Billing/BillGenerator/Action/Instance` | Create a new billing instance (live or forecast). |
 | `create_client(data)` | `POST /Portfolio/Clients/Verbose` | Create a new client/household. |
 | `create_orion_account(data, generate_account_number=False)` | `POST /Portfolio/Accounts/Verbose` | Create a new account. |
@@ -101,7 +102,7 @@ Client for the Orion Advisor API.
 
 Eclipse client targeting the v1 API surface (``/v1/...``) only.
 
-**228 methods.**
+**226 methods.**
 
 | Method | Endpoint | Description |
 |---|---|---|
@@ -177,7 +178,6 @@ Eclipse client targeting the v1 API surface (``/v1/...``) only.
 | `get_all_submodels(model_type=None)` | `GET /modeling/models/allSubModel` | Get all submodels, optionally filtered by model type. |
 | `get_allow_short_term_gains_options()` | `GET /tradetool/allowshorttermgains` | Get the allow-short-term-gains options. |
 | `get_allow_wash_sales_options()` | `GET /tradetool/allowwashsales` | Get the allow-wash-sales options. |
-| `get_analytics_status()` | `GET /dataimport/analysis/status` | Check if analytics are currently running. |
 | `get_aside_cash_account_types()` | `GET /portfolio/portfolios/asideCashAccountType` | Get the set-aside-cash account types. |
 | `get_aside_cash_amount_types()` | `GET /account/accounts/asideCashAmountType` | Get set-aside-cash amount types. |
 | `get_aside_cash_expiration_types()` | `GET /account/accounts/asideCashExpirationType` | Get set-aside-cash expiration types. |
@@ -332,7 +332,6 @@ Eclipse client targeting the v1 API surface (``/v1/...``) only.
 | `validate_model_upload(payload)` | `POST /modeling/models/upload/validate` | Validate a model upload (POST-body). |
 | `validate_tlh_securities(payload)` | `POST /tradetool/taxLossHarvesting/action/validateTLHSecurities` | Validate tax-loss-harvesting securities (POST-body). |
 | `validate_trade(action_id, account_id=None, portfolio_id=None, security_id=None, dollar_amount=None, quantity=None, percentage=None, is_auto_allocate=None)` | `POST /tradeorder/trades/validate` | Validate a trade before creating it (``POST /tradeorder/trades/validate``). |
-| `wait_for_analytics(poll_interval=1, timeout=300)` |  | Wait for analytics to complete. |
 
 ## EclipseV2
 
@@ -352,7 +351,7 @@ Eclipse client targeting the v2 API surface (``/api/v2/...``) only.
 | `add_trade_block_reason_by_name(payload)` | `POST /api/v2/TradeBlockReasons/AddByName` | Add a trade-block reason by name (mutating). |
 | `apply_custom_import(instance_id)` | `PUT /api/v2/CustomImports/Instances/Apply/{instance_id}` | Apply a custom-import instance (mutating). |
 | `assign_model_to_portfolios(payload)` | `PUT /api/v2/Portfolio/Portfolios/action/assignModel` | Assign a model to portfolios (mutating). |
-| `billing_set_aside_cash(payload)` | `POST /api/v2/SetAsideCash/BillingSetAsideCash` | Set each account's billing set-aside cash (mutating). |
+| `billing_set_aside_cash(payload, sync=False)` | `POST /api/v2/SetAsideCash/BillingSetAsideCash` | Set each account's billing set-aside cash (mutating). |
 | `build_trade(account_id, portfolio_id, security_id, action, shares=None, amount=None, percent=None, **extra)` |  | Build one entry for the ``trades`` list of :meth:`validate_trades` / |
 | `cancel_analytics()` | `POST /api/v2/Analytics/Cancel` | Cancel the running analytics (mutating). |
 | `classify_securities(classifications)` | `POST /api/v2/AssetClassification/Security/Classifications` | Assign classifications to securities. |

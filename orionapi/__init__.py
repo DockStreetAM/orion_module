@@ -1,4 +1,4 @@
-__version__ = "2.32.1"
+__version__ = "2.33.0"
 
 import logging
 import re
@@ -1492,7 +1492,8 @@ class OrionAPI(BaseAPI):
             bill_type: Type of bill. One of: Unknown, Renewal, NewMoney,
                 NewAccount, FinancialPlanningFee, Performance, AdvanceCreditDebit
             nickname: Optional nickname for this billing instance
-            keys: Optional list of integer IDs for the selected run_for scope
+            keys: Optional list of integer IDs for the selected run_for scope.
+                Sent as [] when omitted (required by Orion for AllHouseholds).
             as_of_date: Optional as-of date (YYYY-MM-DD format)
             end_date_override: Optional end date override (YYYY-MM-DD format)
             include_cash_flow: Whether to include cash flow (default False)
@@ -1529,8 +1530,9 @@ class OrionAPI(BaseAPI):
         }
         if nickname is not None:
             payload["nickName"] = nickname
-        if keys is not None:
-            payload["keys"] = keys
+        # Always send keys: with it omitted, runFor="AllHouseholds" gets a
+        # 404 "Object does not exist" (live-verified 2026-09); [] works.
+        payload["keys"] = keys if keys is not None else []
         if as_of_date is not None:
             payload["asOfDate"] = as_of_date
         if end_date_override is not None:
@@ -1840,8 +1842,39 @@ class OrionAPI(BaseAPI):
         )
         return _json_or_none(res)
 
+    def create_bill_data_files(self, instance_id):
+        """Create the Data Files for a billing instance and advance its status.
+
+        What "Create" on the Data Files step of Orion's billing screen calls.
+        Unlike generate_audit_files(), this completes the Data Files step: a
+        forecast in "Data Files Needed" moves to "Complete". It also writes a
+        fourth file, "reconciliation data.XLSX", alongside the billing audit
+        CSV and the billing data / payable summary XLSX files.
+
+        The call returns before the files exist (they appeared within ~10s,
+        2026-09); list them with get_audit_files(instance_id=...).
+
+        Args:
+            instance_id: Billing instance ID
+
+        Returns:
+            None: Orion answers 200 with an empty body
+        """
+        if not isinstance(instance_id, int) or instance_id < 1:
+            raise ValueError("instance_id must be a positive integer")
+
+        res = self.api_request(
+            f"{self.base_url}/Billing/Instances/{instance_id}/Action/BillDataFiles",
+            requests.post,
+        )
+        return _json_or_none(res)
+
     def generate_audit_files(self, instance_ids, start_date=None, end_date=None, entity_list=None):
         """Generate the billing audit files for billing instance(s).
+
+        This does NOT complete the Data Files step: the instance stays in
+        "Data Files Needed". To do what the billing screen's "Create" does,
+        use create_bill_data_files().
 
         Works on forecast instances. For one instance Orion produced three
         files within ~10s: "billing audit.CSV", "billing data.XLSX" and
@@ -3004,6 +3037,45 @@ class EclipseBase(BaseAPI):
             owner._orion_connect_firm_id = firm_ids[0]
         return owner._orion_connect_firm_id
 
+    def get_analytics_status(self):
+        """Check if analytics are currently running.
+
+        Returns:
+            dict: Status with 'isAnalysisRunning' and 'doRunAnalytics' flags
+                  (0 = not running/no pending, 1 = running/pending)
+        """
+        res = self.api_request(f"{self.base_url}/dataimport/analysis/status")
+        return res.json()
+
+    def wait_for_analytics(self, poll_interval=1, timeout=300):
+        """Wait for analytics to complete.
+
+        Polls the analytics status until isAnalysisRunning is 0.
+
+        Args:
+            poll_interval: Seconds between status checks (default 1)
+            timeout: Max seconds to wait (default 300)
+
+        Returns:
+            True when analytics complete
+
+        Raises:
+            TimeoutError: If analytics don't complete within timeout
+        """
+        start = time.time()
+        while True:
+            status = self.get_analytics_status()
+            if not status.get("isAnalysisRunning"):
+                return True
+            if time.time() - start > timeout:
+                raise TimeoutError(f"Analytics did not complete within {timeout} seconds")
+            time.sleep(poll_interval)
+
+    def _maybe_wait_for_analytics(self, sync):
+        """Helper to conditionally wait for analytics."""
+        if sync:
+            self.wait_for_analytics()
+
 
 class EclipseV1(EclipseBase):
     """Eclipse client targeting the v1 API surface (``/v1/...``) only.
@@ -3416,45 +3488,6 @@ class EclipseV1(EclipseBase):
         """
         res = self.api_request(f"{self.base_url}/postimport/run_need_analysis")
         return res.json()
-
-    def get_analytics_status(self):
-        """Check if analytics are currently running.
-
-        Returns:
-            dict: Status with 'isAnalysisRunning' and 'doRunAnalytics' flags
-                  (0 = not running/no pending, 1 = running/pending)
-        """
-        res = self.api_request(f"{self.base_url}/dataimport/analysis/status")
-        return res.json()
-
-    def wait_for_analytics(self, poll_interval=1, timeout=300):
-        """Wait for analytics to complete.
-
-        Polls the analytics status until isAnalysisRunning is 0.
-
-        Args:
-            poll_interval: Seconds between status checks (default 1)
-            timeout: Max seconds to wait (default 300)
-
-        Returns:
-            True when analytics complete
-
-        Raises:
-            TimeoutError: If analytics don't complete within timeout
-        """
-        start = time.time()
-        while True:
-            status = self.get_analytics_status()
-            if not status.get("isAnalysisRunning"):
-                return True
-            if time.time() - start > timeout:
-                raise TimeoutError(f"Analytics did not complete within {timeout} seconds")
-            time.sleep(poll_interval)
-
-    def _maybe_wait_for_analytics(self, sync):
-        """Helper to conditionally wait for analytics."""
-        if sync:
-            self.wait_for_analytics()
 
     def get_orders(self):
         """Deprecated alias of ``get_trades(is_pending=False)``.
@@ -9726,7 +9759,7 @@ class EclipseV2(EclipseBase):
         )
         return res.json()
 
-    def billing_set_aside_cash(self, payload):
+    def billing_set_aside_cash(self, payload, sync=False):
         """Set each account's billing set-aside cash (mutating).
 
         The endpoint behind Orion's Cash Funding Export. Give it dollar
@@ -9751,6 +9784,8 @@ class EclipseV2(EclipseBase):
                 Orion account id (the ``id`` of a get_cash_funding() row), not
                 the Eclipse id. ``orionConnectFirmId`` is filled in from
                 get_orion_connect_firm_id() when an entry omits it.
+            sync: If True, wait for Eclipse analytics to finish after the
+                POST, as create_set_aside(sync=True) does (default False)
 
         Returns:
             dict | None: Parsed response, or None on the empty body the
@@ -9770,7 +9805,9 @@ class EclipseV2(EclipseBase):
         res = self.api_request(
             f"{self.base_url_v2}/SetAsideCash/BillingSetAsideCash", requests.post, json=payload
         )
-        return _json_or_none(res)
+        result = _json_or_none(res)
+        self._maybe_wait_for_analytics(sync)
+        return result
 
     def delete_account_set_aside_cash(self, payload):
         """Delete account set-aside cash (mutating).
