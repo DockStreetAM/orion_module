@@ -1108,7 +1108,8 @@ class TestOrionBillingOperations:
             mock.return_value = Mock(
                 json=Mock(return_value={"id": 1801, "accountId": 74, "cashAmount": 4763.0})
             )
-            result = api.sync_cash_to_eclipse(self.CASH_FUNDING_ROW)
+            with pytest.warns(DeprecationWarning, match="billing_set_aside_cash"):
+                result = api.sync_cash_to_eclipse(self.CASH_FUNDING_ROW)
             assert result["cashAmount"] == 4763.0
 
             call_url = mock.call_args[0][0]
@@ -1123,6 +1124,7 @@ class TestOrionBillingOperations:
             assert body["accountNumber"] == "27163812"
             assert body["feeReqSrc"] == "Cash account"
 
+    @pytest.mark.filterwarnings("ignore:sync_cash_to_eclipse is deprecated")
     def test_sync_cash_to_eclipse_accepts_account_id(self):
         """Test a dict already keyed accountId passes through."""
         api = self._make_api()
@@ -1132,6 +1134,7 @@ class TestOrionBillingOperations:
             body = mock.call_args[1]["json"]
             assert body == {"accountId": 99, "balanceDue": 10.0}
 
+    @pytest.mark.filterwarnings("ignore:sync_cash_to_eclipse is deprecated")
     def test_sync_cash_to_eclipse_drops_unknown_fields(self):
         """Test extra grid columns are not sent in the request body."""
         api = self._make_api()
@@ -1141,6 +1144,7 @@ class TestOrionBillingOperations:
             api.sync_cash_to_eclipse(row)
             assert "someNewColumn" not in mock.call_args[1]["json"]
 
+    @pytest.mark.filterwarnings("ignore:sync_cash_to_eclipse is deprecated")
     def test_sync_cash_to_eclipse_invalid(self):
         """Test sync_cash_to_eclipse with an invalid account."""
         api = self._make_api()

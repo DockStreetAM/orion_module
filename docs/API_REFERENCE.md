@@ -1,4 +1,4 @@
-# orionapi API Reference (v2.31.1)
+# orionapi API Reference (v2.32.0)
 
 Auto-generated from docstrings by `scripts/gen_api_reference.py`. Eclipse methods note their underlying endpoint.
 
@@ -87,7 +87,7 @@ Client for the Orion Advisor API.
 | `search_registrations(search_term, top=20, is_active=True)` | `GET /Portfolio/Registrations/Simple/Search` | Search for registrations by name. |
 | `send_electronic_statements(batch_id, entity_ids=None)` | `POST /Reporting/Batch/{batch_id}/Entities/Action/SendElectronicStatement` | Send electronic statements (email) for a report batch. |
 | `split_registration(registration_id)` | `PUT /Portfolio/Registrations/{registration_id}/Action/Split` | Split a registration so each active non-sleeved account gets its own registration. |
-| `sync_cash_to_eclipse(account)` | `POST /Billing/SyncCashtoEclipse` | Export one cash funding row to Eclipse as a cash set-aside. |
+| `sync_cash_to_eclipse(account)` | `POST /Billing/SyncCashtoEclipse` | Deprecated: export one cash funding row to Eclipse as a set-aside. |
 | `undo_account_conversion(account_id)` | `DELETE /Portfolio/Accounts/{account_id}/Action/UndoConversion` | Undo an account conversion. |
 | `update_bill_item_adjustments(bill_account_item_id, adjustments, create_payable_adj=None)` | `PUT /Billing/BillGenerator/BillAccountItems/BillAccountAdj/edit/{bill_account_item_id}` | Add, update, or delete adjustments on a bill account item. |
 | `update_client(client_id, data)` | `PUT /Portfolio/Clients/{client_id}` | Update a household/client. |
@@ -352,7 +352,7 @@ Eclipse client targeting the v2 API surface (``/api/v2/...``) only.
 | `add_trade_block_reason_by_name(payload)` | `POST /api/v2/TradeBlockReasons/AddByName` | Add a trade-block reason by name (mutating). |
 | `apply_custom_import(instance_id)` | `PUT /api/v2/CustomImports/Instances/Apply/{instance_id}` | Apply a custom-import instance (mutating). |
 | `assign_model_to_portfolios(payload)` | `PUT /api/v2/Portfolio/Portfolios/action/assignModel` | Assign a model to portfolios (mutating). |
-| `billing_set_aside_cash(payload)` | `POST /api/v2/SetAsideCash/BillingSetAsideCash` | Create or update billing set-aside cash (mutating). |
+| `billing_set_aside_cash(payload)` | `POST /api/v2/SetAsideCash/BillingSetAsideCash` | Set each account's billing set-aside cash (mutating). |
 | `build_trade(account_id, portfolio_id, security_id, action, shares=None, amount=None, percent=None, **extra)` |  | Build one entry for the ``trades`` list of :meth:`validate_trades` / |
 | `cancel_analytics()` | `POST /api/v2/Analytics/Cancel` | Cancel the running analytics (mutating). |
 | `classify_securities(classifications)` | `POST /api/v2/AssetClassification/Security/Classifications` | Assign classifications to securities. |
