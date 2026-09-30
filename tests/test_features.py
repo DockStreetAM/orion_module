@@ -1257,6 +1257,7 @@ class TestEclipseV1TradeGenPreview:
         with (
             patch("requests.post", mock_post),
             patch.object(EclipseV1, "_maybe_wait_for_analytics"),
+            patch.object(EclipseV1, "get_portfolio_accounts", return_value=[]),
         ):
             api.spend_cash_trade([1])
         body = mock_post.call_args.kwargs["json"]
@@ -1264,12 +1265,49 @@ class TestEclipseV1TradeGenPreview:
         assert "spendFullAmount" not in body
         assert "filterType" not in body
 
+    def test_spend_cash_trade_resolves_accounts_from_portfolios(self):
+        # Portfolio-only bodies 500 for every portfolio; the accounts must be sent.
+        api = _eclipse_v1()
+        mock_post = _mock_post({"instanceId": 1})
+        with (
+            patch("requests.post", mock_post),
+            patch.object(EclipseV1, "_maybe_wait_for_analytics"),
+            patch.object(
+                EclipseV1,
+                "get_portfolio_accounts",
+                side_effect=lambda pid: {204: [{"id": 620}, {"id": 802}], 409: [{"id": 9}]}[pid],
+            ) as mock_accts,
+        ):
+            api.spend_cash_trade([204, 409])
+        body = mock_post.call_args.kwargs["json"]
+        assert body["accounts"] == [
+            {"id": 620, "amount": 0},
+            {"id": 802, "amount": 0},
+            {"id": 9, "amount": 0},
+        ]
+        assert body["sleevedPortfolios"] is None
+        assert body["emphasiedAccounts"] is None
+        assert [c.args[0] for c in mock_accts.call_args_list] == [204, 409]
+
+    def test_spend_cash_trade_explicit_accounts_skip_lookup(self):
+        api = _eclipse_v1()
+        mock_post = _mock_post({"instanceId": 1})
+        with (
+            patch("requests.post", mock_post),
+            patch.object(EclipseV1, "_maybe_wait_for_analytics"),
+            patch.object(EclipseV1, "get_portfolio_accounts") as mock_accts,
+        ):
+            api.spend_cash_trade([204], accounts=[{"id": 620, "amount": 1500}])
+        assert mock_post.call_args.kwargs["json"]["accounts"] == [{"id": 620, "amount": 1500}]
+        mock_accts.assert_not_called()
+
     def test_spend_cash_trade_extra_params_present(self):
         api = _eclipse_v1()
         mock_post = _mock_post({"instanceId": 1})
         with (
             patch("requests.post", mock_post),
             patch.object(EclipseV1, "_maybe_wait_for_analytics"),
+            patch.object(EclipseV1, "get_portfolio_accounts", return_value=[]),
         ):
             api.spend_cash_trade([1], selected_method_id=3, spend_full_amount=True, filter_type="X")
         body = mock_post.call_args.kwargs["json"]
