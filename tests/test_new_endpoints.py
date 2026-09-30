@@ -568,6 +568,7 @@ class TestEclipseTradeTools:
             with (
                 patch.object(api, "api_request") as mock_api_request,
                 patch.object(api, "_maybe_wait_for_analytics"),
+                patch.object(api, "get_portfolio_accounts", return_value=[{"id": 7}]),
             ):
                 mock_response = Mock()
                 mock_response.json.return_value = {

@@ -1,4 +1,4 @@
-__version__ = "2.33.0"
+__version__ = "2.34.0"
 
 import logging
 import re
@@ -3858,8 +3858,18 @@ class EclipseV1(EclipseBase):
         selected_method_id=None,
         spend_full_amount=None,
         filter_type=None,
+        accounts=None,
     ):
         """Generate Spend Cash trade for portfolios.
+
+        Eclipse's spend-cash generator needs the accounts spelled out: a body with
+        only ``portfolioIds`` returns 500 "please verify parameters" for every
+        portfolio (live-verified 2026-09-29 across 9 portfolios). So when
+        ``accounts`` is omitted, the accounts of each portfolio are resolved via
+        :meth:`get_portfolio_accounts` and sent as ``{"id": <internal id>,
+        "amount": 0}`` (one extra GET per portfolio). ``sleevedPortfolios`` and
+        ``emphasiedAccounts`` (sic, Eclipse's spelling) are sent as null, as in
+        Eclipse's documented examples.
 
         Args:
             portfolio_ids: List of portfolio IDs to process
@@ -3874,12 +3884,23 @@ class EclipseV1(EclipseBase):
                 (see ``get_spend_cash_methods``); added to the body only when provided
             spend_full_amount: Optional bool; added to the body only when provided
             filter_type: Optional filter type; added to the body only when provided
+            accounts: Optional list of ``{"id": <Eclipse internal account id>,
+                "amount": <number>}``. Omitted: resolved from ``portfolio_ids``.
+                Account ids are Eclipse internal ids (``get_portfolio_accounts``
+                ``id``), not the Orion ``accountId``.
 
         Returns:
             dict with 'issues', 'success', and 'instanceId' fields
         """
         if portfolio_trade_group_ids is None:
             portfolio_trade_group_ids = []
+        if accounts is None:
+            accounts = [
+                {"id": acct["id"], "amount": 0}
+                for pid in portfolio_ids or []
+                for acct in (self.get_portfolio_accounts(pid) or [])
+                if isinstance(acct, dict) and acct.get("id") is not None
+            ]
 
         payload = {
             "portfolioIds": portfolio_ids,
@@ -3887,6 +3908,9 @@ class EclipseV1(EclipseBase):
             "isViewOnly": is_view_only,
             "reason": reason,
             "isExcelImport": is_excel_import,
+            "accounts": accounts,
+            "sleevedPortfolios": None,
+            "emphasiedAccounts": None,
         }
         if selected_method_id is not None:
             payload["selectedMethodId"] = selected_method_id
