@@ -12075,15 +12075,54 @@ class EclipseV2(EclipseBase):
     def patch_portfolio(self, portfolio_id, payload):
         """Patch a portfolio (partial update, mutating).
 
+        The v2 swagger types the body as a JSON Patch (RFC 6902) operation
+        list, not a partial DTO: ``[{"op": "replace", "path": "/name",
+        "value": "..."}]``. Prefer a narrow wrapper such as
+        :meth:`rename_portfolio` over calling this directly.
+
         Args:
             portfolio_id: Portfolio ID
-            payload: Partial portfolio DTO (request body)
+            payload: JSON Patch operation list (request body)
         """
         return self.api_request(
             f"{self.base_url_v2}/Portfolio/Portfolios/{portfolio_id}",
             requests.patch,
             json=payload,
         ).json()
+
+    def rename_portfolio(self, portfolio_id, name):
+        """Rename a portfolio. Changes ``name`` and no other field.
+
+        Sends one JSON Patch ``replace`` on ``/name`` to the v2
+        ``PATCH /Portfolio/Portfolios/{portfolioId}`` endpoint, with the
+        ``application/json-patch+json`` content type the swagger lists first.
+        Unlike the v1 whole-object PUT, a single-path patch cannot strip teams,
+        model, trading instructions or rebalance settings.
+
+        Swagger-derived and NOT yet verified live. Verify with an idempotent
+        probe before relying on it: read the portfolio, rename it to its
+        current name, read again, and diff ``general`` and ``teams``.
+
+        Args:
+            portfolio_id: Portfolio ID (positive int)
+            name: New portfolio name (non-empty; surrounding whitespace stripped)
+
+        Returns:
+            dict: Portfolio details read back after the patch (same shape as
+            :meth:`get_portfolio_v2`)
+        """
+        if isinstance(portfolio_id, bool) or not isinstance(portfolio_id, int) or portfolio_id < 1:
+            raise ValueError("portfolio_id must be a positive integer")
+        if not isinstance(name, str) or not name.strip():
+            raise ValueError("name must be a non-empty string")
+
+        self.api_request(
+            f"{self.base_url_v2}/Portfolio/Portfolios/{portfolio_id}",
+            requests.patch,
+            json=[{"op": "replace", "path": "/name", "value": name.strip()}],
+            headers={"Content-Type": "application/json-patch+json"},
+        )
+        return self.get_portfolio_v2(portfolio_id)
 
     def get_sleeve_strategy_aggregates_by_firm_ids(self, payload):
         """Get sleeve strategy aggregates for a list of firm IDs (POST-body read).

@@ -4407,6 +4407,53 @@ class TestEclipseCoverageBatch16Sweep:
         assert m.call_args.kwargs["params"] == {"modelId": 5}
 
 
+class TestRenamePortfolio:
+    """rename_portfolio: one JSON Patch replace on /name, then a v2 read-back."""
+
+    def _run(self, portfolio_id, name):
+        api = _eclipse_for_set_asides()
+        mock_patch = _mock_post({"id": portfolio_id})
+        mock_get = _mock_get({"id": portfolio_id, "name": name})
+        with patch("requests.patch", mock_patch), patch("requests.get", mock_get):
+            result = api.rename_portfolio(portfolio_id, name)
+        return mock_patch, mock_get, result
+
+    def test_sends_single_name_replace_as_json_patch(self):
+        mock_patch, _, _ = self._run(132, "New Name")
+        assert mock_patch.call_args.args[0] == f"{V2_BASE}/Portfolio/Portfolios/132"
+        assert mock_patch.call_args.kwargs["json"] == [
+            {"op": "replace", "path": "/name", "value": "New Name"}
+        ]
+        headers = mock_patch.call_args.kwargs["headers"]
+        assert headers["Content-Type"] == "application/json-patch+json"
+        assert headers["Authorization"] == "Session test-token"
+
+    def test_strips_whitespace(self):
+        mock_patch, _, _ = self._run(132, "  New Name  ")
+        assert mock_patch.call_args.kwargs["json"][0]["value"] == "New Name"
+
+    def test_returns_v2_read_back(self):
+        _, mock_get, result = self._run(132, "New Name")
+        assert mock_get.call_args.args[0] == f"{V2_BASE}/Portfolio/Portfolios/132"
+        assert result == {"id": 132, "name": "New Name"}
+
+    @pytest.mark.parametrize("bad_id", [0, -1, "132", None, True, 1.5])
+    def test_rejects_bad_portfolio_id(self, bad_id):
+        api = _eclipse_for_set_asides()
+        mock_patch = _mock_post({})
+        with patch("requests.patch", mock_patch), pytest.raises(ValueError, match="portfolio_id"):
+            api.rename_portfolio(bad_id, "Name")
+        mock_patch.assert_not_called()
+
+    @pytest.mark.parametrize("bad_name", ["", "   ", None, 5])
+    def test_rejects_bad_name(self, bad_name):
+        api = _eclipse_for_set_asides()
+        mock_patch = _mock_post({})
+        with patch("requests.patch", mock_patch), pytest.raises(ValueError, match="name"):
+            api.rename_portfolio(132, bad_name)
+        mock_patch.assert_not_called()
+
+
 class TestEclipseV2TradeToolAdminAnalyticsBatch17:
     """v2 TradeTool/Admin/Analytics (batch 17)."""
 
