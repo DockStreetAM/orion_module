@@ -597,7 +597,8 @@ Eclipse client targeting the v2 API surface (``/api/v2/...``) only.
 | `global_search(search=None, name=None, status=None, include_value=None, limit=None)` | `GET /api/v2/GlobalSearch/GlobalSearchList` | Global search across Eclipse entities (v2). |
 | `list_accounts(body=None, filter_id=None, portfolio_id=None, limit=None, offset=None)` | `POST /api/v2/Account/Accounts/list` | List accounts via the v2 POST-body filtered endpoint. |
 | `list_portfolios(body=None, filter_id=None, limit=None, offset=None)` | `POST /api/v2/Portfolio/Portfolios/list` | List portfolios via the v2 POST-body filtered endpoint. |
-| `patch_portfolio(portfolio_id, payload)` | `PATCH /api/v2/Portfolio/Portfolios/{portfolio_id}` | Patch a portfolio (partial update, mutating). |
+| `patch_portfolio(portfolio_id, payload)` | `PATCH /api/v2/Portfolio/Portfolios/{portfolio_id}` | Patch a portfolio with a JSON Patch operation list (mutating). |
+| `rename_portfolio(portfolio_id, name)` | `PATCH /api/v2/Portfolio/Portfolios/{portfolio_id}` | Rename a portfolio: one JSON Patch `replace` on `/name`, then a v2 read-back (mutating; not yet verified live). |
 | `raise_cash_by_fund(payload)` | `POST /api/v2/TradeTool/RaiseCashByFund` | Generate a raise-cash-by-fund trade (pass isViewOnly in body for preview). |
 | `raise_cash_distribution_full_rebalance(payload)` | `POST /api/v2/TradeTool/RaiseCashDistributionFullRebalance` | Generate a raise-cash-distribution full-rebalance trade. |
 | `request_import(payload)` | `POST /api/v2/DataImport/Action/RequestImport` | Request a data import (mutating). |
