@@ -1,4 +1,4 @@
-# orionapi API Reference (v2.33.0)
+# orionapi API Reference (v2.34.0)
 
 Auto-generated from docstrings by `scripts/gen_api_reference.py`. Eclipse methods note their underlying endpoint.
 
@@ -310,7 +310,7 @@ Eclipse client targeting the v1 API surface (``/v1/...``) only.
 | `set_portfolio_tradeable(portfolio_id, tradeable=True, sync=True)` | `PUT /api/v2/Portfolio/Portfolios/action/setPortfolioTradeBlock` | Set whether trading is allowed for a portfolio. |
 | `set_security_set_favorite(set_id, payload)` | `PUT /security/securityset/favorites/{set_id}` | Set a security set as favorite (mutating). |
 | `set_submodel_favorite(submodel_id, payload)` | `PUT /modeling/models/submodels/favorites/{submodel_id}` | Set a submodel as favorite (mutating). |
-| `spend_cash_trade(portfolio_ids, portfolio_trade_group_ids=None, is_view_only=True, reason='', is_excel_import=False, sync=True, selected_method_id=None, spend_full_amount=None, filter_type=None)` | `POST /tradetool/spendcash/action/generatetrade` | Generate Spend Cash trade for portfolios. |
+| `spend_cash_trade(portfolio_ids, portfolio_trade_group_ids=None, is_view_only=True, reason='', is_excel_import=False, sync=True, selected_method_id=None, spend_full_amount=None, filter_type=None, accounts=None)` | `POST /tradetool/spendcash/action/generatetrade` | Generate Spend Cash trade for portfolios. |
 | `sync_model_from_file(file_path, model_id=None)` |  | Sync a model from a definition file to Eclipse. |
 | `sync_model_from_file_by_name(file_path)` |  | Sync a model from file, auto-detecting create vs update. |
 | `sync_security_set_from_file(file_path, set_id=None)` |  | Sync a security set from a definition file to Eclipse. |
@@ -337,7 +337,7 @@ Eclipse client targeting the v1 API surface (``/v1/...``) only.
 
 Eclipse client targeting the v2 API surface (``/api/v2/...``) only.
 
-**311 methods.**
+**312 methods.**
 
 | Method | Endpoint | Description |
 |---|---|---|
@@ -600,6 +600,7 @@ Eclipse client targeting the v2 API surface (``/api/v2/...``) only.
 | `patch_portfolio(portfolio_id, payload)` | `PATCH /api/v2/Portfolio/Portfolios/{portfolio_id}` | Patch a portfolio (partial update, mutating). |
 | `raise_cash_by_fund(payload)` | `POST /api/v2/TradeTool/RaiseCashByFund` | Generate a raise-cash-by-fund trade (pass isViewOnly in body for preview). |
 | `raise_cash_distribution_full_rebalance(payload)` | `POST /api/v2/TradeTool/RaiseCashDistributionFullRebalance` | Generate a raise-cash-distribution full-rebalance trade. |
+| `rename_portfolio(portfolio_id, name)` | `PATCH /api/v2/Portfolio/Portfolios/{portfolio_id}` | Rename a portfolio. Changes ``name`` and no other field. |
 | `request_import(payload)` | `POST /api/v2/DataImport/Action/RequestImport` | Request a data import (mutating). |
 | `reset_analytics_run_history()` | `GET /api/v2/Analytics/ResetAnalyticsRunHistory` | Reset the analytics run history (mutating). |
 | `resync_import_errored_accounts()` | `POST /api/v2/DataImport/Action/ResyncImportErroredAccounts` | Resync accounts that errored during import (mutating). |
