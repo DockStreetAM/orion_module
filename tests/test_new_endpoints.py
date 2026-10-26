@@ -1082,7 +1082,7 @@ class TestOrionBillingOperations:
 
     CASH_FUNDING_ROW = {
         "id": 74,
-        "registrationName": "David H Bruce 1980",
+        "registrationName": "Jane Q Sample 1980",
         "registrationId": 74,
         "fundFamily": "Schwab",
         "productName": "Cash and Equivalents",
@@ -1092,13 +1092,13 @@ class TestOrionBillingOperations:
         "payMethod": "Direct",
         "instanceType": "Forecast",
         "clientId": 61,
-        "clientLastName": "Bruce",
-        "clientName": "David & Krista Bruce",
+        "clientLastName": "Sample",
+        "clientName": "Jane & John Sample",
         "accountType": "Trust",
-        "accountNumber": "27163812",
+        "accountNumber": "10000003",
         "managementStyle": "Managed Account",
         "accountIsActive": True,
-        "representativeName": "Daniel Ogden",
+        "representativeName": "Test Advisor",
         "feeReqSrc": "Cash account",
     }
 
@@ -1122,7 +1122,7 @@ class TestOrionBillingOperations:
             assert body["accountId"] == 74
             assert "id" not in body
             assert body["balanceDue"] == 4763.0
-            assert body["accountNumber"] == "27163812"
+            assert body["accountNumber"] == "10000003"
             assert body["feeReqSrc"] == "Cash account"
 
     @pytest.mark.filterwarnings("ignore:sync_cash_to_eclipse is deprecated")
