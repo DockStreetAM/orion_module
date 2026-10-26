@@ -440,7 +440,7 @@ class TestSetAsideDepleteOverTimePassthrough:
 SAMPLE_SET_ASIDE = {
     "id": 1723,
     "accountId": 1114,
-    "accountNumber": "08197200",
+    "accountNumber": "10000001",
     "setAsideCashAmount": 15500.0,
     "setAsideCashAmountType": "Dollar",
     "cashAmountTypeId": 1,
@@ -481,7 +481,7 @@ class TestGetSetAsides:
         with patch.object(api, "get_internal_account_id", return_value=123):
             mock_post = _mock_post([dict(SAMPLE_SET_ASIDE)])
             with patch("requests.post", mock_post):
-                result = api.get_set_asides("08197200")
+                result = api.get_set_asides("10000001")
 
         # POST body is the resolved internal account id list
         assert mock_post.call_args.kwargs["json"] == [123]
@@ -495,7 +495,7 @@ class TestGetSetAsides:
         assert rec["set_aside_id"] == 1723
         assert rec["amount"] == 15500.0
         assert rec["active"] is True
-        assert rec["account_number"] == "08197200"
+        assert rec["account_number"] == "10000001"
         assert rec["start_date"] == "2026-03-05T00:00:00"
         # Original raw keys preserved (augmentation, not replacement)
         assert rec["id"] == 1723
@@ -519,8 +519,8 @@ class TestGetSetAsides:
         with patch.object(api, "get_internal_account_id", return_value=123):
             mock_post = _mock_post([dict(SAMPLE_SET_ASIDE), inactive])
             with patch("requests.post", mock_post):
-                active = api.get_set_asides("08197200", active_only=True)
-                all_records = api.get_set_asides("08197200")
+                active = api.get_set_asides("10000001", active_only=True)
+                all_records = api.get_set_asides("10000001")
 
         assert [r["set_aside_id"] for r in active] == [1723]
         assert len(all_records) == 2
@@ -537,7 +537,7 @@ class TestGetSetAsides:
         with patch.object(api, "get_internal_account_id", return_value=123):
             mock_post = _mock_post([date_based, dict(SAMPLE_SET_ASIDE)])
             with patch("requests.post", mock_post):
-                result = api.get_set_asides("08197200")
+                result = api.get_set_asides("10000001")
 
         by_id = {r["set_aside_id"]: r for r in result}
         assert by_id[5]["end_date"] == "2026-12-31"
@@ -4830,8 +4830,8 @@ class TestGetInternalAccountIdResolution:
         """A result whose id equals the search wins over earlier fuzzy hits."""
         api, ctx = self._api_with_results(
             [
-                {"id": 1114, "name": "Bole Trust", "accountNumber": "08197200"},
-                {"id": 819, "name": "Rose Roth", "accountNumber": "44443921"},
+                {"id": 1114, "name": "Sample Trust", "accountNumber": "10000001"},
+                {"id": 819, "name": "Test Client", "accountNumber": "10000002"},
             ]
         )
         with ctx:
@@ -4877,7 +4877,7 @@ class TestGetInternalAccountIdResolution:
         """id 819 on one account, accountNumber '819' on another: never guess."""
         api, ctx = self._api_with_results(
             [
-                {"id": 819, "name": "Rose Roth", "accountNumber": "44443921"},
+                {"id": 819, "name": "Test Client", "accountNumber": "10000002"},
                 {"id": 55, "name": "Old Custodial", "accountNumber": "819"},
             ]
         )
@@ -4914,8 +4914,8 @@ class TestInternalAccountIdKeyword:
         with patch.object(api, "get_internal_account_id", return_value=123) as mock_resolve:
             mock_post = _mock_post([dict(SAMPLE_SET_ASIDE)])
             with patch("requests.post", mock_post):
-                api.get_set_asides("08197200")
-        mock_resolve.assert_called_once_with("08197200")
+                api.get_set_asides("10000001")
+        mock_resolve.assert_called_once_with("10000001")
         assert mock_post.call_args.kwargs["json"] == [123]
 
     def test_v1_get_set_asides_uses_id_verbatim_no_search(self):
