@@ -1,4 +1,4 @@
-# orionapi API Reference (v2.35.0)
+# orionapi API Reference (v2.36.0)
 
 Auto-generated from docstrings by `scripts/gen_api_reference.py`. Eclipse methods note their underlying endpoint.
 
@@ -102,7 +102,7 @@ Client for the Orion Advisor API.
 
 Eclipse client targeting the v1 API surface (``/v1/...``) only.
 
-**226 methods.**
+**229 methods.**
 
 | Method | Endpoint | Description |
 |---|---|---|
@@ -192,6 +192,7 @@ Eclipse client targeting the v1 API surface (``/v1/...``) only.
 | `get_holding_transactions(holding_id)` | `GET /holding/holdings/{holding_id}/transactions` | Get transactions for a holding. |
 | `get_house_account(custodian_id)` | `GET /account/accounts/action/houseAccount/{custodian_id}` | Get the house account for a custodian. |
 | `get_instance_trades(instance_id, status=None)` | `GET /tradeorder/instances/{instance_id}/trades` | Get the trades belonging to a trade instance. |
+| `get_level_preferences(level_name, record_id)` | `GET /preference/{level_name}/{record_id}` | Get all preferences set at a level (Firm, Portfolio, Account, ...). |
 | `get_model(id)` | `GET /modeling/models/{id}` | Get details for a specific model. |
 | `get_model_allocations(id, aggregate=True)` | `GET /modeling/models/{id}/allocations` | Get allocations for a model. |
 | `get_model_analysis(model_id, asset_type='securityset')` | `GET /modeling/models/{model_id}/modelAnalysis` | Get model analysis for a model. |
@@ -247,6 +248,7 @@ Eclipse client targeting the v1 API surface (``/v1/...``) only.
 | `get_security_count(security_id, body=None)` | `POST /security/securities/{security_id}/count` | Get a usage count for a security (POST-body). |
 | `get_security_maintain(location)` | `GET /security/securities/maintain/{location}` | Get security maintenance data for a location. |
 | `get_security_min_initial_buy_prefs(security_id)` | `GET /security/securities/{security_id}/securityMinimumInitialBuyAmountPreferences` | Get the minimum-initial-buy-amount preferences for a security. |
+| `get_security_preference_values(level_name, record_id, preference_value_id, inherited_value_id=None, preference_id=103)` | `GET /preference/{level_name}/securityPreference/{record_id}/{preference_id}/{preference_value_id}/{inherited}` | Get per-security preference rows (Do Not Buy / Do Not Sell, etc.) at a level. |
 | `get_security_preferences(portfolio_id, security_id)` | `GET /preference/Portfolio/securityPreference/{portfolio_id}/{security_id}/0/0` | Get rebalance preferences/rules for a security in a portfolio. |
 | `get_security_price(security_id)` | `GET /security/securities/price/{security_id}` | Get the price for a security. |
 | `get_security_priority_prefs(security_id, priority=None)` | `GET /security/securities/{security_id}/securityPriorityPreferences` | Get the buy/sell priority preferences for a security. |
@@ -323,6 +325,7 @@ Eclipse client targeting the v1 API surface (``/v1/...``) only.
 | `update_model_detail_element(model_id, model_detail_id, payload)` | `PUT /modeling/models/{model_id}/modelDetail/{model_detail_id}` | Update a single model-detail element (mutating). |
 | `update_portfolio_accounts(portfolio_id, payload)` | `PUT /portfolio/portfolios/{portfolio_id}/accounts` | Update accounts on a portfolio (mutating). |
 | `update_security(security_id, payload)` | `PUT /security/securities/{security_id}` | Update a security (mutating). |
+| `update_security_preferences(level_name, record_id, preference_value_id, add=None, edit=None, delete=None, preference_id=103)` | `PUT /preference/Action/updateAll/securityPreferences` | Add, edit or delete per-security preference rows at a level. |
 | `update_security_set(set_id, name, securities, description=None, tolerance_type='ABSOLUTE', tolerance_type_value=0, sync=True)` | `PUT /security/securityset/{set_id}` | Update an existing security set. |
 | `update_submodel(submodel_id, payload)` | `PUT /modeling/models/submodels/{submodel_id}` | Update a submodel (mutating). |
 | `update_submodel_by_model(payload, model_id=None)` | `PUT /modeling/models/submodels` | Update a submodel in the context of a model (mutating). |

@@ -2515,3 +2515,116 @@ class TestOrionForecastBilling:
             assert mock.call_args[0][0].endswith(
                 "/Billing/BillDataExport?billInstanceId=164&startDate=2026-10-01"
             )
+
+
+class TestEclipseV1SecurityPreferenceLevels:
+    """EclipseV1 level preference + per-security preference read/update."""
+
+    @staticmethod
+    def _api():
+        with patch.object(EclipseV1, "login"):
+            return EclipseV1(usr="test", pwd="pass")
+
+    def test_get_level_preferences_url(self):
+        api = self._api()
+        with patch.object(api, "api_request") as mock_req:
+            mock_req.return_value.json.return_value = {"preferences": [{"preferenceId": 103}]}
+            result = api.get_level_preferences("Portfolio", 486)
+        mock_req.assert_called_once_with(f"{api.base_url}/preference/Portfolio/486")
+        assert result["preferences"][0]["preferenceId"] == 103
+
+    def test_get_level_preferences_invalid(self):
+        api = self._api()
+        with pytest.raises(ValueError, match="level_name must be one of"):
+            api.get_level_preferences("Bogus", 1)
+        with pytest.raises(ValueError, match="record_id must be a positive integer"):
+            api.get_level_preferences("Account", 0)
+        with pytest.raises(ValueError, match="record_id must be a positive integer"):
+            api.get_level_preferences("Account", "5")
+
+    def test_get_security_preference_values_none_segment(self):
+        api = self._api()
+        with patch.object(api, "api_request") as mock_req:
+            mock_req.return_value.json.return_value = {
+                "securityPreferences": [],
+                "inheritedSecurityPreferences": [],
+            }
+            result = api.get_security_preference_values("Portfolio", 486, 284)
+        mock_req.assert_called_once_with(
+            f"{api.base_url}/preference/Portfolio/securityPreference/486/103/284/None"
+        )
+        assert "inheritedSecurityPreferences" in result
+
+    def test_get_security_preference_values_inherited_and_preference_id(self):
+        api = self._api()
+        with patch.object(api, "api_request") as mock_req:
+            api.get_security_preference_values(
+                "Account", 7, 11, inherited_value_id=22, preference_id=104
+            )
+        mock_req.assert_called_once_with(
+            f"{api.base_url}/preference/Account/securityPreference/7/104/11/22"
+        )
+
+    def test_get_security_preference_values_invalid(self):
+        api = self._api()
+        with pytest.raises(ValueError, match="level_name must be one of"):
+            api.get_security_preference_values("x", 1, 1)
+        with pytest.raises(ValueError, match="record_id must be a positive integer"):
+            api.get_security_preference_values("Account", -1, 1)
+        with pytest.raises(ValueError, match="preference_value_id must be a positive integer"):
+            api.get_security_preference_values("Account", 1, 0)
+        with pytest.raises(ValueError, match="inherited_value_id must be a positive integer"):
+            api.get_security_preference_values("Account", 1, 1, inherited_value_id=0)
+        with pytest.raises(ValueError, match="preference_id must be a positive integer"):
+            api.get_security_preference_values("Account", 1, 1, preference_id=0)
+
+    def test_update_security_preferences_body(self):
+        api = self._api()
+        row = {"id": 99, "symbol": "XYZ", "doNotBuy": True}
+        with patch.object(api, "api_request") as mock_req:
+            mock_req.return_value.json.return_value = {"ok": True}
+            result = api.update_security_preferences("Portfolio", 486, 284, add=[row], delete=[5])
+        mock_req.assert_called_once_with(
+            f"{api.base_url}/preference/Action/updateAll/securityPreferences",
+            requests.put,
+            json={
+                "level": "Portfolio",
+                "id": 486,
+                "ids": None,
+                "securityPreferences": {
+                    "id": 284,
+                    "preferenceId": 103,
+                    "addSecurities": [row],
+                    "editSecurities": [],
+                    "deleteSecurities": [5],
+                    "resetToParent": False,
+                },
+            },
+        )
+        assert result == {"ok": True}
+
+    def test_update_security_preferences_edit_and_none_value_id(self):
+        api = self._api()
+        row = {"id": 1}
+        with patch.object(api, "api_request") as mock_req:
+            api.update_security_preferences("Account", 3, None, edit=[row], preference_id=104)
+        body = mock_req.call_args.kwargs["json"]
+        assert body["securityPreferences"]["id"] is None
+        assert body["securityPreferences"]["preferenceId"] == 104
+        assert body["securityPreferences"]["editSecurities"] == [row]
+        assert body["securityPreferences"]["addSecurities"] == []
+
+    def test_update_security_preferences_invalid(self):
+        api = self._api()
+        with pytest.raises(ValueError, match="at least one of add, edit, delete"):
+            api.update_security_preferences("Account", 1, 1)
+        with pytest.raises(ValueError, match="at least one of add, edit, delete"):
+            api.update_security_preferences("Account", 1, 1, add=[], edit=[], delete=[])
+        with pytest.raises(ValueError, match="level_name must be one of"):
+            api.update_security_preferences("x", 1, 1, delete=[1])
+        with pytest.raises(ValueError, match="record_id must be a positive integer"):
+            api.update_security_preferences("Account", 0, 1, delete=[1])
+        with pytest.raises(ValueError, match="preference_value_id must be a positive integer"):
+            api.update_security_preferences("Account", 1, 0, delete=[1])
+        with pytest.raises(ValueError, match="preference_id must be a positive integer"):
+            api.update_security_preferences("Account", 1, 1, delete=[1], preference_id=0)

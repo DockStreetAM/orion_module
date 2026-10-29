@@ -1,4 +1,4 @@
-__version__ = "2.35.0"
+__version__ = "2.36.0"
 
 import logging
 import re
@@ -5254,6 +5254,140 @@ class EclipseV1(EclipseBase):
 
         res = self.api_request(
             f"{self.base_url}/preference/Portfolio/securityPreference/{portfolio_id}/{security_id}/0/0"
+        )
+        return res.json()
+
+    _PREFERENCE_LEVELS = ("Firm", "Custodian", "Team", "Model", "Portfolio", "Account")
+
+    def _validate_preference_level(self, level_name, record_id):
+        if level_name not in self._PREFERENCE_LEVELS:
+            raise ValueError(f"level_name must be one of {', '.join(self._PREFERENCE_LEVELS)}")
+        if not isinstance(record_id, int) or isinstance(record_id, bool) or record_id < 1:
+            raise ValueError("record_id must be a positive integer")
+
+    def get_level_preferences(self, level_name, record_id):
+        """Get all preferences set at a level (Firm, Portfolio, Account, ...).
+
+        Use this to find the preference value id of the ``securitySetting``
+        preference (preferenceId 103), which is needed by
+        ``get_security_preference_values`` and ``update_security_preferences``.
+
+        Args:
+            level_name: One of Firm, Custodian, Team, Model, Portfolio, Account
+            record_id: ID of the record at that level
+
+        Returns:
+            dict: Level preferences; the ``preferences`` list holds each preference
+        """
+        self._validate_preference_level(level_name, record_id)
+
+        res = self.api_request(f"{self.base_url}/preference/{level_name}/{record_id}")
+        return res.json()
+
+    def get_security_preference_values(
+        self,
+        level_name,
+        record_id,
+        preference_value_id,
+        inherited_value_id=None,
+        preference_id=103,
+    ):
+        """Get per-security preference rows (Do Not Buy / Do Not Sell, etc.) at a level.
+
+        The security preference is the ``securitySetting`` preference
+        (preferenceId 103). Get the value ids from ``get_level_preferences``.
+
+        Args:
+            level_name: One of Firm, Custodian, Team, Model, Portfolio, Account
+            record_id: ID of the record at that level
+            preference_value_id: Value id of the security preference at this level
+            inherited_value_id: Value id at the parent level, or None for no parent
+                value (sent as the literal "None", which the live API accepts)
+            preference_id: Preference id (default 103, securitySetting)
+
+        Returns:
+            dict: ``securityPreferences`` (rows at this level) and
+            ``inheritedSecurityPreferences`` (rows inherited from the parent)
+        """
+        self._validate_preference_level(level_name, record_id)
+        if not isinstance(preference_id, int) or preference_id < 1:
+            raise ValueError("preference_id must be a positive integer")
+        if not isinstance(preference_value_id, int) or preference_value_id < 1:
+            raise ValueError("preference_value_id must be a positive integer")
+        if inherited_value_id is not None and (
+            not isinstance(inherited_value_id, int) or inherited_value_id < 1
+        ):
+            raise ValueError("inherited_value_id must be a positive integer or None")
+
+        inherited = "None" if inherited_value_id is None else inherited_value_id
+        res = self.api_request(
+            f"{self.base_url}/preference/{level_name}/securityPreference/"
+            f"{record_id}/{preference_id}/{preference_value_id}/{inherited}"
+        )
+        return res.json()
+
+    def update_security_preferences(
+        self,
+        level_name,
+        record_id,
+        preference_value_id,
+        add=None,
+        edit=None,
+        delete=None,
+        preference_id=103,
+    ):
+        """Add, edit or delete per-security preference rows at a level.
+
+        Semantics verified live against production Eclipse:
+
+        - ``add`` and ``edit`` rows must be the FULL security-preference row
+          (~75 keys, exactly as returned by ``get_security_preference_values``).
+          A sparse row returns HTTP 500 "please verify parameters".
+        - ``edit`` REPLACES the stored row, so a null value overwrites.
+        - ``delete`` is a list of security ids (the row ``id`` is the security id).
+        - An add on an account that inherits creates an account-level row and
+          leaves the parent unchanged.
+
+        Args:
+            level_name: One of Firm, Custodian, Team, Model, Portfolio, Account
+            record_id: ID of the record at that level
+            preference_value_id: Value id of the security preference at this level;
+                may be None for a record with no own value yet
+            add: List of full security-preference rows to add
+            edit: List of full security-preference rows that replace stored rows
+            delete: List of security ids whose rows are removed
+            preference_id: Preference id (default 103, securitySetting)
+
+        Returns:
+            dict: API response
+        """
+        self._validate_preference_level(level_name, record_id)
+        if not isinstance(preference_id, int) or preference_id < 1:
+            raise ValueError("preference_id must be a positive integer")
+        if preference_value_id is not None and (
+            not isinstance(preference_value_id, int) or preference_value_id < 1
+        ):
+            raise ValueError("preference_value_id must be a positive integer or None")
+        if not (add or edit or delete):
+            raise ValueError("at least one of add, edit, delete must be non-empty")
+
+        payload = {
+            "level": level_name,
+            "id": record_id,
+            "ids": None,
+            "securityPreferences": {
+                "id": preference_value_id,
+                "preferenceId": preference_id,
+                "addSecurities": add or [],
+                "editSecurities": edit or [],
+                "deleteSecurities": delete or [],
+                "resetToParent": False,
+            },
+        }
+        res = self.api_request(
+            f"{self.base_url}/preference/Action/updateAll/securityPreferences",
+            requests.put,
+            json=payload,
         )
         return res.json()
 
