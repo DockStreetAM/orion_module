@@ -1,4 +1,4 @@
-# orionapi API Reference (v2.36.0)
+# orionapi API Reference (v2.37.0)
 
 Auto-generated from docstrings by `scripts/gen_api_reference.py`. Eclipse methods note their underlying endpoint.
 
@@ -340,7 +340,7 @@ Eclipse client targeting the v1 API surface (``/v1/...``) only.
 
 Eclipse client targeting the v2 API surface (``/api/v2/...``) only.
 
-**312 methods.**
+**316 methods.**
 
 | Method | Endpoint | Description |
 |---|---|---|
@@ -517,6 +517,7 @@ Eclipse client targeting the v2 API surface (``/api/v2/...``) only.
 | `get_portfolio_search(search=None, include_value=None, limit=None, offset=None)` | `GET /api/v2/Portfolio/Portfolios/GetPortfolioSearch` | Search firm portfolios (v2 paged search). |
 | `get_portfolio_substitutions_history(portfolio_id, from_date=None, to_date=None)` | `GET /api/v2/Portfolio/Portfolios/{portfolio_id}/PortfolioSubstitutionsHistory` | Get a portfolio's substitutions history. |
 | `get_portfolio_summary(portfolio_id)` | `GET /api/v2/Portfolio/Portfolios/summary/{portfolio_id}` | Get the portfolio summary (v2 beta). |
+| `get_portfolio_tags(portfolio_id)` |  | Get a portfolio's tags as a list. |
 | `get_portfolio_team_history(portfolio_id, start_date=None, end_date=None)` | `GET /api/v2/Portfolio/Portfolios/{portfolio_id}/TeamHistory` | Get a portfolio's team history. |
 | `get_portfolio_tree(portfolio_id=None, account_id=None)` | `GET /api/v2/Portfolio/Portfolios/PortfolioTree` | Get the portfolio/account hierarchy for a portfolio or account. |
 | `get_portfolio_v2(portfolio_id) -> orionapi.models.PortfolioDetails` | `GET /api/v2/Portfolio/Portfolios/{portfolio_id}` | Get portfolio details (v2). |
@@ -564,6 +565,7 @@ Eclipse client targeting the v2 API surface (``/api/v2/...``) only.
 | `get_tactical_restricted_securities(portfolio_id)` | `GET /api/v2/Tactical/RestrictedSecurities/{portfolio_id}` | Get restricted securities for a portfolio (tactical view). |
 | `get_tactical_tax_lots(portfolio_id, account_id=None) -> list[orionapi.models.RankedTaxLots]` | `GET /api/v2/Tactical/TaxLots/{portfolio_id}` | Get tax-lot data for a portfolio (tactical view). |
 | `get_tactical_trades(portfolio_id, account_id=None)` | `GET /api/v2/Tactical/Trades/{portfolio_id}` | Get trades for a portfolio (tactical view). |
+| `get_tags(tag_type)` | `GET /api/v2/Tags/tagType/{tag_type_id}` | List the tag names Eclipse offers for one kind of record. |
 | `get_tax_lot_depletion_preference(related_type, record_id, preference_value_id=None, inherited_preference_value_id=None)` | `GET /api/v2/Preference/Preference/{related_type}/taxLotDepletionMethodPreference/{record_id}` | Get tax-lot depletion-method preference values for a record. |
 | `get_tax_lot_depletion_preference_master(related_type, preference_value_id=None, inherited_preference_value_id=None)` | `GET /api/v2/Preference/Preference/{related_type}/taxLotDepletionMethodPreference/Master` | Get the tax-lot depletion-method preference master (JSON structure). |
 | `get_teams(external_id=None)` | `GET /api/v2/Team/Team/GetTeams` | Get teams (v2 ``Team/Team/GetTeams``). |
@@ -604,6 +606,7 @@ Eclipse client targeting the v2 API surface (``/api/v2/...``) only.
 | `raise_cash_by_fund(payload)` | `POST /api/v2/TradeTool/RaiseCashByFund` | Generate a raise-cash-by-fund trade (pass isViewOnly in body for preview). |
 | `raise_cash_distribution_full_rebalance(payload)` | `POST /api/v2/TradeTool/RaiseCashDistributionFullRebalance` | Generate a raise-cash-distribution full-rebalance trade. |
 | `rename_portfolio(portfolio_id, name)` | `PATCH /api/v2/Portfolio/Portfolios/{portfolio_id}` | Rename a portfolio. Changes ``name`` and no other field. |
+| `replace_portfolio_tags(portfolio_id, tags)` |  | Replace all of a portfolio's tags. Changes ``tags`` and no other field. |
 | `request_import(payload)` | `POST /api/v2/DataImport/Action/RequestImport` | Request a data import (mutating). |
 | `reset_analytics_run_history()` | `GET /api/v2/Analytics/ResetAnalyticsRunHistory` | Reset the analytics run history (mutating). |
 | `resync_import_errored_accounts()` | `POST /api/v2/DataImport/Action/ResyncImportErroredAccounts` | Resync accounts that errored during import (mutating). |
@@ -645,6 +648,7 @@ Eclipse client targeting the v2 API surface (``/api/v2/...``) only.
 | `update_note(note_id, note)` | `PUT /api/v2/Notes/{note_id}` | Update a single note. |
 | `update_notes(notes)` | `POST /api/v2/Notes/UpdateList` | Update notes. |
 | `update_notification(notification)` | `PUT /api/v2/Notifications/Notification/UpdateNotification` | Update a notification. |
+| `update_portfolio_tags(portfolio_id, add_tags=None, remove_tags=None)` |  | Add and/or remove tags on a portfolio, keeping its other tags. |
 | `update_restricted_plan(restricted_plan_id, payload)` | `PUT /api/v2/Account/Accounts/RestrictedPlan/{restricted_plan_id}` | Update a restricted plan (mutating). |
 | `update_run_analytics_config(config_id, payload)` | `PUT /api/v2/Analytics/RunAnalyticsConfig/{config_id}` | Update a run-analytics configuration (mutating). |
 | `update_security_preference_batch_job(payload)` | `PUT /api/v2/Preference/Preference/UpdateBatchJobForSecurityPreferenceChange` | Update the batch job for a security-preference change. |
