@@ -1,4 +1,4 @@
-__version__ = "2.36.0"
+__version__ = "2.37.0"
 
 import logging
 import re
@@ -12257,6 +12257,140 @@ class EclipseV2(EclipseBase):
             headers={"Content-Type": "application/json-patch+json"},
         )
         return self.get_portfolio_v2(portfolio_id)
+
+    # --- Portfolio tags ---
+    # Eclipse stores a portfolio's tags as one comma-separated string and has
+    # no add/remove endpoint for portfolios (unlike PUT /Account/Accounts/Tags).
+    # These helpers patch only ``/tags`` on the v2 portfolio record.
+    # Verified live 2026-11-23: the patch changes tags and nothing else, the
+    # server stores the string verbatim, and a tag does not need to exist in
+    # the tag vocabulary (GET /Tags/tagType/2) first, nor is it added to it.
+
+    TAG_TYPES = {"account": 1, "portfolio": 2, "model": 3}
+
+    @staticmethod
+    def _require_portfolio_id(portfolio_id):
+        if isinstance(portfolio_id, bool) or not isinstance(portfolio_id, int) or portfolio_id < 1:
+            raise ValueError("portfolio_id must be a positive integer")
+
+    @staticmethod
+    def _split_tags(raw):
+        """Split Eclipse's comma-separated tag string into a clean list."""
+        out = []
+        for tag in (raw or "").split(","):
+            tag = tag.strip()
+            if tag and tag.casefold() not in {t.casefold() for t in out}:
+                out.append(tag)
+        return out
+
+    @classmethod
+    def _clean_tag_list(cls, tags, arg):
+        if tags is None:
+            return []
+        if isinstance(tags, str) or not isinstance(tags, (list, tuple, set, frozenset)):
+            raise ValueError(f"{arg} must be a list of strings")
+        for tag in tags:
+            if not isinstance(tag, str) or not tag.strip() or "," in tag:
+                raise ValueError(f"{arg} entries must be non-empty strings without commas")
+        return cls._split_tags(
+            ",".join(sorted(tags) if isinstance(tags, (set, frozenset)) else tags)
+        )
+
+    def get_tags(self, tag_type):
+        """List the tag names Eclipse offers for one kind of record.
+
+        This is the pick-list the Eclipse UI suggests, not a constraint:
+        a portfolio can carry a tag that is not in it.
+
+        Args:
+            tag_type: ``"account"``, ``"portfolio"`` or ``"model"`` (or 1, 2, 3)
+
+        Returns:
+            list[str]: Tag names
+        """
+        tag_type_id = (
+            self.TAG_TYPES.get(tag_type, tag_type) if isinstance(tag_type, str) else tag_type
+        )
+        if isinstance(tag_type_id, bool) or tag_type_id not in self.TAG_TYPES.values():
+            raise ValueError("tag_type must be 'account', 'portfolio' or 'model' (or 1, 2, 3)")
+        res = self.api_request(f"{self.base_url_v2}/Tags/tagType/{tag_type_id}")
+        return [t["value"] for t in res.json()]
+
+    def get_portfolio_tags(self, portfolio_id):
+        """Get a portfolio's tags as a list.
+
+        Args:
+            portfolio_id: Portfolio ID (positive int)
+
+        Returns:
+            list[str]: Tags in stored order (empty list if none)
+        """
+        self._require_portfolio_id(portfolio_id)
+        return self._split_tags(self.get_portfolio_v2(portfolio_id)["general"].get("tags"))
+
+    def _patch_portfolio_tags(self, portfolio_id, tags, expected=...):
+        ops = [{"op": "replace", "path": "/tags", "value": ",".join(tags) or None}]
+        if expected is not ...:
+            ops.insert(0, {"op": "test", "path": "/tags", "value": expected})
+        res = self.api_request(
+            f"{self.base_url_v2}/Portfolio/Portfolios/{portfolio_id}",
+            requests.patch,
+            json=ops,
+            headers={"Content-Type": "application/json-patch+json"},
+        )
+        return self._split_tags(res.json().get("tags"))
+
+    def replace_portfolio_tags(self, portfolio_id, tags):
+        """Replace all of a portfolio's tags. Changes ``tags`` and no other field.
+
+        Overwrites whatever tags the portfolio had. To add or remove
+        individual tags and keep the rest, use :meth:`update_portfolio_tags`.
+
+        Args:
+            portfolio_id: Portfolio ID (positive int)
+            tags: List of tag names (no commas). An empty list clears all tags.
+
+        Returns:
+            list[str]: The portfolio's tags after the change
+        """
+        self._require_portfolio_id(portfolio_id)
+        if tags is None:
+            raise ValueError("tags must be a list of strings (use [] to clear)")
+        return self._patch_portfolio_tags(portfolio_id, self._clean_tag_list(tags, "tags"))
+
+    def update_portfolio_tags(self, portfolio_id, add_tags=None, remove_tags=None):
+        """Add and/or remove tags on a portfolio, keeping its other tags.
+
+        Reads the current tags, applies the change, and writes the result with
+        a JSON Patch ``test`` guard, so a concurrent edit of the portfolio's
+        tags makes the call raise :class:`OrionAPIError` rather than be
+        overwritten; re-run the call in that case. Matching is
+        case-insensitive and an existing tag keeps its spelling. Nothing is
+        sent if the tags would not change.
+
+        Args:
+            portfolio_id: Portfolio ID (positive int)
+            add_tags: Tag names to add (no commas)
+            remove_tags: Tag names to remove
+
+        Returns:
+            list[str]: The portfolio's tags after the change
+        """
+        self._require_portfolio_id(portfolio_id)
+        add = self._clean_tag_list(add_tags, "add_tags")
+        remove = {t.casefold() for t in self._clean_tag_list(remove_tags, "remove_tags")}
+        if not add and not remove:
+            raise ValueError("at least one of add_tags or remove_tags is required")
+        if remove & {t.casefold() for t in add}:
+            raise ValueError("a tag cannot be in both add_tags and remove_tags")
+
+        raw = self.get_portfolio_v2(portfolio_id)["general"].get("tags")
+        current = self._split_tags(raw)
+        kept = [t for t in current if t.casefold() not in remove]
+        new = self._split_tags(",".join(kept + add))
+        if new == current:
+            return current
+        return self._patch_portfolio_tags(portfolio_id, new, expected=raw)
 
     def get_sleeve_strategy_aggregates_by_firm_ids(self, payload):
         """Get sleeve strategy aggregates for a list of firm IDs (POST-body read).

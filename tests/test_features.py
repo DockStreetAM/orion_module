@@ -4971,3 +4971,126 @@ class TestInternalAccountIdKeyword:
         with patch.object(api.v2, "get_set_asides", return_value=[]) as mock_v2:
             api.get_set_asides(internal_account_id=819, active_only=True)
         mock_v2.assert_called_once_with(account_id=None, active_only=True, internal_account_id=819)
+
+
+class TestPortfolioTags:
+    """Portfolio tags: JSON Patch on /tags only; update is read-modify-write with a test guard."""
+
+    URL = f"{V2_BASE}/Portfolio/Portfolios/132"
+
+    def _run(self, fn, current="A,B", after="ignored"):
+        api = _eclipse_for_set_asides()
+        mock_patch = _mock_post({"id": 132, "tags": after})
+        mock_get = _mock_get({"id": 132, "general": {"tags": current}})
+        with patch("requests.patch", mock_patch), patch("requests.get", mock_get):
+            result = fn(api)
+        return mock_patch, mock_get, result
+
+    def test_get_portfolio_tags_splits_and_cleans(self):
+        _, mock_get, result = self._run(lambda a: a.get_portfolio_tags(132), current=" A , b c ,,a")
+        assert mock_get.call_args.args[0] == self.URL
+        assert result == ["A", "b c"]
+
+    @pytest.mark.parametrize("empty", [None, ""])
+    def test_get_portfolio_tags_empty(self, empty):
+        assert self._run(lambda a: a.get_portfolio_tags(132), current=empty)[2] == []
+
+    def test_replace_sends_whole_string_without_reading(self):
+        mock_patch, mock_get, result = self._run(
+            lambda a: a.replace_portfolio_tags(132, [" X ", "Y", "x"]), after="X,Y"
+        )
+        assert mock_patch.call_args.args[0] == self.URL
+        assert mock_patch.call_args.kwargs["json"] == [
+            {"op": "replace", "path": "/tags", "value": "X,Y"}
+        ]
+        headers = mock_patch.call_args.kwargs["headers"]
+        assert headers["Content-Type"] == "application/json-patch+json"
+        mock_get.assert_not_called()
+        assert result == ["X", "Y"]
+
+    def test_set_empty_list_clears_with_null(self):
+        mock_patch, _, result = self._run(lambda a: a.replace_portfolio_tags(132, []), after=None)
+        assert mock_patch.call_args.kwargs["json"][0]["value"] is None
+        assert result == []
+
+    def test_update_adds_and_removes_with_test_guard(self):
+        mock_patch, _, result = self._run(
+            lambda a: a.update_portfolio_tags(132, add_tags=["C"], remove_tags=["a"]),
+            current="A, B",
+            after="B,C",
+        )
+        assert mock_patch.call_args.kwargs["json"] == [
+            {"op": "test", "path": "/tags", "value": "A, B"},
+            {"op": "replace", "path": "/tags", "value": "B,C"},
+        ]
+        assert result == ["B", "C"]
+
+    def test_update_on_untagged_portfolio_guards_on_null(self):
+        mock_patch, _, _ = self._run(
+            lambda a: a.update_portfolio_tags(132, add_tags=["C"]), current=None, after="C"
+        )
+        assert mock_patch.call_args.kwargs["json"][0] == {
+            "op": "test",
+            "path": "/tags",
+            "value": None,
+        }
+
+    @pytest.mark.parametrize(
+        "kwargs",
+        [{"add_tags": ["b"]}, {"remove_tags": ["Z"]}, {"add_tags": ["A"], "remove_tags": ["z"]}],
+    )
+    def test_update_noop_sends_nothing(self, kwargs):
+        mock_patch, _, result = self._run(lambda a: a.update_portfolio_tags(132, **kwargs))
+        mock_patch.assert_not_called()
+        assert result == ["A", "B"]
+
+    @pytest.mark.parametrize("bad_id", [0, -1, "132", None, True, 1.5])
+    def test_rejects_bad_portfolio_id(self, bad_id):
+        for fn in (
+            lambda a: a.get_portfolio_tags(bad_id),
+            lambda a: a.replace_portfolio_tags(bad_id, ["A"]),
+            lambda a: a.update_portfolio_tags(bad_id, add_tags=["A"]),
+        ):
+            with pytest.raises(ValueError, match="portfolio_id"):
+                mock_patch, mock_get, _ = self._run(fn)
+
+    @pytest.mark.parametrize("bad", ["A", "A,B", ["A,B"], [""], ["  "], [5], 5, None])
+    def test_set_rejects_bad_tags(self, bad):
+        api = _eclipse_for_set_asides()
+        mock_patch = _mock_post({})
+        with patch("requests.patch", mock_patch), pytest.raises(ValueError, match="tags"):
+            api.replace_portfolio_tags(132, bad)
+        mock_patch.assert_not_called()
+
+    @pytest.mark.parametrize(
+        "kwargs",
+        [
+            {},
+            {"add_tags": []},
+            {"add_tags": "A"},
+            {"remove_tags": ["A,B"]},
+            {"add_tags": ["A"], "remove_tags": ["a"]},
+        ],
+    )
+    def test_update_rejects_bad_args(self, kwargs):
+        api = _eclipse_for_set_asides()
+        mock_patch, mock_get = _mock_post({}), _mock_get({})
+        with patch("requests.patch", mock_patch), patch("requests.get", mock_get):
+            with pytest.raises(ValueError, match="tags"):
+                api.update_portfolio_tags(132, **kwargs)
+        mock_patch.assert_not_called()
+        mock_get.assert_not_called()
+
+    def test_get_tags_by_name_and_id(self):
+        api = _eclipse_for_set_asides()
+        mock_get = _mock_get([{"tagTypeId": 2, "value": "A"}, {"tagTypeId": 2, "value": "B"}])
+        with patch("requests.get", mock_get):
+            assert api.get_tags("portfolio") == ["A", "B"]
+            assert api.get_tags(2) == ["A", "B"]
+        assert mock_get.call_args.args[0] == f"{V2_BASE}/Tags/tagType/2"
+
+    @pytest.mark.parametrize("bad", ["portfolios", 0, 4, None, True])
+    def test_get_tags_rejects_bad_type(self, bad):
+        api = _eclipse_for_set_asides()
+        with pytest.raises(ValueError, match="tag_type"):
+            api.get_tags(bad)
